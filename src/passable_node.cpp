@@ -26,6 +26,8 @@ PassableNode::PassableNode()
 void PassableNode::initialize()
 {
     RCLCPP_INFO(get_logger(), "Initializing passable node");
+    elevationInit();
+
     cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
         "cloud_topic", 1, std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
     body_vis_pub_ = create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
@@ -33,8 +35,6 @@ void PassableNode::initialize()
     impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("impassable", 10);
     expanded_passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
     grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
-
-    elevationInit();
 }
 
 void PassableNode::elevationInit()
@@ -48,8 +48,8 @@ void PassableNode::setInputCloud(const sensor_msgs::msg::PointCloud2& ros_cloud)
 {
     pcl::fromROSMsg(ros_cloud, origin_cloud_);
     if (origin_cloud_.empty()) return;
-    cloud_ptr_ = origin_cloud_.makeShared();
-    kdtree_.setInputCloud(cloud_ptr_);
+    // cloud_ptr_ = origin_cloud_.makeShared();
+    // kdtree_.setInputCloud(cloud_ptr_);
 }
 
 void PassableNode::bodyVisual()
