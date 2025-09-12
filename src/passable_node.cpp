@@ -2,7 +2,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 PassableNode::PassableNode()
-    : Node("reachable_node"),
+    : Node("passable_node"),
       ele_init_(false),
       map_width_(declare_parameter("map_width", 7.0f)),
       map_height_(declare_parameter("map_height", 2.0f)),
@@ -29,8 +29,8 @@ void PassableNode::initialize()
     cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
         "cloud_topic", 1, std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
     body_vis_pub_ = create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
-    passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("reachable", 10);
-    impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("unreachable", 10);
+    passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("passable", 10);
+    impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("impassable", 10);
     expanded_passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
     grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
 
