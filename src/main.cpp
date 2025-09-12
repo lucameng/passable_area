@@ -11,7 +11,10 @@ int main(int argc, char** argv)
 
     RCLCPP_INFO(node->get_logger(), "Spinning passable node");
 
-    rclcpp::spin(node);
+    rclcpp::executors::MultiThreadedExecutor executor;
+
+    executor.add_node(node);
+    executor.spin();
 
     rclcpp::shutdown();
 
