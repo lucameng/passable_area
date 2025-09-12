@@ -26,15 +26,16 @@ PassableNode::PassableNode(const ros::NodeHandle& nh)
 void PassableNode::initialize()
 {
     ROS_INFO("Initializing passable node");
+    elevationInit();
+
     cloud_sub_ = nh_.subscribe("cloud_topic", 1, &PassableNode::cloudCallback, this,
                                ros::TransportHints().tcpNoDelay());
     body_vis_pub_ = nh_.advertise<visualization_msgs::Marker>("body_visual", 1);
-    passable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("passable", 1);
-    impassable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("impassable", 1);
+    passable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("passable_area", 1);
+    impassable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("impassable_area", 1);
     expanded_passable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("expaneded", 1);
     grid_map_pub_ = nh_.advertise<grid_map_msgs::GridMap>("grid_map", 1, true);
 
-    elevationInit();
 }
 
 void PassableNode::elevationInit()
@@ -48,8 +49,8 @@ void PassableNode::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
 {
     pcl::fromROSMsg(ros_cloud, origin_cloud_);
     if (origin_cloud_.empty()) return;
-    cloud_ptr_ = origin_cloud_.makeShared();
-    kdtree_.setInputCloud(cloud_ptr_);
+    // cloud_ptr_ = origin_cloud_.makeShared();
+    // kdtree_.setInputCloud(cloud_ptr_);
 }
 
 void PassableNode::bodyVisual()
@@ -84,6 +85,7 @@ void PassableNode::bodyVisual()
 
 void PassableNode::cloud2Elevation()
 {
+
     ele_map_.clear("elevation");
     ele_map_.clear("elevation_low");
     ele_map_.clear("elevation_high");
@@ -91,10 +93,9 @@ void PassableNode::cloud2Elevation()
     float half_width = map_width_ * 0.5f;
     float half_height = map_height_ * 0.5f;
     int map_size_grid = ele_map_.getMapSizeGrid();
-
     std::vector<std::vector<float>> cell_bins(map_size_grid * map_size_grid);
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < static_cast<int>(origin_cloud_.size()); ++i)
     {
         const auto& p = origin_cloud_[i];
@@ -107,11 +108,11 @@ void PassableNode::cloud2Elevation()
         if (!ele_map_.getIndex(Eigen::Vector2d(p.x, p.y), index)) continue;
 
         int id = index.x() + index.y() * map_size_grid;
-#pragma omp critical
+        #pragma omp critical
         cell_bins[id].push_back(p.z);
     }
-
-#pragma omp parallel for collapse(2)
+    
+    #pragma omp parallel for collapse(2)
     for (int y = 0; y < map_size_grid; ++y)
     {
         for (int x = 0; x < map_size_grid; ++x)
@@ -152,7 +153,6 @@ void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
     ele_map_.inPainting("elevation", MINLIMIT);
     ele_map_.deNoise("elevation", MEDIAN, 3);
     ele_map_.judgePassability(rough_thres_, max_drop_, 3);
-
     bodyVisual();
     publishPassableInfo();
     publishGridMap();
@@ -161,7 +161,7 @@ void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 void PassableNode::publishPassableInfo()
 {
     if (origin_cloud_.empty()) return;
-
+    
     const float half_w = map_width_ * 0.5f;
     const float half_h = map_height_ * 0.5f;
 

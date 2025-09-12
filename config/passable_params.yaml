@@ -1,18 +1,16 @@
-passable_node:
-  ros__parameters:
-    map_width:     10.0
-    map_height:    3.0
-    voxel_size:    0.05
-    body_length:   0.9
-    body_width:    0.4
-    max_drop:      0.25
-    max_roughness: 0.10
+map_width:     10.0
+map_height:    3.0
+voxel_size:    0.05
+body_length:   0.9
+body_width:    0.4
+max_drop:      0.25
+max_roughness: 0.10
 
-    # for post process
-    low_ratio:        0.1
-    high_ratio:       0.8
-    gap_thresh:       0.1
+# for post process
+low_ratio:        0.1
+high_ratio:       0.8
+gap_thresh:       0.1
 
-    world_frame:   "camera_init"
-    gravity_frame: "base_gravity"
-    body_frame:    "body"
+world_frame:   "camera_init"
+gravity_frame: "base_gravity"
+body_frame:    "body"

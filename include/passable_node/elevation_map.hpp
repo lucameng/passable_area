@@ -96,9 +96,9 @@ private:
                        Eigen::Matrix3f &square) const;
 
 private:
-    int map_size_grid_;
     float map_size_;
     float grid_size_;
+    int map_size_grid_;
     std::string frame_;
     struct Pixel { int r, c; };
 };
