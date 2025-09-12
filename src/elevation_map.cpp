@@ -1,6 +1,6 @@
 #include "elevation_map.hpp"
 
-#include <rclcpp/rclcpp.hpp>
+#include <ros/ros.h>
 #include <algorithm>
 #include <opencv2/imgproc.hpp>
 #include <grid_map_cv/GridMapCvConverter.hpp>
@@ -18,15 +18,9 @@ elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_i
     get("passability").setConstant(UNKNOWN);
 }
 
-float elevationMap::getMinheight() const noexcept 
-{   
-    return minCoeffOfFinites(get("elevation")); 
-}
+float elevationMap::getMinheight() const noexcept { return minCoeffOfFinites(get("elevation")); }
 
-float elevationMap::getMaxheight() const noexcept 
-{ 
-    return maxCoeffOfFinites(get("elevation")); 
-}
+float elevationMap::getMaxheight() const noexcept { return maxCoeffOfFinites(get("elevation")); }
 
 void elevationMap::setAltitude(const Eigen::Array2i &id, float height)
 {
@@ -144,7 +138,7 @@ void elevationMap::minValues(const std::string &layer_in, const std::string &lay
 void elevationMap::minValuesLimited(const std::string &layer_in, const std::string &layer_out,
                                     int max_hole_pixels)
 {
-    if (!exists(layer_out)) 
+    if (!exists(layer_out))
     {
         add(layer_out, get(layer_in));
     }
@@ -541,21 +535,11 @@ void elevationMap::inPainting(const std::string &layer, int method)
 
     switch (method)
     {
-        case MEANONCE: 
-            meanValuesOnce(layer, layer_out); 
-            break;
-        case MIN: 
-            minValues(layer, layer_out); 
-            break;
-        case MINLIMIT: 
-            minValuesLimited(layer, layer_out, 200); 
-            break;
-        case MAX: 
-            maxValues(layer, layer_out);
-            break;
-        case MEAN: 
-            meanValues(layer, layer_out); 
-            break;
+        case MEANONCE: meanValuesOnce(layer, layer_out); break;
+        case MIN: minValues(layer, layer_out); break;
+        case MINLIMIT: minValuesLimited(layer, layer_out, 200); break;
+        case MAX: maxValues(layer, layer_out); break;
+        case MEAN: meanValues(layer, layer_out); break;
         default: break;
     }
 

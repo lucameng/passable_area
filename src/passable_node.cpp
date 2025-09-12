@@ -1,22 +1,22 @@
 #include "passable_node.hpp"
-#include <rclcpp/rclcpp.hpp>
+#include <ros/ros.h>
 
-PassableNode::PassableNode()
-    : Node("reachable_node"),
+PassableNode::PassableNode(const ros::NodeHandle& nh)
+    : nh_(nh),
       ele_init_(false),
-      map_width_(declare_parameter("map_width", 7.0f)),
-      map_height_(declare_parameter("map_height", 2.0f)),
-      voxel_width_(declare_parameter("voxel_size", 0.1f)),
-      body_length_(declare_parameter("body_length", 0.6f)),
-      body_width_(declare_parameter("body_width", 0.4f)),
-      max_drop_(declare_parameter("max_drop", 0.3f)),
-      rough_thres_(declare_parameter("max_roughness", 0.1f)),
-      low_ratio_(declare_parameter("low_ratio", 0.1f)),
-      high_ratio_(declare_parameter("high_ratio", 0.8f)),
-      gap_thresh_(declare_parameter("gap_thresh", 0.1f)),
-      w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
-      g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
-      b_frame_(declare_parameter<std::string>("body_frame", "body")),
+      map_width_(nh.param("map_width", 7.0f)),
+      map_height_(nh.param("map_height", 2.0f)),
+      voxel_width_(nh.param("voxel_size", 0.1f)),
+      body_length_(nh.param("body_length", 0.6f)),
+      body_width_(nh.param("body_width", 0.4f)),
+      max_drop_(nh.param("max_drop", 0.3f)),
+      rough_thres_(nh.param("max_roughness", 0.1f)),
+      low_ratio_(nh.param("low_ratio", 0.1f)),
+      high_ratio_(nh.param("high_ratio", 0.8f)),
+      gap_thresh_(nh.param("gap_thresh", 0.1f)),
+      w_frame_(nh.param<std::string>("world_frame", "camera_init")),
+      g_frame_(nh.param<std::string>("gravity_frame", "base_gravity")),
+      b_frame_(nh.param<std::string>("body_frame", "body")),
       body_l_(body_length_ / voxel_width_),
       body_w_(body_width_ / voxel_width_)
 {
@@ -25,26 +25,26 @@ PassableNode::PassableNode()
 
 void PassableNode::initialize()
 {
-    RCLCPP_INFO(get_logger(), "Initializing passable node");
-    cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-        "cloud_topic", 1, std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
-    body_vis_pub_ = create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
-    passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("reachable", 10);
-    impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("unreachable", 10);
-    expanded_passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
-    grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
+    ROS_INFO("Initializing passable node");
+    cloud_sub_ = nh_.subscribe("cloud_topic", 1, &PassableNode::cloudCallback, this,
+                               ros::TransportHints().tcpNoDelay());
+    body_vis_pub_ = nh_.advertise<visualization_msgs::Marker>("body_visual", 1);
+    passable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("passable", 1);
+    impassable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("impassable", 1);
+    expanded_passable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("expaneded", 1);
+    grid_map_pub_ = nh_.advertise<grid_map_msgs::GridMap>("grid_map", 1, true);
 
     elevationInit();
 }
 
 void PassableNode::elevationInit()
 {
-    RCLCPP_INFO(get_logger(), "Initializing elevation map");
+    ROS_INFO("Initializing elevation map");
     ele_map_ = elevationMap(map_width_, voxel_width_, g_frame_);
     ele_init_ = true;
 }
 
-void PassableNode::setInputCloud(const sensor_msgs::msg::PointCloud2& ros_cloud)
+void PassableNode::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
 {
     pcl::fromROSMsg(ros_cloud, origin_cloud_);
     if (origin_cloud_.empty()) return;
@@ -54,12 +54,12 @@ void PassableNode::setInputCloud(const sensor_msgs::msg::PointCloud2& ros_cloud)
 
 void PassableNode::bodyVisual()
 {
-    visualization_msgs::msg::Marker body;
+    visualization_msgs::Marker body;
 
     body.header.frame_id = b_frame_;
     body.header.stamp = stamp_;
-    body.type = visualization_msgs::msg::Marker::CUBE;
-    body.action = visualization_msgs::msg::Marker::ADD;
+    body.type = visualization_msgs::Marker::CUBE;
+    body.action = visualization_msgs::Marker::ADD;
 
     body.pose.position.x = 0.0;
     body.pose.position.y = 0.0;
@@ -79,7 +79,7 @@ void PassableNode::bodyVisual()
     body.color.b = 0.8;
     body.color.a = 0.7;
 
-    body_vis_pub_->publish(body);
+    body_vis_pub_.publish(body);
 }
 
 void PassableNode::cloud2Elevation()
@@ -135,7 +135,7 @@ void PassableNode::cloud2Elevation()
                 std::nth_element(zs.begin(), zs.begin() + j, zs.end());
                 high_z = zs[j];
             }
-            
+
             ele_map_.at("elevation_low", grid_map::Index(x, y)) = low_z;
             ele_map_.at("elevation_high", grid_map::Index(x, y)) = high_z;
             ele_map_.at("elevation", grid_map::Index(x, y)) = max_z;
@@ -143,7 +143,7 @@ void PassableNode::cloud2Elevation()
     }
 }
 
-void PassableNode::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
     if (!ele_init_) return;
     stamp_ = msg->header.stamp;
@@ -210,7 +210,7 @@ void PassableNode::publishPassableInfo()
         c.is_dense = true;
     };
 
-    sensor_msgs::msg::PointCloud2 ros_passable, ros_impassable;
+    sensor_msgs::PointCloud2 ros_passable, ros_impassable;
     finalize(passable_cloud_);
     finalize(impassable_cloud_);
     pcl::toROSMsg(passable_cloud_, ros_passable);
@@ -218,16 +218,16 @@ void PassableNode::publishPassableInfo()
     ros_passable.header.frame_id = ros_impassable.header.frame_id = g_frame_;
     ros_passable.header.stamp = ros_impassable.header.stamp = stamp_;
 
-    passable_pub_->publish(ros_passable);
-    impassable_pub_->publish(ros_impassable);
+    passable_pub_.publish(ros_passable);
+    impassable_pub_.publish(ros_impassable);
 }
 
 void PassableNode::publishGridMap()
 {
-    auto ros_map_ptr = grid_map::GridMapRosConverter::toMessage(ele_map_);
+    grid_map_msgs::GridMap ros_map;
+    grid_map::GridMapRosConverter::toMessage(ele_map_, ros_map);
+    ros_map.info.header.stamp = stamp_;
+    ros_map.info.header.frame_id = g_frame_;
 
-    ros_map_ptr->header.frame_id = g_frame_;
-    ros_map_ptr->header.stamp = stamp_;
-
-    grid_map_pub_->publish(*ros_map_ptr);
+    grid_map_pub_.publish(ros_map);
 }

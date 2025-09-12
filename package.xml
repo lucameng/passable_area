@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
-<package format="3">
+<package format="2">
   <name>passable_node</name>
   <version>0.0.0</version>
-  <description>The passable_node package</description>
+  <description>The passable node package</description>
 
-  <maintainer email="deeprobotics@todo.todo">deeprobotics</maintainer>
-  <license>TODO</license>
+  <maintainer email="support@deeprobotics.cn">support</maintainer>
+  <license>BSD</license>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>rclcpp</build_depend>
+  <build_depend>roscpp</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>pcl_conversions</build_depend>
   <build_depend>pcl_ros</build_depend>
@@ -17,7 +17,7 @@
   <build_depend>grid_map_cv</build_depend>
   <build_depend>grid_map_ros</build_depend>
 
-  <exec_depend>rclcpp</exec_depend>
+  <exec_depend>roscpp</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>pcl_conversions</exec_depend>
   <exec_depend>pcl_ros</exec_depend>
@@ -26,6 +26,5 @@
   <exec_depend>grid_map_ros</exec_depend>
 
   <export>
-    <build_type>ament_cmake</build_type>
   </export>
 </package>
