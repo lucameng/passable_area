@@ -94,7 +94,7 @@ void PassableNode::cloud2Elevation()
 
     std::vector<std::vector<float>> cell_bins(map_size_grid * map_size_grid);
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < static_cast<int>(origin_cloud_.size()); ++i)
     {
         const auto& p = origin_cloud_[i];
@@ -107,11 +107,11 @@ void PassableNode::cloud2Elevation()
         if (!ele_map_.getIndex(Eigen::Vector2d(p.x, p.y), index)) continue;
 
         int id = index.x() + index.y() * map_size_grid;
-#pragma omp critical
+        #pragma omp critical
         cell_bins[id].push_back(p.z);
     }
 
-#pragma omp parallel for collapse(2)
+    #pragma omp parallel for collapse(2)
     for (int y = 0; y < map_size_grid; ++y)
     {
         for (int x = 0; x < map_size_grid; ++x)
