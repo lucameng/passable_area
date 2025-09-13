@@ -25,7 +25,6 @@ endif()
 include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
-  ${drdds_INCLUDE_DIRS}
   include/passable_node
 )
 
