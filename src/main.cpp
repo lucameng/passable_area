@@ -1,19 +1,22 @@
+#include <ros/ros.h>
 #include "passable_node.hpp"
-#include <rclcpp/rclcpp.hpp>
 
 int main(int argc, char** argv)
 {
-    rclcpp::init(argc, argv);
+    ros::init(argc, argv, "passable_node");
 
-    auto node = std::make_shared<PassableNode>();
+    ros::NodeHandle nh("~");
+
+    PassableNode passable_node(nh);
+
+    passable_node.initialize();
+
+    ros::AsyncSpinner spinner(0);
     
-    node->initialize();
+    ROS_INFO("Start spinning passable node");
+    spinner.start();
 
-    RCLCPP_INFO(node->get_logger(), "Spinning passable node");
-
-    rclcpp::spin(node);
-
-    rclcpp::shutdown();
+    ros::waitForShutdown();
 
     return 0;
 }

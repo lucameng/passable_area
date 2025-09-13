@@ -1,6 +1,6 @@
 #include "elevation_map.hpp"
 
-#include <rclcpp/rclcpp.hpp>
+#include <ros/ros.h>
 #include <algorithm>
 #include <opencv2/imgproc.hpp>
 #include <grid_map_cv/GridMapCvConverter.hpp>
@@ -9,8 +9,8 @@ elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_i
     : grid_map::GridMap({"elevation", "passability", "elevation_low", "elevation_high"}),
       map_size_(map_s),
       grid_size_(grid_s),
-      frame_(frame_id),
-      map_size_grid_(map_size_ / grid_size_)
+      map_size_grid_(map_size_ / grid_size_),
+      frame_(frame_id)
 {
     setFrameId(frame_);
     setGeometry(grid_map::Length(map_size_, map_size_), grid_size_);
@@ -19,7 +19,7 @@ elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_i
 }
 
 float elevationMap::getMinheight() const noexcept 
-{   
+{ 
     return minCoeffOfFinites(get("elevation")); 
 }
 
@@ -144,7 +144,7 @@ void elevationMap::minValues(const std::string &layer_in, const std::string &lay
 void elevationMap::minValuesLimited(const std::string &layer_in, const std::string &layer_out,
                                     int max_hole_pixels)
 {
-    if (!exists(layer_out)) 
+    if (!exists(layer_out))
     {
         add(layer_out, get(layer_in));
     }
@@ -551,12 +551,13 @@ void elevationMap::inPainting(const std::string &layer, int method)
             minValuesLimited(layer, layer_out, 200); 
             break;
         case MAX: 
-            maxValues(layer, layer_out);
+            maxValues(layer, layer_out); 
             break;
         case MEAN: 
             meanValues(layer, layer_out); 
             break;
-        default: break;
+        default: 
+            break;
     }
 
     get(layer) = std::move(get(layer_out));
