@@ -9,7 +9,7 @@ int main(int argc, char** argv)
     
     node->initialize();
 
-    RCLCPP_INFO(node->get_logger(), "Spinning passable node");
+    RCLCPP_INFO(node->get_logger(), "Start spinning passable node");
 
     rclcpp::executors::MultiThreadedExecutor executor;
 

@@ -29,15 +29,11 @@ void PassableNode::initialize()
     elevationInit();
 
     cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-        "cloud_topic", rclcpp::SensorDataQoS(),
-        std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
+        "cloud_topic", 10, std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
     body_vis_pub_ = create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
-    passable_pub_ =
-        create_publisher<sensor_msgs::msg::PointCloud2>("passable", rclcpp::SensorDataQoS());
-    impassable_pub_ =
-        create_publisher<sensor_msgs::msg::PointCloud2>("impassable", rclcpp::SensorDataQoS());
-    expanded_passable_pub_ =
-        create_publisher<sensor_msgs::msg::PointCloud2>("expanded", rclcpp::SensorDataQoS());
+    passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("passable", 10);
+    impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("impassable", 10);
+    expanded_passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
     grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
 }
 

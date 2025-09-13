@@ -14,7 +14,7 @@
 #include <pcl/common/transforms.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <pcl/kdtree/kdtree_flann.h>
+// #include <pcl/kdtree/kdtree_flann.h>
 #include <cmath>
 #include <Eigen/Dense>
 #include <unordered_set>
@@ -43,7 +43,7 @@ private:
     rclcpp::Publisher<grid_map_msgs::msg::GridMap>::SharedPtr grid_map_pub_;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_ptr_;
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_;
+    // pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_;
     pcl::PointCloud<pcl::PointXYZ> origin_cloud_;
     pcl::PointCloud<pcl::PointXYZ> passable_cloud_;
     pcl::PointCloud<pcl::PointXYZ> impassable_cloud_;
