@@ -198,10 +198,10 @@ void PassableNode::publishPassableInfo()
                 impassable_cloud_.push_back(p);
             }
         }
-        else
-        {
-            impassable_cloud_.push_back(p);
-        }
+        // else
+        // {
+        //     expanded_passable_cloud_.push_back(p);
+        // }
     }
 
     auto finalize = [](pcl::PointCloud<pcl::PointXYZ>& c) {
@@ -220,6 +220,14 @@ void PassableNode::publishPassableInfo()
 
     passable_pub_->publish(ros_passable);
     impassable_pub_->publish(ros_impassable);
+
+    // visualize for debug
+    // sensor_msgs::msg::PointCloud2 ros_expanded;
+    // finalize(expanded_passable_cloud_);
+    // pcl::toROSMsg(expanded_passable_cloud_, ros_expanded);
+    // ros_expanded.header.frame_id = g_frame_;
+    // ros_expanded.header.stamp = stamp_;
+    // expanded_passable_pub_->publish(ros_expanded);
 }
 
 void PassableNode::publishGridMap()

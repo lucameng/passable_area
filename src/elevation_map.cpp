@@ -609,7 +609,7 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
 
     const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
     const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
-    const int nDir = 8;
+    const int n_dir = 8;
 
     while (!q.empty())
     {
@@ -622,7 +622,7 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             setAltitude(grid_map::Index(x, y), cur_height);
         }
 
-        for (int i = 0; i < nDir; ++i)
+        for (int i = 0; i < n_dir; ++i)
         {
             int nx = x + dx[i], ny = y + dy[i];
             if (nx < 0 || nx >= map_size_grid_ || ny < 0 || ny >= map_size_grid_) continue;
