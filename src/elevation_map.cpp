@@ -581,7 +581,7 @@ void elevationMap::deNoise(const std::string &layer, int method, int kernel_size
     erase(layer_out);
 }
 
-bool elevationMap::isSteppable(float variance_error, float roughness_thres) const
+bool elevationMap::isPassable(float variance_error, float roughness_thres) const
 {
     float square_thres = roughness_thres * roughness_thres;
     return (variance_error < square_thres);
@@ -597,15 +597,7 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
     std::deque<std::pair<int, int>> q;
     q.emplace_back(center, center);
     visited[center + center * map_size_grid_] = true;
-
-    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-    Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
-    auto err = computeError(center, center, kernel_size, mean, square);
-
-    if (isSteppable(err, roughness_thres))
-    {
-        setPassability(Eigen::Array2i(center, center), STEPPABLE);
-    }
+    setPassability(Eigen::Array2i(center, center), PASSABLE);
 
     const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
     const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
@@ -635,16 +627,25 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             if (!std::isfinite(nbr_height))
             {
                 nbr_height = cur_height;
-                setAltitude(grid_map::Index(x, y), nbr_height);
+                setAltitude(grid_map::Index(nx, ny), nbr_height);
             }
 
             if (std::fabs(nbr_height - cur_height) > drop_thres)
             {
-                setPassability(grid_map::Index(nx, ny), UNSTEPPABLE);
+                setPassability(grid_map::Index(nx, ny), IMPASSABLE);
                 continue;
             }
 
-            setPassability(grid_map::Index(nx, ny), STEPPABLE);
+            Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+            Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
+            auto e = computeError(nx, ny, kernel_size, mean, square);
+            if (!isPassable(e, roughness_thres) && cur_height > mean.z())
+            {
+                setPassability(grid_map::Index(nx, ny), IMPASSABLE);
+                continue;
+            }
+
+            setPassability(grid_map::Index(nx, ny), PASSABLE);
             q.emplace_back(nx, ny);
         }
     }

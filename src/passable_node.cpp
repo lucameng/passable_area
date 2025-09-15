@@ -179,11 +179,11 @@ void PassableNode::publishPassableInfo()
 
         Eigen::Vector2d pos(p.x, p.y);
         uint8_t step = ele_map_.getPassability(pos);
-        if (step == STEPPABLE)
+        if (step == PASSABLE)
         {
             passable_cloud_.push_back(p);
         }
-        else if (step == UNSTEPPABLE)
+        else if (step == IMPASSABLE)
         {
             float low_z = ele_map_.atPosition("elevation_low", pos);
             float high_z = ele_map_.atPosition("elevation_high", pos);

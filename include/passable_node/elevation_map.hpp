@@ -12,10 +12,10 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 #include <opencv2/core/eigen.hpp>
 
-enum Steppability : uint8_t
+enum Passability : uint8_t
 {
-    STEPPABLE = 0,
-    UNSTEPPABLE = 1,
+    PASSABLE = 0,
+    IMPASSABLE = 1,
     UNKNOWN = 2
 };
 
@@ -58,7 +58,7 @@ public:
 
     void inPainting(const std::string &layer, int method);
     void deNoise(const std::string &layer, int method, int kernel_size);
-    bool isSteppable(float variance_error, float roughness_thres) const;
+    bool isPassable(float variance_error, float roughness_thres) const;
     void judgePassability(float roughness_thres, float drop_thres, int kernel_size);
 
     float getGridSize() const noexcept { return grid_size_; }
