@@ -40,7 +40,7 @@ private:
     ros::Subscriber cloud_sub_;
     ros::Publisher passable_pub_;
     ros::Publisher impassable_pub_;
-    ros::Publisher expanded_passable_pub_;
+    ros::Publisher expanded_pub_;
     ros::Publisher body_vis_pub_;
     ros::Publisher grid_map_pub_;
 
@@ -49,7 +49,7 @@ private:
     pcl::PointCloud<pcl::PointXYZ> origin_cloud_;
     pcl::PointCloud<pcl::PointXYZ> passable_cloud_;
     pcl::PointCloud<pcl::PointXYZ> impassable_cloud_;
-    pcl::PointCloud<pcl::PointXYZ> expanded_passable_cloud_;
+    pcl::PointCloud<pcl::PointXYZ> expanded_cloud_;
     std::vector<int> expanded_indices_;
 
     std::string w_frame_;   // world frame
