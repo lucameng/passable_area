@@ -6,7 +6,7 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 
 elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "passability", "elevation_low", "elevation_high"}),
+    : grid_map::GridMap({"elevation", "passability"}),
       map_size_(map_s),
       grid_size_(grid_s),
       map_size_grid_(map_size_ / grid_size_),
@@ -535,49 +535,49 @@ float elevationMap::computeError(int x, int y, int kernel_size, Eigen::Vector3f 
     }
 }
 
-void elevationMap::inPainting(const std::string &layer, int method)
+void elevationMap::inPainting(const std::string &layer_in, int method)
 {
     const std::string layer_out = "tmp";
 
     switch (method)
     {
         case MEANONCE: 
-            meanValuesOnce(layer, layer_out); 
+            meanValuesOnce(layer_in, layer_out); 
             break;
         case MIN: 
-            minValues(layer, layer_out); 
+            minValues(layer_in, layer_out); 
             break;
         case MINLIMIT: 
-            minValuesLimited(layer, layer_out, 200); 
+            minValuesLimited(layer_in, layer_out, 200); 
             break;
         case MAX: 
-            maxValues(layer, layer_out);
+            maxValues(layer_in, layer_out);
             break;
         case MEAN: 
-            meanValues(layer, layer_out); 
+            meanValues(layer_in, layer_out); 
             break;
         default: break;
     }
 
-    get(layer) = std::move(get(layer_out));
+    get(layer_in) = std::move(get(layer_out));
     erase(layer_out);
 }
 
-void elevationMap::deNoise(const std::string &layer, int method, int kernel_size)
+void elevationMap::deNoise(const std::string &layer_in, int method, int kernel_size)
 {
     kernel_size = std::clamp(kernel_size, 1, 5);
     const std::string layer_out = "tmp";
 
     if (method == MEDIAN)
     {
-        medianFilter(layer, layer_out, kernel_size, -0.1f);
+        medianFilter(layer_in, layer_out, kernel_size, -0.1f);
     }
     else if (method == GAUSS)
     {
-        gaussianFilter(layer, layer_out, kernel_size);
+        gaussianFilter(layer_in, layer_out, kernel_size);
     }
 
-    get(layer) = std::move(get(layer_out));
+    get(layer_in) = std::move(get(layer_out));
     erase(layer_out);
 }
 
@@ -599,8 +599,8 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
     visited[center + center * map_size_grid_] = true;
     setPassability(Eigen::Array2i(center, center), PASSABLE);
 
-    const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
-    const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
+    const int dx[8] = {1,  1,  0, -1, -1, -1, 0, 1};
+    const int dy[8] = {0, -1, -1, -1,  0,  1, 1, 1};
     const int n_dir = 8;
 
     while (!q.empty())

@@ -38,7 +38,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr passable_pub_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr impassable_pub_;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr expanded_passable_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr expanded_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr body_vis_pub_;
     rclcpp::Publisher<grid_map_msgs::msg::GridMap>::SharedPtr grid_map_pub_;
 
@@ -47,7 +47,7 @@ private:
     pcl::PointCloud<pcl::PointXYZ> origin_cloud_;
     pcl::PointCloud<pcl::PointXYZ> passable_cloud_;
     pcl::PointCloud<pcl::PointXYZ> impassable_cloud_;
-    pcl::PointCloud<pcl::PointXYZ> expanded_passable_cloud_;
+    pcl::PointCloud<pcl::PointXYZ> expanded_cloud_;
     std::vector<int> expanded_indices_;
 
     std::string w_frame_;   // world frame
