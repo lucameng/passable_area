@@ -6,7 +6,7 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 
 elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "passability", "elevation_low", "elevation_high"}),
+    : grid_map::GridMap({"elevation", "passability"}),
       map_size_(map_s),
       grid_size_(grid_s),
       map_size_grid_(map_size_ / grid_size_),
@@ -168,13 +168,13 @@ void elevationMap::minValuesLimited(const std::string &layer_in, const std::stri
             if (!std::isnan(H_in(r, c)) || visited[r][c]) continue;
 
             std::vector<Pixel> comp;
-            std::queue<Pixel> q;
-            q.push({r, c});
+            std::queue<Pixel> que;
+            que.push({r, c});
             visited[r][c] = true;
-            while (!q.empty())
+            while (!que.empty())
             {
-                Pixel p = q.front();
-                q.pop();
+                Pixel p = que.front();
+                que.pop();
                 comp.push_back(p);
                 for (int k = 0; k < 4; ++k)
                 {
@@ -182,7 +182,7 @@ void elevationMap::minValuesLimited(const std::string &layer_in, const std::stri
                     if (inBounds(nr, nc) && !visited[nr][nc] && std::isnan(H_in(nr, nc)))
                     {
                         visited[nr][nc] = true;
-                        q.push({nr, nc});
+                        que.push({nr, nc});
                     }
                 }
             }
@@ -535,53 +535,53 @@ float elevationMap::computeError(int x, int y, int kernel_size, Eigen::Vector3f 
     }
 }
 
-void elevationMap::inPainting(const std::string &layer, int method)
+void elevationMap::inPainting(const std::string &layer_in, int method)
 {
     const std::string layer_out = "tmp";
 
     switch (method)
     {
         case MEANONCE: 
-            meanValuesOnce(layer, layer_out); 
+            meanValuesOnce(layer_in, layer_out); 
             break;
         case MIN: 
-            minValues(layer, layer_out); 
+            minValues(layer_in, layer_out); 
             break;
         case MINLIMIT: 
-            minValuesLimited(layer, layer_out, 200); 
+            minValuesLimited(layer_in, layer_out, 200); 
             break;
         case MAX: 
-            maxValues(layer, layer_out);
+            maxValues(layer_in, layer_out);
             break;
         case MEAN: 
-            meanValues(layer, layer_out); 
+            meanValues(layer_in, layer_out); 
             break;
         default: break;
     }
 
-    get(layer) = std::move(get(layer_out));
+    get(layer_in) = std::move(get(layer_out));
     erase(layer_out);
 }
 
-void elevationMap::deNoise(const std::string &layer, int method, int kernel_size)
+void elevationMap::deNoise(const std::string &layer_in, int method, int kernel_size)
 {
     kernel_size = std::clamp(kernel_size, 1, 5);
     const std::string layer_out = "tmp";
 
     if (method == MEDIAN)
     {
-        medianFilter(layer, layer_out, kernel_size, -0.1f);
+        medianFilter(layer_in, layer_out, kernel_size, -0.1f);
     }
     else if (method == GAUSS)
     {
-        gaussianFilter(layer, layer_out, kernel_size);
+        gaussianFilter(layer_in, layer_out, kernel_size);
     }
 
-    get(layer) = std::move(get(layer_out));
+    get(layer_in) = std::move(get(layer_out));
     erase(layer_out);
 }
 
-bool elevationMap::isSteppable(float variance_error, float roughness_thres) const
+bool elevationMap::isPassable(float variance_error, float roughness_thres) const
 {
     float square_thres = roughness_thres * roughness_thres;
     return (variance_error < square_thres);
@@ -594,27 +594,19 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
 
     get("passability").setConstant(UNKNOWN);
     std::vector<bool> visited(map_size_grid_ * map_size_grid_, false);
-    std::deque<std::pair<int, int>> q;
-    q.emplace_back(center, center);
+    std::queue<std::pair<int, int>> que;
+    que.emplace(center, center);
     visited[center + center * map_size_grid_] = true;
+    setPassability(Eigen::Array2i(center, center), PASSABLE);
 
-    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-    Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
-    auto err = computeError(center, center, kernel_size, mean, square);
-
-    if (isSteppable(err, roughness_thres))
-    {
-        setPassability(Eigen::Array2i(center, center), STEPPABLE);
-    }
-
-    const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
-    const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
+    const int dx[8] = {1,  1,  0, -1, -1, -1, 0, 1};
+    const int dy[8] = {0, -1, -1, -1,  0,  1, 1, 1};
     const int n_dir = 8;
 
-    while (!q.empty())
+    while (!que.empty())
     {
-        auto [x, y] = q.front();
-        q.pop_front();
+        auto [x, y] = que.front();
+        que.pop();
         float cur_height = getAltitude(grid_map::Index(x, y));
         if (!std::isfinite(cur_height))
         {
@@ -635,17 +627,26 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             if (!std::isfinite(nbr_height))
             {
                 nbr_height = cur_height;
-                setAltitude(grid_map::Index(x, y), nbr_height);
+                setAltitude(grid_map::Index(nx, ny), nbr_height);
             }
 
             if (std::fabs(nbr_height - cur_height) > drop_thres)
             {
-                setPassability(grid_map::Index(nx, ny), UNSTEPPABLE);
+                setPassability(grid_map::Index(nx, ny), IMPASSABLE);
                 continue;
             }
 
-            setPassability(grid_map::Index(nx, ny), STEPPABLE);
-            q.emplace_back(nx, ny);
+            Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+            Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
+            auto e = computeError(nx, ny, kernel_size, mean, square);
+            if (!isPassable(e, roughness_thres) && cur_height > mean.z())
+            {
+                setPassability(grid_map::Index(nx, ny), IMPASSABLE);
+                continue;
+            }
+
+            setPassability(grid_map::Index(nx, ny), PASSABLE);
+            que.emplace(nx, ny);
         }
     }
 }
