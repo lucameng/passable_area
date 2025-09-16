@@ -2,7 +2,7 @@
 
 ## Overview
 
-Passable area node, supporting ros and ros2
+Passable area node, compatible with both ros and ros2
 
 ## Branches
 
