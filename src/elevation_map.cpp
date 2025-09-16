@@ -168,13 +168,13 @@ void elevationMap::minValuesLimited(const std::string &layer_in, const std::stri
             if (!std::isnan(H_in(r, c)) || visited[r][c]) continue;
 
             std::vector<Pixel> comp;
-            std::queue<Pixel> q;
-            q.push({r, c});
+            std::queue<Pixel> que;
+            que.push({r, c});
             visited[r][c] = true;
-            while (!q.empty())
+            while (!que.empty())
             {
-                Pixel p = q.front();
-                q.pop();
+                Pixel p = que.front();
+                que.pop();
                 comp.push_back(p);
                 for (int k = 0; k < 4; ++k)
                 {
@@ -182,7 +182,7 @@ void elevationMap::minValuesLimited(const std::string &layer_in, const std::stri
                     if (inBounds(nr, nc) && !visited[nr][nc] && std::isnan(H_in(nr, nc)))
                     {
                         visited[nr][nc] = true;
-                        q.push({nr, nc});
+                        que.push({nr, nc});
                     }
                 }
             }
@@ -594,8 +594,8 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
 
     get("passability").setConstant(UNKNOWN);
     std::vector<bool> visited(map_size_grid_ * map_size_grid_, false);
-    std::deque<std::pair<int, int>> q;
-    q.emplace_back(center, center);
+    std::queue<std::pair<int, int>> que;
+    que.emplace(center, center);
     visited[center + center * map_size_grid_] = true;
     setPassability(Eigen::Array2i(center, center), PASSABLE);
 
@@ -603,10 +603,10 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
     const int dy[8] = {0, -1, -1, -1,  0,  1, 1, 1};
     const int n_dir = 8;
 
-    while (!q.empty())
+    while (!que.empty())
     {
-        auto [x, y] = q.front();
-        q.pop_front();
+        auto [x, y] = que.front();
+        que.pop();
         float cur_height = getAltitude(grid_map::Index(x, y));
         if (!std::isfinite(cur_height))
         {
@@ -646,7 +646,7 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             }
 
             setPassability(grid_map::Index(nx, ny), PASSABLE);
-            q.emplace_back(nx, ny);
+            que.emplace(nx, ny);
         }
     }
 }
