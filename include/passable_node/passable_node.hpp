@@ -14,7 +14,7 @@
 #include <pcl/common/transforms.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <pcl/kdtree/kdtree_flann.h>
+// #include <pcl/kdtree/kdtree_flann.h>
 #include <cmath>
 #include <Eigen/Dense>
 #include <unordered_set>
@@ -40,16 +40,16 @@ private:
     ros::Subscriber cloud_sub_;
     ros::Publisher passable_pub_;
     ros::Publisher impassable_pub_;
-    ros::Publisher expanded_passable_pub_;
+    ros::Publisher expanded_pub_;
     ros::Publisher body_vis_pub_;
     ros::Publisher grid_map_pub_;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_ptr_;
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_;
+    // pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_;
     pcl::PointCloud<pcl::PointXYZ> origin_cloud_;
     pcl::PointCloud<pcl::PointXYZ> passable_cloud_;
     pcl::PointCloud<pcl::PointXYZ> impassable_cloud_;
-    pcl::PointCloud<pcl::PointXYZ> expanded_passable_cloud_;
+    pcl::PointCloud<pcl::PointXYZ> expanded_cloud_;
     std::vector<int> expanded_indices_;
 
     std::string w_frame_;   // world frame
