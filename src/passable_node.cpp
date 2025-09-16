@@ -29,11 +29,11 @@ void PassableNode::initialize()
     elevationInit();
 
     cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-        "cloud_topic", 1, std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
+        "cloud_topic", 10, std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
     body_vis_pub_ = create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
     passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("passable", 10);
     impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("impassable", 10);
-    expanded_passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
+    expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
     grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
 }
 
@@ -85,61 +85,26 @@ void PassableNode::bodyVisual()
 void PassableNode::cloud2Elevation()
 {
     ele_map_.clear("elevation");
-    ele_map_.clear("elevation_low");
-    ele_map_.clear("elevation_high");
-
-    float half_width = map_width_ * 0.5f;
-    float half_height = map_height_ * 0.5f;
-    int map_size_grid = ele_map_.getMapSizeGrid();
-
-    std::vector<std::vector<float>> cell_bins(map_size_grid * map_size_grid);
-
+    float half_width = map_width_ * 0.5;
+    float half_height = map_height_ * 0.5;
+    
     #pragma omp parallel for
-    for (int i = 0; i < static_cast<int>(origin_cloud_.size()); ++i)
+    for (const auto& p : origin_cloud_)
     {
-        const auto& p = origin_cloud_[i];
-        if (p.x <= -half_width || p.x >= half_width || 
+        if (p.x <= -half_width || p.x >= half_width ||
             p.y <= -half_width || p.y >= half_width ||
-            p.z <= -half_height || p.z >= half_height)
-            continue;
+            p.z <= -half_height || p.z >= half_height) continue;
 
-        grid_map::Index index;
-        if (!ele_map_.getIndex(Eigen::Vector2d(p.x, p.y), index)) continue;
-
-        int id = index.x() + index.y() * map_size_grid;
-        #pragma omp critical
-        cell_bins[id].push_back(p.z);
-    }
-
-    #pragma omp parallel for collapse(2)
-    for (int y = 0; y < map_size_grid; ++y)
-    {
-        for (int x = 0; x < map_size_grid; ++x)
+        float height = ele_map_.getAltitude(Eigen::Vector2d(p.x, p.y));
+        if (std::isnan(height))
         {
-            int id = x + y * map_size_grid;
-            auto& zs = cell_bins[id];
-            if (zs.empty()) continue;
-
-            float max_z = *std::max_element(zs.begin(), zs.end());
-
-            float low_z = NAN, high_z = NAN;
-            if (zs.size() > 3)
-            {
-                size_t k = static_cast<size_t>(zs.size() * low_ratio_);
-                k = std::min(k, zs.size() - 1);
-                std::nth_element(zs.begin(), zs.begin() + k, zs.end());
-                low_z = zs[k];
-
-                size_t j = static_cast<size_t>(zs.size() * high_ratio_);
-                j = std::min(j, zs.size() - 1);
-                std::nth_element(zs.begin(), zs.begin() + j, zs.end());
-                high_z = zs[j];
-            }
-            
-            ele_map_.at("elevation_low", grid_map::Index(x, y)) = low_z;
-            ele_map_.at("elevation_high", grid_map::Index(x, y)) = high_z;
-            ele_map_.at("elevation", grid_map::Index(x, y)) = max_z;
+            height = p.z;
         }
+        else
+        {
+            height = std::max(height, p.z);
+        }
+        ele_map_.setAltitude(Eigen::Vector2d(p.x, p.y), height);
     }
 }
 
@@ -167,7 +132,7 @@ void PassableNode::publishPassableInfo()
 
     passable_cloud_.clear();
     impassable_cloud_.clear();
-    expanded_passable_cloud_.clear();
+    expanded_cloud_.clear();
     long expand_count = 0;
 
     for (int i = 0; i < static_cast<int>(origin_cloud_.size()); ++i)
@@ -179,29 +144,18 @@ void PassableNode::publishPassableInfo()
 
         Eigen::Vector2d pos(p.x, p.y);
         uint8_t step = ele_map_.getPassability(pos);
-        if (step == STEPPABLE)
+        if (step == PASSABLE)
         {
             passable_cloud_.push_back(p);
         }
-        else if (step == UNSTEPPABLE)
-        {
-            float low_z = ele_map_.atPosition("elevation_low", pos);
-            float high_z = ele_map_.atPosition("elevation_high", pos);
-            if (std::isfinite(high_z) && std::isfinite(low_z) && (p.z < low_z) &&
-                (high_z - low_z >= gap_thresh_))
-            {
-                passable_cloud_.push_back(p);
-                ++expand_count;
-            }
-            else
-            {
-                impassable_cloud_.push_back(p);
-            }
-        }
-        else
+        else if (step == IMPASSABLE)
         {
             impassable_cloud_.push_back(p);
         }
+        // else
+        // {
+        //     expanded_cloud_.push_back(p);
+        // }
     }
 
     auto finalize = [](pcl::PointCloud<pcl::PointXYZ>& c) {
@@ -220,6 +174,14 @@ void PassableNode::publishPassableInfo()
 
     passable_pub_->publish(ros_passable);
     impassable_pub_->publish(ros_impassable);
+
+    // visualize for debug
+    // sensor_msgs::msg::PointCloud2 ros_expanded;
+    // finalize(expanded_cloud_);
+    // pcl::toROSMsg(expanded_cloud_, ros_expanded);
+    // ros_expanded.header.frame_id = g_frame_;
+    // ros_expanded.header.stamp = stamp_;
+    // expanded_pub_->publish(ros_expanded);
 }
 
 void PassableNode::publishGridMap()
