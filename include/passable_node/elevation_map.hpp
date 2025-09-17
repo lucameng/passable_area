@@ -39,7 +39,7 @@ class elevationMap : public grid_map::GridMap
 {
 public:
     elevationMap() = default;
-    elevationMap(float map_s, float grid_s, const std::string &frame_id);
+    explicit elevationMap(float map_s, float grid_s, const std::string &frame_id);
 
     float getMinheight() const noexcept;
     float getMaxheight() const noexcept;
