@@ -1,4 +1,5 @@
 #include "elevation_map.hpp"
+#include "dr_math.hpp"
 
 #include <ros/ros.h>
 #include <algorithm>
@@ -6,7 +7,7 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 
 elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "passability"}),
+    : grid_map::GridMap({"elevation", "passability", "coverability"}),
       map_size_(map_s),
       grid_size_(grid_s),
       map_size_grid_(map_size_ / grid_size_),
@@ -624,11 +625,18 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             if (visited[idx]) continue;
             visited[idx] = true;
 
-            float nbr_height = getAltitude(grid_map::Index(nx, ny));
-            if (!std::isfinite(nbr_height))
+            auto nbr_height = getAltitude(grid_map::Index(nx, ny));
+            // if (!std::isfinite(nbr_height))
+            // {
+            //     nbr_height = cur_height;
+            //     setAltitude(grid_map::Index(nx, ny), nbr_height);
+            // }
+
+            if (dr_math::equal(nbr_height, DEAD_VALUE))
             {
-                nbr_height = cur_height;
-                setAltitude(grid_map::Index(nx, ny), nbr_height);
+                // setPassability(grid_map::Index(nx, ny), IMPASSABLE);
+                setPassability(grid_map::Index(x, y), IMPASSABLE);
+                continue;
             }
 
             if (std::fabs(nbr_height - cur_height) > drop_thres)

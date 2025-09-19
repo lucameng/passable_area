@@ -5,6 +5,7 @@
 #include <deque>
 #include <cstdint>
 #include <vector>
+#include <Eigen/Dense>
 
 namespace dr_utils {
 
@@ -97,6 +98,44 @@ public:
         return 0;
     };
 };
+
+inline Eigen::Matrix3d rotationFromYPRrad(const Eigen::Vector3d& rpy_rad)
+{
+    // AngleAxisd expects angle (rad) and axis
+    Eigen::AngleAxisd rollAngle(rpy_rad[0], Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd pitchAngle(rpy_rad[1], Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd yawAngle(rpy_rad[2], Eigen::Vector3d::UnitZ());
+
+    // compose rotations: R = R_z(yaw) * R_y(pitch) * R_x(roll)
+    Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+    return q.toRotationMatrix();
+}
+
+inline Eigen::Matrix3f rotationFromYPRrad(const Eigen::Vector3f& rpy_rad)
+{
+    // AngleAxisd expects angle (rad) and axis
+    Eigen::AngleAxisf rollAngle(rpy_rad[0], Eigen::Vector3f::UnitX());
+    Eigen::AngleAxisf pitchAngle(rpy_rad[1], Eigen::Vector3f::UnitY());
+    Eigen::AngleAxisf yawAngle(rpy_rad[2], Eigen::Vector3f::UnitZ());
+
+    // compose rotations: R = R_z(yaw) * R_y(pitch) * R_x(roll)
+    Eigen::Quaternionf q = yawAngle * pitchAngle * rollAngle;
+    return q.toRotationMatrix();
+}
+
+inline Eigen::Matrix3d rotationFromYPRdeg(const Eigen::Vector3d& rpy_deg)
+{
+    const double d2r = M_PI / 180.0;
+    Eigen::Vector3d rpy_rad = rpy_deg * d2r;
+    return rotationFromYPRrad(rpy_rad);
+}
+
+inline Eigen::Matrix3f rotationFromYPRdeg(const Eigen::Vector3f& rpy_deg)
+{
+    const float d2r = M_PI / 180.0;
+    Eigen::Vector3f rpy_rad = rpy_deg * d2r;
+    return rotationFromYPRrad(rpy_rad);
+}
 
 } // namespace dr_utils
 

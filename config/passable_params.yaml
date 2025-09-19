@@ -3,7 +3,7 @@ map_height:    3.0
 voxel_size:    0.05
 body_length:   0.9
 body_width:    0.4
-max_drop:      0.25
+max_drop:      0.20
 max_roughness: 0.10
 
 # for post process
@@ -14,3 +14,20 @@ gap_thresh:       0.1
 world_frame:   "camera_init"
 gravity_frame: "base_gravity"
 body_frame:    "body"
+
+
+lidar_front_up:
+  pos_body: [0.44367, 0.0, 0.05415]      # m
+  rpy_body: [0.0, -65.0, 0.0]             # deg
+
+lidar_front_down:
+  pos_body: [0.43297, 0.0, -0.05519]     # m
+  rpy_body: [0.0, -136.0, 0.0]            # deg
+
+lidar_rear_up:
+  pos_body: [-0.46576, 0.0, 0.03484]     # m
+  rpy_body: [0.0, 95.0, 0.0]           # deg
+
+lidar_rear_down:
+  pos_body: [-0.41074, 0.0, -0.05601]    # m
+  rpy_body: [0.0, 146.0, 0.0]          # deg

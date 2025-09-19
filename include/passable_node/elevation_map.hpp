@@ -12,6 +12,8 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 #include <opencv2/core/eigen.hpp>
 
+#define DEAD_VALUE -10.f
+
 enum Passability : uint8_t
 {
     PASSABLE = 0,

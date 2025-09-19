@@ -2,6 +2,7 @@
 #define PASSABLE_NODE_HPP
 
 #include "elevation_map.hpp"
+#include "lidar_coverage.hpp"
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -19,6 +20,9 @@
 #include <Eigen/Dense>
 #include <unordered_set>
 
+// class elevationMap;
+// class LidarCoverage;
+
 class PassableNode
 {
 public:
@@ -28,16 +32,20 @@ public:
 
 private:
     void elevationInit();
+    void lidarCoverInit();
     void cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
     void setInputCloud(const sensor_msgs::PointCloud2 &ros_cloud);
     void cloud2Elevation();
     void bodyVisual();
     void publishPassableInfo();
     void publishGridMap();
+    Eigen::Affine3f getTransform() const;
 
 private:
     ros::NodeHandle nh_;
     ros::Subscriber cloud_sub_;
+    ros::Subscriber imu_sub_;
     ros::Publisher passable_pub_;
     ros::Publisher impassable_pub_;
     ros::Publisher expanded_pub_;
@@ -55,8 +63,13 @@ private:
     std::string w_frame_;   // world frame
     std::string g_frame_;   // gravity frame
     std::string b_frame_;   // body frame
-    elevationMap ele_map_;
     ros::Time stamp_;
+    elevationMap ele_map_;
+    
+    std::unique_ptr<LidarCoverage> lidar_cov_;
+    mutable std::mutex imu_mutex_;
+    Eigen::Affine3f T_g2b_;
+
 
     float map_width_;
     float map_height_;
@@ -72,6 +85,7 @@ private:
     int body_l_;
     int body_w_;
     bool ele_init_;
+    bool lidar_init_;
 };
 
 #endif // PASSABLE_NODE_HPP
