@@ -18,16 +18,24 @@ body_frame:    "body"
 
 lidar_front_up:
   pos_body: [0.44367, 0.0, 0.05415]      # m
-  rpy_body: [0.0, -65.0, 0.0]             # deg
+  rpy_body: [0.0, 65.0, 0.0]             # deg
+  fov_up_deg: 51.0
+  fov_down_deg: -6.0
 
 lidar_front_down:
   pos_body: [0.43297, 0.0, -0.05519]     # m
-  rpy_body: [0.0, -136.0, 0.0]            # deg
+  rpy_body: [0.0, 136.0, 0.0]            # deg
+  fov_up_deg: 51.0
+  fov_down_deg: -6.0
 
 lidar_rear_up:
   pos_body: [-0.46576, 0.0, 0.03484]     # m
-  rpy_body: [0.0, 95.0, 0.0]           # deg
+  rpy_body: [0.0, -95.0, 0.0]           # deg
+  fov_up_deg: 52.0
+  fov_down_deg: -7.0
 
 lidar_rear_down:
   pos_body: [-0.41074, 0.0, -0.05601]    # m
-  rpy_body: [0.0, 146.0, 0.0]          # deg
+  rpy_body: [0.0, -146.0, 0.0]          # deg
+  fov_up_deg: 47.0
+  fov_down_deg: -7.0

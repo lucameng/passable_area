@@ -70,7 +70,6 @@ private:
     mutable std::mutex imu_mutex_;
     Eigen::Affine3f T_g2b_;
 
-
     float map_width_;
     float map_height_;
     float voxel_width_;

@@ -56,12 +56,69 @@ void PassableNode::lidarCoverInit()
     lidar_init_ = true;
 }
 
+
+void PassableNode::imuCallback(const sensor_msgs::ImuConstPtr& msg)
+{
+    Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x,
+                         msg->orientation.y, msg->orientation.z);
+    q.normalize();
+
+    Eigen::Matrix3f R_world2body = q.toRotationMatrix();
+    // ROS_INFO_STREAM("R_world2body:\n" << R_world2body << "\n");
+
+    float yaw = std::atan2(R_world2body(1, 0), R_world2body(0, 0));
+    float pitch = std::asin(-R_world2body(2, 0));
+    float roll = std::atan2(R_world2body(2, 1), R_world2body(2, 2));
+
+    pitch = -pitch;
+    Eigen::AngleAxisf Rx(roll,  Eigen::Vector3f::UnitX());
+    Eigen::AngleAxisf Ry(pitch, Eigen::Vector3f::UnitY());
+    Eigen::Matrix3f R_gravity2body = (Ry * Rx).toRotationMatrix();
+    
+    // ROS_INFO_STREAM("R_baseGravity2body:\n" << R_baseGravity2body << "\n");
+
+    std::lock_guard<std::mutex> lock(imu_mutex_);
+    T_g2b_.setIdentity();
+    T_g2b_.linear() = R_gravity2body;
+    T_g2b_.translation() = Eigen::Vector3f::Zero();
+}
+
+void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
+{
+    if (!ele_init_) return;
+    stamp_ = msg->header.stamp;
+    setInputCloud(*msg);
+    cloud2Elevation();
+
+    ele_map_.inPainting("elevation", MINLIMIT);
+    ele_map_.deNoise("elevation", MEDIAN, 3);
+    ele_map_.judgePassability(rough_thres_, max_drop_, 3);
+    lidar_cov_->computeCoverage(ele_map_, getTransform());
+
+    bodyVisual();
+    publishPassableInfo();
+    publishGridMap();
+}
+
+Eigen::Affine3f PassableNode::getTransform() const
+{
+    std::lock_guard<std::mutex> lock(imu_mutex_);
+    return T_g2b_;
+}
+
 void PassableNode::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
 {
-    pcl::fromROSMsg(ros_cloud, origin_cloud_);
-    if (origin_cloud_.empty()) return;
-    // cloud_ptr_ = origin_cloud_.makeShared();
-    // kdtree_.setInputCloud(cloud_ptr_);
+    try
+    {
+        pcl::PointCloud<pcl::PointXYZ> temp_cloud;
+        pcl::fromROSMsg(ros_cloud, temp_cloud);
+        origin_cloud_.swap(temp_cloud);
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR("Failed to convert ROS cloud: %s", e.what());
+        origin_cloud_.clear();
+    }
 }
 
 void PassableNode::bodyVisual()
@@ -120,39 +177,6 @@ void PassableNode::cloud2Elevation()
         }
         ele_map_.setAltitude(Eigen::Vector2d(p.x, p.y), height);
     }
-}
-
-void PassableNode::imuCallback(const sensor_msgs::ImuConstPtr& msg)
-{
-    Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x, msg->orientation.y,
-                         msg->orientation.z);
-    q.normalize();
-
-    Eigen::Matrix3f R = q.toRotationMatrix();
-    // ROS_INFO_STREAM("R: \n" << R);
-
-    std::lock_guard<std::mutex> lock(imu_mutex_);
-    T_g2b_.setIdentity();
-    T_g2b_.linear() = R;
-    T_g2b_.translation() = Eigen::Vector3f::Zero();
-}
-
-
-void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
-{
-    if (!ele_init_) return;
-    stamp_ = msg->header.stamp;
-    setInputCloud(*msg);
-    cloud2Elevation();
-    
-    lidar_cov_->computeCoverage(ele_map_, getTransform());
-
-    ele_map_.inPainting("elevation", MINLIMIT);
-    ele_map_.deNoise("elevation", MEDIAN, 3);
-    ele_map_.judgePassability(rough_thres_, max_drop_, 3);
-    bodyVisual();
-    publishPassableInfo();
-    publishGridMap();
 }
 
 void PassableNode::publishPassableInfo()
@@ -224,10 +248,4 @@ void PassableNode::publishGridMap()
     ros_map.info.header.frame_id = g_frame_;
 
     grid_map_pub_.publish(ros_map);
-}
-
-Eigen::Affine3f PassableNode::getTransform() const
-{
-    std::lock_guard<std::mutex> lock(imu_mutex_);
-    return T_g2b_;
 }

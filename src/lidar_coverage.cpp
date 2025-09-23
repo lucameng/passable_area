@@ -1,4 +1,5 @@
 #include "lidar_coverage.hpp"
+#include "elevation_map.hpp"
 #include "dr_math.hpp"
 #include "dr_utils.hpp"
 
@@ -69,8 +70,10 @@ void LidarCoverage::addLidar(const std::string& lidar_name)
         ROS_ERROR("Failed to get euler angle for %s", lidar_name.c_str());
     }
 
-    param.fov_down_rad = dr_math::degreeToRadian(param.fov_down_deg);
+    nh_.getParam(lidar_name + "/fov_up_deg", param.fov_up_deg);
+    nh_.getParam(lidar_name + "/fov_down_deg", param.fov_down_deg);
     param.fov_up_rad = dr_math::degreeToRadian(param.fov_up_deg);
+    param.fov_down_rad = dr_math::degreeToRadian(param.fov_down_deg);
 
     lidars_.push_back(param);
 }
@@ -82,8 +85,8 @@ bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f& p_body,
     float dist = v_body.norm();
     if (dist < lidar.min_range || dist > lidar.max_range) return false;
 
-    // Eigen::Vector3f v_lidar = lidar.R_mount.transpose() * v_body;
-    Eigen::Vector3f v_lidar = lidar.R_mount * v_body;
+    Eigen::Vector3f v_lidar = lidar.R_mount.transpose() * v_body;
+    // Eigen::Vector3f v_lidar = lidar.R_mount * v_body;
 
     // if (v_lidar.x() <= 0.0) return false;
     // ROS_INFO_STREAM("\nv_body:\n" << v_body << "\nv_lidar:\n"<< v_lidar << "\n");
@@ -110,13 +113,18 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3
         //     pos.x() < bound_min_.x() || pos.y() < bound_min_.y())
         //     continue;
 
+        if (dr_math::equal(pos.z(), DEAD_VALUE))
+        {
+            pos.z() = ground_height_;
+        }
+
         Eigen::Vector3f p_grav = {static_cast<float>(pos.x()),
                                   static_cast<float>(pos.y()), 
                                   static_cast<float>(pos.z())};
         Eigen::Vector3f p_body = T_g2b * p_grav;
         
-        // ROS_INFO("p_grav:(%.3f, %.3f) p_body(%.3f, %.3f, %.3f)", 
-        //         p_grav.x(), p_grav.y(), p_body.x(), p_body.y(), p_body.z());
+        // ROS_INFO("p_grav:(%.3f, %.3f, %.3f) p_body(%.3f, %.3f, %.3f)", 
+        //         p_grav.x(), p_grav.y(), p_grav.z(), p_body.x(), p_body.y(), p_body.z());
         for (const auto& lidar : lidars_)
         {
             if (isCellCoveredByLidar(p_body, lidar))
