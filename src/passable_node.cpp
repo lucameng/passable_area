@@ -37,14 +37,14 @@ void PassableNode::initialize()
     body_vis_pub_ = nh_.advertise<visualization_msgs::Marker>("body_visual", 1);
     passable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("passable_area", 1);
     impassable_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("impassable_area", 1);
-    expanded_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("expaneded", 1);
+    expanded_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("expanded", 1);
     grid_map_pub_ = nh_.advertise<grid_map_msgs::GridMap>("grid_map", 1, true);
 }
 
 void PassableNode::elevationInit()
 {
     ROS_INFO("Initializing elevation map");
-    ele_map_ = elevationMap(map_width_, voxel_width_, g_frame_);
+    ele_map_ = std::make_unique<elevationMap>(map_width_, map_height_, voxel_width_, g_frame_);
     ele_init_ = true;
 }
 
@@ -56,8 +56,7 @@ void PassableNode::lidarCoverInit()
     lidar_init_ = true;
 }
 
-
-void PassableNode::imuCallback(const sensor_msgs::ImuConstPtr& msg)
+void PassableNode::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 {
     Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x,
                          msg->orientation.y, msg->orientation.z);
@@ -87,13 +86,10 @@ void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
     if (!ele_init_) return;
     stamp_ = msg->header.stamp;
-    setInputCloud(*msg);
-    cloud2Elevation();
 
-    ele_map_.inPainting("elevation", MINLIMIT);
-    ele_map_.deNoise("elevation", MEDIAN, 3);
-    ele_map_.judgePassability(rough_thres_, max_drop_, 3);
-    lidar_cov_->computeCoverage(ele_map_, getTransform());
+    ele_map_->processPointCloud(*msg, rough_thres_, max_drop_);
+
+    lidar_cov_->computeCoverage(*ele_map_, getTransform());
 
     bodyVisual();
     publishPassableInfo();
@@ -104,21 +100,6 @@ Eigen::Affine3f PassableNode::getTransform() const
 {
     std::lock_guard<std::mutex> lock(imu_mutex_);
     return T_g2b_;
-}
-
-void PassableNode::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
-{
-    try
-    {
-        pcl::PointCloud<pcl::PointXYZ> temp_cloud;
-        pcl::fromROSMsg(ros_cloud, temp_cloud);
-        origin_cloud_.swap(temp_cloud);
-    }
-    catch (const std::exception& e)
-    {
-        ROS_ERROR("Failed to convert ROS cloud: %s", e.what());
-        origin_cloud_.clear();
-    }
 }
 
 void PassableNode::bodyVisual()
@@ -151,37 +132,12 @@ void PassableNode::bodyVisual()
     body_vis_pub_.publish(body);
 }
 
-void PassableNode::cloud2Elevation()
-{
-    ele_map_.clear("elevation");
-    ele_map_.get("elevation").setConstant(DEAD_VALUE);
-
-    float half_width = map_width_ * 0.5;
-    float half_height = map_height_ * 0.5;
-    
-    #pragma omp parallel for
-    for (const auto& p : origin_cloud_)
-    {
-        if (p.x <= -half_width || p.x >= half_width ||
-            p.y <= -half_width || p.y >= half_width ||
-            p.z <= -half_height || p.z >= half_height) continue;
-
-        float height = ele_map_.getAltitude(Eigen::Vector2d(p.x, p.y));
-        if (std::isnan(height))
-        {
-            height = p.z;
-        }
-        else
-        {
-            height = std::max(height, p.z);
-        }
-        ele_map_.setAltitude(Eigen::Vector2d(p.x, p.y), height);
-    }
-}
 
 void PassableNode::publishPassableInfo()
 {
-    if (origin_cloud_.empty()) return;
+    const auto& cloud = ele_map_->getWorkingCloud();
+
+    if (cloud.empty()) return;
     
     const float half_w = map_width_ * 0.5f;
     const float half_h = map_height_ * 0.5f;
@@ -191,15 +147,15 @@ void PassableNode::publishPassableInfo()
     expanded_cloud_.clear();
     long expand_count = 0;
 
-    for (int i = 0; i < static_cast<int>(origin_cloud_.size()); ++i)
+    for (int i = 0; i < static_cast<int>(cloud.size()); ++i)
     {
-        const auto& p = origin_cloud_[i];
+        const auto& p = cloud[i];
         if (p.x <= -half_w || p.x >= half_w || p.y <= -half_w || 
             p.y >= half_w || p.z <= -half_h || p.z >= half_h)
             continue;
 
         Eigen::Vector2d pos(p.x, p.y);
-        uint8_t step = ele_map_.getPassability(pos);
+        uint8_t step = ele_map_->getPassability(pos);
         if (step == PASSABLE)
         {
             passable_cloud_.push_back(p);
@@ -208,11 +164,12 @@ void PassableNode::publishPassableInfo()
         {
             impassable_cloud_.push_back(p);
         }
-        else
-        {
-            expanded_cloud_.push_back(p);
-        }
+        // else
+        // {
+        //     expanded_cloud_.push_back(p);
+        // }
     }
+    expanded_cloud_ = ele_map_->getWorkingCloud();
 
     auto finalize = [](pcl::PointCloud<pcl::PointXYZ>& c) {
         c.width = static_cast<uint32_t>(c.size());
@@ -243,7 +200,7 @@ void PassableNode::publishPassableInfo()
 void PassableNode::publishGridMap()
 {
     grid_map_msgs::GridMap ros_map;
-    grid_map::GridMapRosConverter::toMessage(ele_map_, ros_map);
+    grid_map::GridMapRosConverter::toMessage(*ele_map_, ros_map);
     ros_map.info.header.stamp = stamp_;
     ros_map.info.header.frame_id = g_frame_;
 

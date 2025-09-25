@@ -1,5 +1,5 @@
 #include "lidar_coverage.hpp"
-#include "elevation_map.hpp"
+#include "common.hpp"
 #include "dr_math.hpp"
 #include "dr_utils.hpp"
 
@@ -24,20 +24,6 @@ void LidarCoverage::initialize()
     addLidar("lidar_rear_up");
     addLidar("lidar_rear_down");
 }
-
-// void LidarCoverage::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
-// {
-//     Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x, msg->orientation.y,
-//                          msg->orientation.z);
-//     q.normalize();
-
-//     Eigen::Matrix3f R = q.toRotationMatrix();
-//     ROS_INFO_STREAM("R: \n" << R);
-
-//     T_g2b_.setIdentity();
-//     T_g2b_.linear() = R;
-//     T_g2b_.translation() = Eigen::Vector3f::Zero();
-// }
 
 void LidarCoverage::addLidar(const std::string& lidar_name)
 {
@@ -101,6 +87,8 @@ bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f& p_body,
 void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b) const
 {
     // ROS_INFO("Start computing lidar coverage...");
+    if (!map.exists("coverability") || !map.exists("elevation")) return;
+
     map.get("coverability").setConstant(UNCOVERED);
 
     for (grid_map::GridMapIterator it(map); !it.isPastEnd(); ++it)
@@ -113,9 +101,14 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3
         //     pos.x() < bound_min_.x() || pos.y() < bound_min_.y())
         //     continue;
 
-        if (dr_math::equal(pos.z(), DEAD_VALUE))
+        // if (dr_math::equal(pos.z(), DEAD_VALUE))
+        // {
+        //     pos.z() = ground_height_;
+        // }
+
+        if (std::isnan(pos.z()))
         {
-            pos.z() = ground_height_;
+            continue;
         }
 
         Eigen::Vector3f p_grav = {static_cast<float>(pos.x()),

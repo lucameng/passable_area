@@ -5,10 +5,12 @@
 #include <algorithm>
 #include <opencv2/imgproc.hpp>
 #include <grid_map_cv/GridMapCvConverter.hpp>
+#include <pcl_conversions/pcl_conversions.h>
 
-elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "passability", "coverability"}),
+elevationMap::elevationMap(float map_s, float max_h, float grid_s, const std::string &frame_id)
+    : grid_map::GridMap({"elevation", "passability", "coverability", "padding"}),
       map_size_(map_s),
+      max_height_(max_h),
       grid_size_(grid_s),
       map_size_grid_(map_size_ / grid_size_),
       frame_(frame_id)
@@ -17,6 +19,63 @@ elevationMap::elevationMap(float map_s, float grid_s, const std::string &frame_i
     setGeometry(grid_map::Length(map_size_, map_size_), grid_size_);
     setPosition(grid_map::Position(0.0, 0.0));
     get("passability").setConstant(UNKNOWN);
+    get("coverability").setConstant(UNCOVERED);
+    get("padding").setConstant(UNPADDED);
+}
+
+void elevationMap::processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float rough_thres,
+                                     float drop_thres)
+{
+    setInputCloud(ros_cloud);
+    cloud2Elevation();
+    // inpaint("elevation", MINLIMIT);
+    denoise("elevation", MEDIAN, 3);
+    fillElevationHoles("elevation", "padding", 1.2f, 10);
+    fillPointCloud("elevation", "padding");
+    judgePassability(rough_thres, drop_thres, 3);
+}
+
+void elevationMap::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
+{
+    try
+    {
+        pcl::PointCloud<pcl::PointXYZ> temp_cloud;
+        pcl::fromROSMsg(ros_cloud, temp_cloud);
+        working_cloud_.swap(temp_cloud);
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR("Failed to convert ROS cloud: %s", e.what());
+        working_cloud_.clear();
+    }
+}
+
+void elevationMap::cloud2Elevation()
+{
+    clear("elevation");
+    // get("elevation").setConstant(DEAD_VALUE);
+
+    float half_width = map_size_ * 0.5;
+    float half_height = max_height_ * 0.5;
+    
+    #pragma omp parallel for
+    for (const auto& p : working_cloud_)
+    {
+        if (p.x <= -half_width || p.x >= half_width ||
+            p.y <= -half_width || p.y >= half_width ||
+            p.z <= -half_height || p.z >= half_height) continue;
+
+        float height = getAltitude(Eigen::Vector2d(p.x, p.y));
+        if (std::isnan(height))
+        {
+            height = p.z;
+        }
+        else
+        {
+            height = std::max(height, p.z);
+        }
+        setAltitude(Eigen::Vector2d(p.x, p.y), height);
+    }
 }
 
 float elevationMap::getMinheight() const noexcept 
@@ -29,10 +88,10 @@ float elevationMap::getMaxheight() const noexcept
     return maxCoeffOfFinites(get("elevation")); 
 }
 
-void elevationMap::setAltitude(const Eigen::Array2i &id, float height)
+void elevationMap::setAltitude(const Eigen::Array2i &idx, float height)
 {
-    if (!isIndexValid(id)) return;
-    at("elevation", id) = height;
+    if (!isIndexValid(idx)) return;
+    at("elevation", idx) = height;
 }
 
 void elevationMap::setAltitude(const Eigen::Vector2d &pos, float height)
@@ -41,10 +100,10 @@ void elevationMap::setAltitude(const Eigen::Vector2d &pos, float height)
     atPosition("elevation", pos) = height;
 }
 
-float elevationMap::getAltitude(const Eigen::Array2i &id) const
+float elevationMap::getAltitude(const Eigen::Array2i &idx) const
 {
-    if (!isIndexValid(id)) return NAN;
-    return at("elevation", grid_map::Index(id.x(), id.y()));
+    if (!isIndexValid(idx)) return NAN;
+    return at("elevation", grid_map::Index(idx.x(), idx.y()));
 }
 
 float elevationMap::getAltitude(const Eigen::Vector2d &pos) const
@@ -53,10 +112,10 @@ float elevationMap::getAltitude(const Eigen::Vector2d &pos) const
     return atPosition("elevation", pos);
 }
 
-void elevationMap::setPassability(const Eigen::Array2i &id, uint8_t passability)
+void elevationMap::setPassability(const Eigen::Array2i &idx, uint8_t passability)
 {
-    if (!isIndexValid(id)) return;
-    at("passability", grid_map::Index(id.x(), id.y())) = static_cast<float>(passability);
+    if (!isIndexValid(idx)) return;
+    at("passability", grid_map::Index(idx.x(), idx.y())) = static_cast<float>(passability);
 }
 
 void elevationMap::setPassability(const Eigen::Vector2d &pos, uint8_t passability)
@@ -65,10 +124,10 @@ void elevationMap::setPassability(const Eigen::Vector2d &pos, uint8_t passabilit
     atPosition("passability", pos) = static_cast<float>(passability);
 }
 
-uint8_t elevationMap::getPassability(const Eigen::Array2i &id) const
+uint8_t elevationMap::getPassability(const Eigen::Array2i &idx) const
 {
-    if (!isIndexValid(id)) return UNKNOWN;
-    return static_cast<uint8_t>(at("passability", grid_map::Index(id.x(), id.y())));
+    if (!isIndexValid(idx)) return UNKNOWN;
+    return static_cast<uint8_t>(at("passability", grid_map::Index(idx.x(), idx.y())));
 }
 
 uint8_t elevationMap::getPassability(const Eigen::Vector2d &pos) const
@@ -536,7 +595,7 @@ float elevationMap::computeError(int x, int y, int kernel_size, Eigen::Vector3f 
     }
 }
 
-void elevationMap::inPainting(const std::string &layer_in, int method)
+void elevationMap::inpaint(const std::string &layer_in, int method)
 {
     const std::string& layer_out = "tmp";
 
@@ -565,7 +624,7 @@ void elevationMap::inPainting(const std::string &layer_in, int method)
     erase(layer_out);
 }
 
-void elevationMap::deNoise(const std::string &layer_in, int method, int kernel_size)
+void elevationMap::denoise(const std::string &layer_in, int method, int kernel_size)
 {
     kernel_size = std::clamp(kernel_size, 1, 5);
     const std::string layer_out = "tmp";
@@ -589,7 +648,7 @@ bool elevationMap::isPassable(float variance_error, float roughness_thres) const
     return (variance_error < square_thres);
 }
 
-void elevationMap::judgePassability(float roughness_thres, float drop_thres, int kernel_size)
+void elevationMap::judgePassability(float rough_thres, float drop_thres, int kernel_size)
 {
     kernel_size = std::clamp(kernel_size, 3, 5);
     int center = map_size_grid_ / 2;
@@ -626,6 +685,7 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             visited[idx] = true;
 
             auto nbr_height = getAltitude(grid_map::Index(nx, ny));
+
             // if (!std::isfinite(nbr_height))
             // {
             //     nbr_height = cur_height;
@@ -648,7 +708,7 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             Eigen::Vector3f mean = Eigen::Vector3f::Zero();
             Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
             auto e = computeError(nx, ny, kernel_size, mean, square);
-            if (!isPassable(e, roughness_thres) && cur_height > mean.z())
+            if (!isPassable(e, rough_thres) && cur_height > mean.z())
             {
                 setPassability(grid_map::Index(nx, ny), IMPASSABLE);
                 continue;
@@ -658,4 +718,101 @@ void elevationMap::judgePassability(float roughness_thres, float drop_thres, int
             que.emplace(nx, ny);
         }
     }
+}
+
+void elevationMap::fillElevationHoles(const std::string &layer_elevation,
+                                      const std::string &layer_filled,
+                                      float search_radius, int min_neighbors,
+                                      const Eigen::Vector2f& bound_min, 
+                                      const Eigen::Vector2f& bound_max)
+{
+    if (!exists(layer_elevation) || !exists(layer_filled)) return;
+    get(layer_filled).setConstant(UNPADDED);
+
+    grid_map::Matrix& H_in = get(layer_elevation);
+    grid_map::Matrix H_out = H_in;
+
+    const int radius_cells = static_cast<int>(std::ceil(search_radius / grid_size_));
+
+    #pragma omp parallel for collapse(2)
+    for (int r = 0; r < map_size_grid_; ++r)
+    {
+        for (int c = 0; c < map_size_grid_; ++c)
+        {
+            if (!std::isnan(H_in(r, c))) continue;
+
+            grid_map::Position pos;
+            getPosition({r, c}, pos);
+
+            if (pos.x() < bound_min.x() || pos.x() > bound_max.x() ||
+                pos.y() < bound_min.y() || pos.y() > bound_max.y())
+            {
+                continue;
+            }
+
+            float sum = 0.0;
+            float weight_sum = 0.0;
+            int count = 0;
+
+            for (int dr = -radius_cells; dr <= radius_cells; ++dr)
+            {
+                for (int dc = -radius_cells; dc <= radius_cells; ++dc)
+                {
+                    int nr = r + dr;
+                    int nc = c + dc;
+                    if (nr < 0 || nr >= map_size_grid_ || nc < 0 || nc >= map_size_grid_) continue;
+
+
+                    float h = H_in(nr, nc);
+                    if (std::isnan(h)) continue;
+
+                    float dist = std::sqrt(dr * dr + dc * dc) * grid_size_;
+                    if (dist > search_radius || dist < 1e-6) continue;
+
+                    
+                    float w = 1.0 / (dist * dist + 1e-6);
+                    sum += h * w;
+                    weight_sum += w;
+                    count++;
+                }
+            }
+
+            if (count >= min_neighbors && weight_sum > 0.0)
+            {   
+                H_out(r, c) = sum / weight_sum;
+                grid_map::Index idx = {r, c};
+                at(layer_filled, idx) = 1;
+            }
+        }
+    }
+
+    H_in = H_out;
+}
+
+void elevationMap::fillPointCloud(const std::string& layer_elevation,
+                                  const std::string& layer_filled)
+{
+    if (!exists(layer_elevation) || !exists(layer_filled)) return;
+
+    auto& cloud = getWorkingCloud();
+
+    for (grid_map::GridMapIterator it(*this); !it.isPastEnd(); ++it)
+    {
+        grid_map::Index idx(*it);
+        if (at(layer_filled, idx) != PADDED) continue;
+        grid_map::Position pos;
+        getPosition(idx, pos);
+
+        float z = at(layer_elevation, idx);
+
+        pcl::PointXYZ p;
+        p.x = pos.x();
+        p.y = pos.y();
+        p.z = z;
+        cloud.points.push_back(p);
+    }
+
+    cloud.width = cloud.points.size();
+    cloud.height = 1;
+    cloud.is_dense = true;
 }

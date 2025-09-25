@@ -7,12 +7,6 @@
 #include <Eigen/Dense>
 #include <cmath>
 
-enum CoverageStatus : uint8_t
-{
-    UNCOVERED = 0,
-    COVERED = 1
-};
-
 struct LidarParam
 {
     std::string name;
@@ -40,19 +34,14 @@ public:
     void computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b) const;
 
 private:
-    // void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
     bool isCellCoveredByLidar(const Eigen::Vector3f& p_body,
                               const LidarParam& lidar) const;
 
 private:
     ros::NodeHandle nh_;
-    // ros::Subscriber imu_sub_;
     const float ground_height_;
     Eigen::Vector2f bound_max_;
     Eigen::Vector2f bound_min_;
-    // Eigen::Quaternionf q_g2b_;
-    // Eigen::Matrix4f T_g2b_;
-    // Eigen::Affine3f T_g2b_;
     std::vector<LidarParam> lidars_;
 };
 

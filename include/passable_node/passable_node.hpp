@@ -3,6 +3,7 @@
 
 #include "elevation_map.hpp"
 #include "lidar_coverage.hpp"
+#include "common.hpp"
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -15,13 +16,10 @@
 #include <pcl/common/transforms.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-// #include <pcl/kdtree/kdtree_flann.h>
+
 #include <cmath>
 #include <Eigen/Dense>
 #include <unordered_set>
-
-// class elevationMap;
-// class LidarCoverage;
 
 class PassableNode
 {
@@ -35,8 +33,6 @@ private:
     void lidarCoverInit();
     void cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
-    void setInputCloud(const sensor_msgs::PointCloud2 &ros_cloud);
-    void cloud2Elevation();
     void bodyVisual();
     void publishPassableInfo();
     void publishGridMap();
@@ -52,20 +48,16 @@ private:
     ros::Publisher body_vis_pub_;
     ros::Publisher grid_map_pub_;
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_ptr_;
-    // pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_;
-    pcl::PointCloud<pcl::PointXYZ> origin_cloud_;
-    pcl::PointCloud<pcl::PointXYZ> passable_cloud_;
-    pcl::PointCloud<pcl::PointXYZ> impassable_cloud_;
-    pcl::PointCloud<pcl::PointXYZ> expanded_cloud_;
-    std::vector<int> expanded_indices_;
+    PointCloudXYZ passable_cloud_;
+    PointCloudXYZ impassable_cloud_;
+    PointCloudXYZ expanded_cloud_;
 
     std::string w_frame_;   // world frame
     std::string g_frame_;   // gravity frame
     std::string b_frame_;   // body frame
     ros::Time stamp_;
-    elevationMap ele_map_;
-    
+
+    std::unique_ptr<elevationMap> ele_map_;
     std::unique_ptr<LidarCoverage> lidar_cov_;
     mutable std::mutex imu_mutex_;
     Eigen::Affine3f T_g2b_;
