@@ -14,7 +14,7 @@ find_package(grid_map_core REQUIRED)
 find_package(grid_map_cv REQUIRED)
 find_package(grid_map_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(OpenCV 4.5 REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(OpenMP REQUIRED)
 
 if(OpenMP_CXX_FOUND)
