@@ -84,30 +84,22 @@ bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f& p_body,
     return false;
 }
 
-void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b) const
+void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b,
+                                    const std::string& layer_height,
+                                    const std::string& layer_cover) const
 {
     // ROS_INFO("Start computing lidar coverage...");
-    if (!map.exists("coverability") || !map.exists("elevation")) return;
+    if (!map.exists(layer_cover) || !map.exists(layer_height)) return;
 
-    map.get("coverability").setConstant(UNCOVERED);
+    map.get(layer_cover).setConstant(UNCOVERED);
 
     for (grid_map::GridMapIterator it(map); !it.isPastEnd(); ++it)
     {
         const grid_map::Index idx = *it;
         grid_map::Position3 pos;
-        map.getPosition3("elevation", idx, pos);
-
-        // if (pos.x() > bound_max_.x() || pos.y() > bound_max_.y() ||
-        //     pos.x() < bound_min_.x() || pos.y() < bound_min_.y())
-        //     continue;
-
-        // if (dr_math::equal(pos.z(), DEAD_VALUE))
-        // {
-        //     pos.z() = ground_height_;
-        // }
-
-        if (std::isnan(pos.z()))
+        if (!map.getPosition3(layer_height, idx, pos)) 
         {
+            // ROS_ERROR("invalid height");
             continue;
         }
 
@@ -118,11 +110,12 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3
         
         // ROS_INFO("p_grav:(%.3f, %.3f, %.3f) p_body(%.3f, %.3f, %.3f)", 
         //         p_grav.x(), p_grav.y(), p_grav.z(), p_body.x(), p_body.y(), p_body.z());
+
         for (const auto& lidar : lidars_)
         {
             if (isCellCoveredByLidar(p_body, lidar))
             {
-                map.at("coverability", idx) = COVERED;
+                map.at(layer_cover, idx) = COVERED;
                 break;
             }
         }

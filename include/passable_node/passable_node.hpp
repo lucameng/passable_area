@@ -57,7 +57,7 @@ private:
     std::string b_frame_;   // body frame
     ros::Time stamp_;
 
-    std::unique_ptr<elevationMap> ele_map_;
+    std::unique_ptr<ElevationMap> ele_map_;
     std::unique_ptr<LidarCoverage> lidar_cov_;
     mutable std::mutex imu_mutex_;
     Eigen::Affine3f T_g2b_;

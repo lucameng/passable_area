@@ -17,11 +17,11 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 #include <sensor_msgs/PointCloud2.h>
 
-class elevationMap : public grid_map::GridMap
+class ElevationMap : public grid_map::GridMap
 {
 public:
-    elevationMap() = default;
-    explicit elevationMap(float map_s, float max_h, float grid_s, const std::string& frame_id);
+    ElevationMap() = default;
+    explicit ElevationMap(float map_s, float max_h, float grid_s, const std::string& frame_id);
 
     void processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float roughness_thres, float drop_thres);
 
@@ -66,21 +66,21 @@ private:
 
     bool isPositionInside(const Eigen::Vector2d& pos) const noexcept { return isInside(pos); }
 
-    void minValues(const std::string& layer_in, const std::string& layer_out);
-    void minValuesLimited(const std::string& layer_in, const std::string& layer_out,
-                          int max_hole_pixels = 200);
-    void maxValues(const std::string& layer_in, const std::string& layer_out);
-    void meanValues(const std::string& layer_in, const std::string& layer_out);
-    void meanValuesOnce(const std::string& layer_in, const std::string& layer_out);
-    void medianFilter(const std::string& layer_in, const std::string& layer_out, int kernel_size,
+    void minValues(const std::string &layer_height, const std::string &layer_filled);
+    void minValuesLimited(const std::string &layer_height, const std::string &layer_filled,
+                          int max_hole_pixels = 100);
+    void maxValues(const std::string &layer_height, const std::string &layer_filled);
+    void meanValues(const std::string &layer_height, const std::string &layer_filled);
+    void meanValuesOnce(const std::string &layer_height, const std::string &layer_filled);
+    void medianFilter(const std::string& layer_height, int kernel_size,
                       float threshold = -std::numeric_limits<float>::infinity());
-    void gaussianFilter(const std::string& layer_in, const std::string& layer_out, int kernel_size);
+    void gaussianFilter(const std::string& layer_height, int kernel_size);
     float errorFromCovariance(const Eigen::Vector3f& mean, const Eigen::Matrix3f& square) const;
     float computeError(int x, int y, int kernel_size, Eigen::Vector3f& mean,
                        Eigen::Matrix3f& square) const;
 
-    void inpaint(const std::string& layer_in, int method);
-    void denoise(const std::string& layer_in, int method, int kernel_size);
+    void inpaint(const std::string &layer_height, const std::string &layer_filled, int method);
+    void denoise(const std::string& layer_height, int method, int kernel_size);
 
     void cloud2Elevation();
 
@@ -88,12 +88,12 @@ private:
 
     void judgePassability(float rough_thres, float drop_thres, int kernel_size);
 
-    void fillElevationHoles(const std::string& layer_elevation = "elevation",
+    void fillElevationHoles(const std::string& layer_height = "elevation",
                             const std::string& layer_filled = "padding", 
                             float search_radius = 1.5f, int min_neighbors = 10,
                             const Eigen::Vector2f& bound_min = {-3.f, -0.7f},
                             const Eigen::Vector2f& bound_max = {0.8f, 0.7f});
-    void fillPointCloud(const std::string& layer_elevation = "elevation",
+    void fillPointCloud(const std::string& layer_height = "elevation",
                         const std::string& layer_filled = "padding");
 private:
     PointCloudXYZ working_cloud_;

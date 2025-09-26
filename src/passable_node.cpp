@@ -44,7 +44,7 @@ void PassableNode::initialize()
 void PassableNode::elevationInit()
 {
     ROS_INFO("Initializing elevation map");
-    ele_map_ = std::make_unique<elevationMap>(map_width_, map_height_, voxel_width_, g_frame_);
+    ele_map_ = std::make_unique<ElevationMap>(map_width_, map_height_, voxel_width_, g_frame_);
     ele_init_ = true;
 }
 
@@ -136,7 +136,7 @@ void PassableNode::bodyVisual()
 void PassableNode::publishPassableInfo()
 {
     const auto& cloud = ele_map_->getWorkingCloud();
-
+    
     if (cloud.empty()) return;
     
     const float half_w = map_width_ * 0.5f;
@@ -145,7 +145,6 @@ void PassableNode::publishPassableInfo()
     passable_cloud_.clear();
     impassable_cloud_.clear();
     expanded_cloud_.clear();
-    long expand_count = 0;
 
     for (int i = 0; i < static_cast<int>(cloud.size()); ++i)
     {
@@ -164,12 +163,13 @@ void PassableNode::publishPassableInfo()
         {
             impassable_cloud_.push_back(p);
         }
-        // else
-        // {
-        //     expanded_cloud_.push_back(p);
-        // }
+        else
+        {
+            expanded_cloud_.push_back(p);
+        }
     }
-    expanded_cloud_ = ele_map_->getWorkingCloud();
+
+    // expanded_cloud_ = cloud;
 
     auto finalize = [](pcl::PointCloud<pcl::PointXYZ>& c) {
         c.width = static_cast<uint32_t>(c.size());
