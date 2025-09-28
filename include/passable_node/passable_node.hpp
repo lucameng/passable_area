@@ -20,6 +20,7 @@
 #include <cmath>
 #include <Eigen/Dense>
 #include <unordered_set>
+#include <memory>
 
 class PassableNode
 {

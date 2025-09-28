@@ -149,8 +149,8 @@ void PassableNode::publishPassableInfo()
     for (int i = 0; i < static_cast<int>(cloud.size()); ++i)
     {
         const auto& p = cloud[i];
-        if (p.x <= -half_w || p.x >= half_w || p.y <= -half_w || 
-            p.y >= half_w || p.z <= -half_h || p.z >= half_h)
+        if (p.x <= -half_w || p.x >=  half_w || p.y <= -half_w || 
+            p.y >=  half_w || p.z <= -half_h || p.z >=  half_h)
             continue;
 
         Eigen::Vector2d pos(p.x, p.y);
@@ -163,13 +163,13 @@ void PassableNode::publishPassableInfo()
         {
             impassable_cloud_.push_back(p);
         }
-        else
-        {
-            expanded_cloud_.push_back(p);
-        }
+        // else
+        // {
+        //     expanded_cloud_.push_back(p);
+        // }
     }
 
-    // expanded_cloud_ = cloud;
+    expanded_cloud_ = cloud;
 
     auto finalize = [](pcl::PointCloud<pcl::PointXYZ>& c) {
         c.width = static_cast<uint32_t>(c.size());

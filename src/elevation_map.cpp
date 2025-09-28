@@ -1,5 +1,5 @@
 #include "elevation_map.hpp"
-#include "dr_math.hpp"
+#include "maths.hpp"
 
 #include <ros/ros.h>
 #include <algorithm>
@@ -672,7 +672,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres, int ker
             //     setAltitude(grid_map::Index(nx, ny), nbr_height);
             // }
 
-            // if (dr_math::equal(nbr_height, DEAD_VALUE))
+            // if (dr::equal(nbr_height, DEAD_VALUE))
             if (std::isnan(nbr_height))
             {
                 // setPassability(grid_map::Index(nx, ny), IMPASSABLE);

@@ -1,10 +1,10 @@
-#ifndef DR_MATH_H
-#define DR_MATH_H
+#ifndef DR_MATHS_H
+#define DR_MATHS_H
 
 #include <math.h>
 #include <cstdint>
 
-namespace dr_math {
+namespace dr {
 
 const double kEps = 1e-8;
 
@@ -129,6 +129,6 @@ inline double degreeToRadian(double deg) { return deg * M_PI / 180.0; }
 
 inline double radianToDegree(double rad) { return rad * 180.0 / M_PI; }
 
-} // namespace dr_math
+} // namespace dr
 
-#endif // DR_MATH_H
+#endif // DR_MATHS_H

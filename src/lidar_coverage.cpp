@@ -1,7 +1,7 @@
 #include "lidar_coverage.hpp"
 #include "common.hpp"
-#include "dr_math.hpp"
-#include "dr_utils.hpp"
+#include "maths.hpp"
+#include "utils.hpp"
 
 #include <Eigen/Dense>
 #include <grid_map_core/GridMap.hpp>
@@ -44,10 +44,10 @@ void LidarCoverage::addLidar(const std::string& lidar_name)
     if (nh_.getParam(lidar_name + "/rpy_body", rpy_vec) && rpy_vec.size() == 3)
     {
         param.rpy_body_deg = Eigen::Vector3f(rpy_vec[0], rpy_vec[1], rpy_vec[2]);
-        param.rpy_body_rad = Eigen::Vector3f(dr_math::degreeToRadian(rpy_vec[0]),
-                                             dr_math::degreeToRadian(rpy_vec[1]),
-                                             dr_math::degreeToRadian(rpy_vec[2]));
-        param.R_mount = dr_utils::rotationFromYPRrad(param.rpy_body_rad);
+        param.rpy_body_rad = Eigen::Vector3f(dr::degreeToRadian(rpy_vec[0]),
+                                             dr::degreeToRadian(rpy_vec[1]),
+                                             dr::degreeToRadian(rpy_vec[2]));
+        param.R_mount = dr::rotationFromYPRrad(param.rpy_body_rad);
         ROS_INFO_STREAM(lidar_name << ":\nrpy:\n" << param.rpy_body_rad 
                         << "\n\nrotation matrix:\n"<< param.R_mount << "\n");
     }
@@ -58,8 +58,8 @@ void LidarCoverage::addLidar(const std::string& lidar_name)
 
     nh_.getParam(lidar_name + "/fov_up_deg", param.fov_up_deg);
     nh_.getParam(lidar_name + "/fov_down_deg", param.fov_down_deg);
-    param.fov_up_rad = dr_math::degreeToRadian(param.fov_up_deg);
-    param.fov_down_rad = dr_math::degreeToRadian(param.fov_down_deg);
+    param.fov_up_rad = dr::degreeToRadian(param.fov_up_deg);
+    param.fov_down_rad = dr::degreeToRadian(param.fov_down_deg);
 
     lidars_.push_back(param);
 }
@@ -79,29 +79,25 @@ bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f& p_body,
     float horiz = std::hypot(v_lidar.x(), v_lidar.y());
     float theta = std::atan2(v_lidar.z(), horiz); // rad
 
-    // ROS_INFO("horiz=%.3f theta=%.3f", horiz, dr_math::radianToDegree(theta));
+    // ROS_INFO("horiz=%.3f theta=%.3f", horiz, dr::radianToDegree(theta));
     if (theta >= lidar.fov_down_rad && theta <= lidar.fov_up_rad) return true;
     return false;
 }
 
 void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b,
                                     const std::string& layer_height,
-                                    const std::string& layer_cover) const
+                                    const std::string& layer_filled) const
 {
     // ROS_INFO("Start computing lidar coverage...");
-    if (!map.exists(layer_cover) || !map.exists(layer_height)) return;
+    if (!map.exists(layer_filled) || !map.exists(layer_height)) return;
 
-    map.get(layer_cover).setConstant(UNCOVERED);
+    map.get(layer_filled).setConstant(UNCOVERED);
 
     for (grid_map::GridMapIterator it(map); !it.isPastEnd(); ++it)
     {
         const grid_map::Index idx = *it;
         grid_map::Position3 pos;
-        if (!map.getPosition3(layer_height, idx, pos)) 
-        {
-            // ROS_ERROR("invalid height");
-            continue;
-        }
+        if (!map.getPosition3(layer_height, idx, pos)) continue;
 
         Eigen::Vector3f p_grav = {static_cast<float>(pos.x()),
                                   static_cast<float>(pos.y()), 
@@ -115,7 +111,7 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3
         {
             if (isCellCoveredByLidar(p_body, lidar))
             {
-                map.at(layer_cover, idx) = COVERED;
+                map.at(layer_filled, idx) = COVERED;
                 break;
             }
         }

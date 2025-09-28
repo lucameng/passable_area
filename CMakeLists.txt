@@ -39,7 +39,7 @@ add_executable(passable_node
   src/elevation_map.cpp
   src/passable_node.cpp
   src/lidar_coverage.cpp
-  src/main.cpp
+  src/passable_main.cpp
 )
 
 target_link_libraries(passable_node

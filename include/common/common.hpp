@@ -1,5 +1,5 @@
-#ifndef COMMON_H
-#define COMMON_H
+#ifndef DR_COMMON_H
+#define DR_COMMON_H
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -74,4 +74,4 @@ enum Denoise
     GAUSS
 };
 
-#endif // COMMON_H
+#endif // DR_COMMON_H

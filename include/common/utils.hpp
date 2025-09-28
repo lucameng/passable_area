@@ -7,7 +7,7 @@
 #include <vector>
 #include <Eigen/Dense>
 
-namespace dr_utils {
+namespace dr {
 
 template<typename T>
 class DequeArray
@@ -137,6 +137,6 @@ inline Eigen::Matrix3f rotationFromYPRdeg(const Eigen::Vector3f& rpy_deg)
     return rotationFromYPRrad(rpy_rad);
 }
 
-} // namespace dr_utils
+} // namespace dr
 
 #endif // DR_UTILS_H
