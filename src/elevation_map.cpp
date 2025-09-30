@@ -24,7 +24,7 @@ ElevationMap::ElevationMap(float map_s, float max_h, float grid_s, const std::st
 }
 
 void ElevationMap::processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float rough_thres,
-                                     float drop_thres)
+                                     float drop_thres, const Eigen::Affine3f& T_g2b)
 {
     setInputCloud(ros_cloud);
     cloud2Elevation();
@@ -32,7 +32,7 @@ void ElevationMap::processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, 
     denoise("elevation", MEDIAN, 3);
     // fillElevationHoles("elevation", "padding", 1.2f, 10);
     fillPointCloud("elevation", "padding");
-    judgePassability(rough_thres, drop_thres, 3);
+    judgePassability(rough_thres, drop_thres, 3, T_g2b);
 }
 
 void ElevationMap::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
@@ -532,6 +532,7 @@ void ElevationMap::gaussianFilter(const std::string &layer_height, int kernel_si
     cv::GaussianBlur(layer_cv, layer_cv, cv::Size(kernel_size, kernel_size), 0.0);
     cv::cv2eigen(layer_cv, get(layer_height));
 }
+
 float ElevationMap::errorFromCovariance(const Eigen::Vector3f &mean,
                                         const Eigen::Matrix3f &square) const
 {
@@ -596,7 +597,7 @@ void ElevationMap::inpaint(const std::string& layer_height, const std::string& l
         minValues(layer_height, layer_filled);
         break;
     case MINLIMIT: 
-        minValuesLimited(layer_height, layer_filled, 100); 
+        minValuesLimited(layer_height, layer_filled, 70); 
         break;
     case MAX:
         maxValues(layer_height, layer_filled);
@@ -628,7 +629,8 @@ bool ElevationMap::isPassable(float variance_error, float roughness_thres) const
     return (variance_error < square_thres);
 }
 
-void ElevationMap::judgePassability(float rough_thres, float drop_thres, int kernel_size)
+void ElevationMap::judgePassability(float rough_thres, float drop_thres, int kernel_size,
+                                    const Eigen::Affine3f& T_g2b)
 {
     kernel_size = std::clamp(kernel_size, 3, 5);
     int center = map_size_grid_ / 2;
@@ -679,8 +681,10 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres, int ker
                 setPassability(grid_map::Index(x, y), IMPASSABLE);
                 continue;
             }
-
-            if (std::fabs(nbr_height - cur_height) > drop_thres)
+            
+            float height_diff = nbr_height - cur_height;
+            height_diff = std::fabs(projectToBodyZ(height_diff, T_g2b.linear()));
+            if (height_diff > drop_thres)
             {
                 setPassability(grid_map::Index(nx, ny), IMPASSABLE);
                 continue;

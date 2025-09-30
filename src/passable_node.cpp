@@ -87,7 +87,7 @@ void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
     if (!ele_init_) return;
     stamp_ = msg->header.stamp;
 
-    ele_map_->processPointCloud(*msg, rough_thres_, max_drop_);
+    ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform());
 
     lidar_cov_->computeCoverage(*ele_map_, getTransform());
 
@@ -132,7 +132,6 @@ void PassableNode::bodyVisual()
     body_vis_pub_.publish(body);
 }
 
-
 void PassableNode::publishPassableInfo()
 {
     const auto& cloud = ele_map_->getWorkingCloud();
@@ -169,7 +168,9 @@ void PassableNode::publishPassableInfo()
         // }
     }
 
+    //
     expanded_cloud_ = cloud;
+    //
 
     auto finalize = [](pcl::PointCloud<pcl::PointXYZ>& c) {
         c.width = static_cast<uint32_t>(c.size());
@@ -203,6 +204,5 @@ void PassableNode::publishGridMap()
     grid_map::GridMapRosConverter::toMessage(*ele_map_, ros_map);
     ros_map.info.header.stamp = stamp_;
     ros_map.info.header.frame_id = g_frame_;
-
     grid_map_pub_.publish(ros_map);
 }

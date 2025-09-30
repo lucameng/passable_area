@@ -137,6 +137,16 @@ inline Eigen::Matrix3f rotationFromYPRdeg(const Eigen::Vector3f& rpy_deg)
     return rotationFromYPRrad(rpy_rad);
 }
 
+inline float projectScalar(float scalar,
+                           const Eigen::Matrix3f& R_src2dst,
+                           const Eigen::Vector3f& axis_src,
+                           const Eigen::Vector3f& axis_dst)
+{
+    Eigen::Vector3f v_src = axis_src.normalized() * scalar;
+    Eigen::Vector3f v_dst = R_src2dst * v_src;
+    return v_dst.dot(axis_dst.normalized());
+}
+
 } // namespace dr
 
 #endif // DR_UTILS_H

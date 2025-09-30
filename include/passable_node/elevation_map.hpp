@@ -2,6 +2,7 @@
 #define ELEVATION_MAP_HPP
 
 #include "common.hpp"
+#include "utils.hpp"
 
 #include <string>
 #include <vector>
@@ -23,7 +24,8 @@ public:
     ElevationMap() = default;
     explicit ElevationMap(float map_s, float max_h, float grid_s, const std::string& frame_id);
 
-    void processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float roughness_thres, float drop_thres);
+    void processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float roughness_thres,
+                           float drop_thres, const Eigen::Affine3f& T_g2b);
 
     const PointCloudXYZ& getWorkingCloud() const noexcept { return working_cloud_; }
     PointCloudXYZ& getWorkingCloud() noexcept { return working_cloud_; }
@@ -64,6 +66,11 @@ private:
         return (idx.x() >= 0 && idx.y() >= 0 && idx.x() < getSize().x() && idx.y() < getSize().y());
     }
 
+    float projectToBodyZ(float scalar_g, const Eigen::Matrix3f& R_g2b) const
+    {
+        return dr::projectScalar(scalar_g, R_g2b, Eigen::Vector3f::UnitZ(), Eigen::Vector3f::UnitZ());
+    }
+
     bool isPositionInside(const Eigen::Vector2d& pos) const noexcept { return isInside(pos); }
 
     void minValues(const std::string &layer_height, const std::string &layer_filled);
@@ -72,22 +79,21 @@ private:
     void maxValues(const std::string &layer_height, const std::string &layer_filled);
     void meanValues(const std::string &layer_height, const std::string &layer_filled);
     void meanValuesOnce(const std::string &layer_height, const std::string &layer_filled);
+
     void medianFilter(const std::string& layer_height, int kernel_size,
                       float threshold = -std::numeric_limits<float>::infinity());
     void gaussianFilter(const std::string& layer_height, int kernel_size);
+
     float errorFromCovariance(const Eigen::Vector3f& mean, const Eigen::Matrix3f& square) const;
     float computeError(int x, int y, int kernel_size, Eigen::Vector3f& mean,
                        Eigen::Matrix3f& square) const;
-
     void inpaint(const std::string &layer_height, const std::string &layer_filled, int method);
     void denoise(const std::string& layer_height, int method, int kernel_size);
-
+    
     void cloud2Elevation();
-
     bool isPassable(float variance_error, float roughness_thres) const;
-
-    void judgePassability(float rough_thres, float drop_thres, int kernel_size);
-
+    void judgePassability(float rough_thres, float drop_thres, int kernel_size,
+                          const Eigen::Affine3f& T_g2b);
     void fillElevationHoles(const std::string& layer_height = "elevation",
                             const std::string& layer_filled = "padding", 
                             float search_radius = 1.5f, int min_neighbors = 10,
