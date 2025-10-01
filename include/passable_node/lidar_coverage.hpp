@@ -33,7 +33,7 @@ public:
     void addLidar(const std::string& lidar_name);
     void computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b,
                          const std::string& layer_height = "elevation",
-                         const std::string& layer_filled = "coverability") const;
+                         const std::string& layer_covered = "coverability") const;
 
 private:
     bool isCellCoveredByLidar(const Eigen::Vector3f& p_body,

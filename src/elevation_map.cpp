@@ -766,7 +766,7 @@ void ElevationMap::fillElevationHoles(const std::string &layer_height,
             {   
                 H_out(r, c) = sum / weight_sum;
                 grid_map::Index idx = {r, c};
-                at(layer_filled, idx) = 1;
+                at(layer_filled, idx) = PADDED;
             }
         }
     }

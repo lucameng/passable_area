@@ -84,20 +84,21 @@ bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f& p_body,
     return false;
 }
 
-void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b,
+void LidarCoverage::computeCoverage(grid_map::GridMap& ele_map, 
+                                    const Eigen::Affine3f& T_g2b,
                                     const std::string& layer_height,
-                                    const std::string& layer_filled) const
+                                    const std::string& layer_covered) const
 {
     // ROS_INFO("Start computing lidar coverage...");
-    if (!map.exists(layer_filled) || !map.exists(layer_height)) return;
+    if (!ele_map.exists(layer_covered) || !ele_map.exists(layer_height)) return;
 
-    map.get(layer_filled).setConstant(UNCOVERED);
+    ele_map.get(layer_covered).setConstant(UNCOVERED);
 
-    for (grid_map::GridMapIterator it(map); !it.isPastEnd(); ++it)
+    for (grid_map::GridMapIterator it(ele_map); !it.isPastEnd(); ++it)
     {
         const grid_map::Index idx = *it;
         grid_map::Position3 pos;
-        if (!map.getPosition3(layer_height, idx, pos)) continue;
+        if (!ele_map.getPosition3(layer_height, idx, pos)) continue;
 
         Eigen::Vector3f p_grav = {static_cast<float>(pos.x()),
                                   static_cast<float>(pos.y()), 
@@ -111,7 +112,7 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& map, const Eigen::Affine3
         {
             if (isCellCoveredByLidar(p_body, lidar))
             {
-                map.at(layer_filled, idx) = COVERED;
+                ele_map.at(layer_covered, idx) = COVERED;
                 break;
             }
         }
