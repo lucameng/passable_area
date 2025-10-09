@@ -31,13 +31,16 @@ public:
     explicit LidarCoverage(const ros::NodeHandle& nh_);
     void initialize();
     void addLidar(const std::string& lidar_name);
-    void computeCoverage(grid_map::GridMap& map, const Eigen::Affine3f& T_g2b,
-                         const std::string& layer_height = "elevation",
-                         const std::string& layer_covered = "coverability") const;
+    void processCoverage(grid_map::GridMap& ele_map, const Eigen::Affine3f& T_g2b);
 
 private:
     bool isCellCoveredByLidar(const Eigen::Vector3f& p_body,
                               const LidarParam& lidar) const;
+    void computeCoverage(grid_map::GridMap& ele_map, const Eigen::Affine3f& T_g2b,
+                         const std::string& layer_height = "elevation",
+                         const std::string& layer_covered = "coverability") const;
+    void dilateUncoveredArea(grid_map::GridMap& ele_map, int dilation_radius = 3,
+                             const std::string& layer_covered = "coverability");
 
 private:
     ros::NodeHandle nh_;

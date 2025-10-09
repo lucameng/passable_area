@@ -86,7 +86,7 @@ void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 
     ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform());
 
-    lidar_cov_->computeCoverage(*ele_map_, getTransform());
+    lidar_cov_->processCoverage(*ele_map_, getTransform());
 
     bodyVisual();
     publishPassableInfo();
@@ -151,11 +151,13 @@ void PassableNode::publishPassableInfo()
 
         Eigen::Vector2d pos(p.x, p.y);
         uint8_t step = ele_map_->getPassability(pos);
+        uint8_t cover = ele_map_->getCoverability(pos);
+
         if (step == PASSABLE)
         {
             passable_cloud_.push_back(p);
         }
-        else if (step == IMPASSABLE)
+        else if (step == IMPASSABLE && cover == COVERED)
         {
             impassable_cloud_.push_back(p);
         }

@@ -6,21 +6,15 @@ body_width:    0.4
 max_drop:      0.20
 max_roughness: 0.10
 
-# for post process
-low_ratio:        0.1
-high_ratio:       0.8
-gap_thresh:       0.1
-
 world_frame:   "camera_init"
 gravity_frame: "base_gravity"
 body_frame:    "body"
-
 
 lidar_front_up:
   pos_body: [0.44367, 0.0, 0.05415]      # m
   rpy_body: [0.0, 65.0, 0.0]             # deg
   fov_up_deg: 46.0
-  fov_down_deg: -6.0
+  fov_down_deg: -4.0
 
 lidar_front_down:
   pos_body: [0.43297, 0.0, -0.05519]     # m

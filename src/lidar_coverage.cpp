@@ -6,12 +6,18 @@
 #include <Eigen/Dense>
 #include <grid_map_core/GridMap.hpp>
 #include <grid_map_core/iterators/GridMapIterator.hpp>
+#include <grid_map_core/grid_map_core.hpp>
+#include <grid_map_cv/grid_map_cv.hpp>
+
+#include <opencv2/core/eigen.hpp>
+#include <opencv2/imgproc.hpp>
+
 
 LidarCoverage::LidarCoverage(const ros::NodeHandle& nh)
     : nh_(nh),
       ground_height_(-0.5f),
-      bound_max_({4.f, 1.f}),
-      bound_min_({-2.f, -1.f})
+      bound_max_({4.f, 0.7f}),
+      bound_min_({-3.f, -0.7f})
 {
     // LidarCoverage constructor
 }
@@ -64,6 +70,12 @@ void LidarCoverage::addLidar(const std::string& lidar_name)
     lidars_.push_back(param);
 }
 
+void LidarCoverage::processCoverage(grid_map::GridMap& ele_map, const Eigen::Affine3f& T_g2b)
+{
+    computeCoverage(ele_map, T_g2b, "dummy_height");
+    dilateUncoveredArea(ele_map, 2, "coverability");
+}
+
 bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f& p_body,
                                          const LidarParam& lidar) const
 {
@@ -92,13 +104,19 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& ele_map,
     // ROS_INFO("Start computing lidar coverage...");
     if (!ele_map.exists(layer_covered) || !ele_map.exists(layer_height)) return;
 
-    ele_map.get(layer_covered).setConstant(UNCOVERED);
+    ele_map.get(layer_covered).setConstant(COVERED);
 
     for (grid_map::GridMapIterator it(ele_map); !it.isPastEnd(); ++it)
     {
         const grid_map::Index idx = *it;
         grid_map::Position3 pos;
         if (!ele_map.getPosition3(layer_height, idx, pos)) continue;
+
+        if (pos.x() < bound_min_.x() || pos.x() > bound_max_.x() ||
+            pos.y() < bound_min_.y() || pos.y() > bound_max_.y())
+        {
+            continue;
+        }
 
         Eigen::Vector3f p_grav = {static_cast<float>(pos.x()),
                                   static_cast<float>(pos.y()), 
@@ -108,15 +126,44 @@ void LidarCoverage::computeCoverage(grid_map::GridMap& ele_map,
         // ROS_INFO("p_grav:(%.3f, %.3f, %.3f) p_body(%.3f, %.3f, %.3f)", 
         //         p_grav.x(), p_grav.y(), p_grav.z(), p_body.x(), p_body.y(), p_body.z());
 
+        bool is_covered = false;
         for (const auto& lidar : lidars_)
         {
             if (isCellCoveredByLidar(p_body, lidar))
             {
-                ele_map.at(layer_covered, idx) = COVERED;
+                // ele_map.at(layer_covered, idx) = COVERED;
+                is_covered = true;
                 break;
             }
         }
+
+        if (!is_covered) 
+        {
+            ele_map.at(layer_covered, idx) = UNCOVERED;
+        }
+        
+    }
+    // ROS_INFO("Computation done!");
+}
+
+void LidarCoverage::dilateUncoveredArea(grid_map::GridMap& ele_map, int dilation_radius,
+                                        const std::string& layer_covered)
+{
+    if (!ele_map.exists(layer_covered))
+    {
+        return;
     }
 
-    // ROS_INFO("Computation done!");
+    cv::Mat image;
+    grid_map::GridMapCvConverter::toImage<unsigned char, 1>(ele_map, layer_covered, CV_8UC1, 0.0,
+                                                            1.0, image);
+
+    cv::Mat image_eroded;
+    cv::Mat kernel = cv::getStructuringElement(
+        cv::MORPH_ELLIPSE, cv::Size(2 * dilation_radius + 1, 2 * dilation_radius + 1));
+    cv::erode(image, image_eroded, kernel);
+
+    cv::Mat image_float;
+    image_eroded.convertTo(image_float, CV_32F, 1.0 / 255.0);
+    cv::cv2eigen(image_float, ele_map[layer_covered]);
 }

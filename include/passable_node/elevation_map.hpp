@@ -45,6 +45,9 @@ public:
     uint8_t getPassability(const Eigen::Array2i& idx) const;
     uint8_t getPassability(const Eigen::Vector2d& pos) const;
 
+    uint8_t getCoverability(const Eigen::Array2i& idx) const;
+    uint8_t getCoverability(const Eigen::Vector2d& pos) const;
+
     float getGridSize() const noexcept { return grid_size_; }
     int getMapSizeGrid() const noexcept { return map_size_grid_; }
 
@@ -74,8 +77,9 @@ private:
     bool isPositionInside(const Eigen::Vector2d& pos) const noexcept { return isInside(pos); }
 
     void minValues(const std::string &layer_height, const std::string &layer_filled);
-    void minValuesLimited(const std::string &layer_height, const std::string &layer_filled,
-                          int max_hole_pixels = 100);
+    void minValuesLimited(const std::string& layer_height, const std::string& layer_filled,
+                          int max_hole_pixels = 10, bool enable_center_padding = false,
+                          float center_dist_thresh = 0.8f);
     void maxValues(const std::string &layer_height, const std::string &layer_filled);
     void meanValues(const std::string &layer_height, const std::string &layer_filled);
     void meanValuesOnce(const std::string &layer_height, const std::string &layer_filled);
@@ -98,7 +102,7 @@ private:
                             const std::string& layer_filled = "padding", 
                             float search_radius = 1.5f, int min_neighbors = 10,
                             const Eigen::Vector2f& bound_min = {-3.f, -0.7f},
-                            const Eigen::Vector2f& bound_max = {0.8f, 0.7f});
+                            const Eigen::Vector2f& bound_max = {4.f, 0.7f});
     void fillPointCloud(const std::string& layer_height = "elevation",
                         const std::string& layer_filled = "padding");
 private:

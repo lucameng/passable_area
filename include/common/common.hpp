@@ -13,7 +13,8 @@
 constexpr float PI = 3.14159265358979323846f;
 constexpr float DEG2RAD = PI / 180.0f;
 constexpr float RAD2DEG = 180.0f / PI;
-constexpr float DEAD_VALUE = -10.f;
+constexpr float INVALID_VALUE = -100.f;
+constexpr float GROUD_HEIGHT = -0.5f;
 
 // ============================================================================
 // Point Cloud Type Aliases
