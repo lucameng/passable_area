@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Eigen3 REQUIRED)
-find_package(OpenCV 4.5 REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(OpenMP REQUIRED)
 
 if(OpenMP_CXX_FOUND)
@@ -29,6 +29,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  include/common
   include/passable_node
 )
 
@@ -37,7 +38,8 @@ catkin_package()
 add_executable(passable_node
   src/elevation_map.cpp
   src/passable_node.cpp
-  src/main.cpp
+  src/lidar_coverage.cpp
+  src/passable_main.cpp
 )
 
 target_link_libraries(passable_node
