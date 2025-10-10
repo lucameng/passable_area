@@ -48,6 +48,9 @@ public:
     uint8_t getCoverability(const Eigen::Array2i& idx) const;
     uint8_t getCoverability(const Eigen::Vector2d& pos) const;
 
+    int getPointCount(const Eigen::Array2i& idx) const;
+    int getPointCount(const Eigen::Vector2d& pos) const;
+
     float getGridSize() const noexcept { return grid_size_; }
     int getMapSizeGrid() const noexcept { return map_size_grid_; }
 
@@ -103,8 +106,9 @@ private:
                             float search_radius = 1.5f, int min_neighbors = 10,
                             const Eigen::Vector2f& bound_min = {-3.f, -0.7f},
                             const Eigen::Vector2f& bound_max = {4.f, 0.7f});
-    void fillPointCloud(const std::string& layer_height = "elevation",
-                        const std::string& layer_filled = "padding");
+    void fillPointCloudFromLayer(const std::string& layer_height = "elevation",
+                                 const std::string& layer_filled = "padding");
+
 private:
     PointCloudXYZ working_cloud_;
     float map_size_;

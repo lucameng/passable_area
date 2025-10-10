@@ -3,7 +3,7 @@ map_height:    3.0
 voxel_size:    0.05
 body_length:   0.9
 body_width:    0.4
-max_drop:      0.20
+max_drop:      0.25
 max_roughness: 0.10
 
 world_frame:   "camera_init"

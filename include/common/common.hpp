@@ -15,6 +15,7 @@ constexpr float DEG2RAD = PI / 180.0f;
 constexpr float RAD2DEG = 180.0f / PI;
 constexpr float INVALID_VALUE = -100.f;
 constexpr float GROUD_HEIGHT = -0.5f;
+constexpr int   UNKNOWN_OBS_VALID_CNT = 3;
 
 // ============================================================================
 // Point Cloud Type Aliases

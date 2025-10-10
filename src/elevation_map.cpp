@@ -7,13 +7,11 @@
 #include <grid_map_cv/GridMapCvConverter.hpp>
 #include <pcl_conversions/pcl_conversions.h>
 
-ElevationMap::ElevationMap(float map_s, float max_h, float grid_s, const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "passability", "coverability", "padding", "dummy_height"}),
-      map_size_(map_s),
-      max_height_(max_h),
-      grid_size_(grid_s),
-      map_size_grid_(map_size_ / grid_size_),
-      frame_(frame_id)
+ElevationMap::ElevationMap(float map_s, float max_h, float grid_s, const std::string& frame_id)
+    : grid_map::GridMap(
+          {"elevation", "passability", "coverability", "padding", "point_count", "dummy_height"}),
+      map_size_(map_s), max_height_(max_h), grid_size_(grid_s),
+      map_size_grid_(map_size_ / grid_size_), frame_(frame_id)
 {
     setFrameId(frame_);
     setGeometry(grid_map::Length(map_size_, map_size_), grid_size_);
@@ -21,6 +19,7 @@ ElevationMap::ElevationMap(float map_s, float max_h, float grid_s, const std::st
     get("passability").setConstant(UNKNOWN);
     get("coverability").setConstant(UNCOVERED);
     get("padding").setConstant(UNPADDED);
+    get("point_count").setZero();
 }
 
 void ElevationMap::processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float rough_thres,
@@ -31,7 +30,7 @@ void ElevationMap::processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, 
     inpaint("elevation", "padding", MINLIMIT);
     denoise("elevation", MEDIAN, 3);
     fillElevationHoles("elevation", "padding", 1.2f, 10);
-    // fillPointCloud("elevation", "padding");
+    // fillPointCloudFromLayer("elevation", "padding");
     judgePassability(rough_thres, drop_thres, 3, T_g2b);
 }
 
@@ -53,6 +52,8 @@ void ElevationMap::setInputCloud(const sensor_msgs::PointCloud2& ros_cloud)
 void ElevationMap::cloud2Elevation()
 {
     clear("elevation");
+    clear("point_count");
+    get("point_count").setZero();
 
     float half_width = map_size_ * 0.5;
     float half_height = max_height_ * 0.5;
@@ -64,7 +65,8 @@ void ElevationMap::cloud2Elevation()
             p.y <= -half_width || p.y >= half_width ||
             p.z <= -half_height || p.z >= half_height) continue;
 
-        float height = getAltitude(Eigen::Vector2d(p.x, p.y));
+        Eigen::Vector2d pos(p.x, p.y);
+        float height = getAltitude(pos);
         if (std::isnan(height))
         {
             height = p.z;
@@ -73,7 +75,13 @@ void ElevationMap::cloud2Elevation()
         {
             height = std::max(height, p.z);
         }
-        setAltitude(Eigen::Vector2d(p.x, p.y), height);
+        setAltitude(pos, height);
+
+        grid_map::Index idx;
+        if (getIndex(pos, idx))
+        {
+            get("point_count")(idx.x(), idx.y()) += 1.0f;
+        }
     }
 }
 
@@ -87,67 +95,91 @@ float ElevationMap::getMaxheight() const noexcept
     return maxCoeffOfFinites(get("elevation")); 
 }
 
-void ElevationMap::setAltitude(const Eigen::Array2i &idx, float height)
+void ElevationMap::setAltitude(const Eigen::Array2i& idx, float height)
 {
-    if (!isIndexValid(idx)) return;
+    if (!isIndexValid(idx))
+        return;
     at("elevation", idx) = height;
 }
 
-void ElevationMap::setAltitude(const Eigen::Vector2d &pos, float height)
+void ElevationMap::setAltitude(const Eigen::Vector2d& pos, float height)
 {
-    if (!isPositionInside(pos)) return;
+    if (!isPositionInside(pos))
+        return;
     atPosition("elevation", pos) = height;
 }
 
-float ElevationMap::getAltitude(const Eigen::Array2i &idx) const
+float ElevationMap::getAltitude(const Eigen::Array2i& idx) const
 {
-    if (!isIndexValid(idx)) return NAN;
+    if (!isIndexValid(idx))
+        return NAN;
     return at("elevation", grid_map::Index(idx.x(), idx.y()));
 }
 
-float ElevationMap::getAltitude(const Eigen::Vector2d &pos) const
+float ElevationMap::getAltitude(const Eigen::Vector2d& pos) const
 {
-    if (!isPositionInside(pos)) return NAN;
+    if (!isPositionInside(pos))
+        return NAN;
     return atPosition("elevation", pos);
 }
 
-void ElevationMap::setPassability(const Eigen::Array2i &idx, uint8_t passability)
+void ElevationMap::setPassability(const Eigen::Array2i& idx, uint8_t passability)
 {
-    if (!isIndexValid(idx)) return;
+    if (!isIndexValid(idx))
+        return;
     at("passability", grid_map::Index(idx.x(), idx.y())) = static_cast<float>(passability);
 }
 
-void ElevationMap::setPassability(const Eigen::Vector2d &pos, uint8_t passability)
+void ElevationMap::setPassability(const Eigen::Vector2d& pos, uint8_t passability)
 {
-    if (!isPositionInside(pos)) return;
+    if (!isPositionInside(pos))
+        return;
     atPosition("passability", pos) = static_cast<float>(passability);
 }
 
-uint8_t ElevationMap::getPassability(const Eigen::Array2i &idx) const
+uint8_t ElevationMap::getPassability(const Eigen::Array2i& idx) const
 {
-    if (!isIndexValid(idx)) return UNKNOWN;
+    if (!isIndexValid(idx))
+        return UNKNOWN;
     return static_cast<uint8_t>(at("passability", grid_map::Index(idx.x(), idx.y())));
 }
 
-uint8_t ElevationMap::getPassability(const Eigen::Vector2d &pos) const
+uint8_t ElevationMap::getPassability(const Eigen::Vector2d& pos) const
 {
-    if (!isPositionInside(pos)) return UNKNOWN;
+    if (!isPositionInside(pos))
+        return UNKNOWN;
     return static_cast<uint8_t>(atPosition("passability", pos));
 }
 
-uint8_t ElevationMap::getCoverability(const Eigen::Array2i &idx) const
+uint8_t ElevationMap::getCoverability(const Eigen::Array2i& idx) const
 {
-    if (!isIndexValid(idx)) return UNKNOWN;
+    if (!isIndexValid(idx))
+        return UNKNOWN;
     return static_cast<uint8_t>(at("coverability", grid_map::Index(idx.x(), idx.y())));
 }
 
-uint8_t ElevationMap::getCoverability(const Eigen::Vector2d &pos) const
+uint8_t ElevationMap::getCoverability(const Eigen::Vector2d& pos) const
 {
-    if (!isPositionInside(pos)) return UNKNOWN;
+    if (!isPositionInside(pos))
+        return UNKNOWN;
     return static_cast<uint8_t>(atPosition("coverability", pos));
 }
 
-void ElevationMap::minValues(const std::string &layer_height, const std::string &layer_filled)
+int ElevationMap::getPointCount(const Eigen::Array2i& idx) const
+{
+    if (!isIndexValid(idx))
+        return 0;
+    return static_cast<int>(at("point_count", grid_map::Index(idx.x(), idx.y())));
+}
+
+int ElevationMap::getPointCount(const Eigen::Vector2d& pos) const
+{
+    if (!isPositionInside(pos))
+        return 0;
+    return static_cast<int>(atPosition("point_count", pos));
+}
+
+void ElevationMap::minValues(const std::string& layer_height, const std::string& layer_filled)
 {
     grid_map::Matrix &H_ele = get(layer_height);
     grid_map::Matrix &H_pad = get(layer_filled);
@@ -158,7 +190,7 @@ void ElevationMap::minValues(const std::string &layer_height, const std::string 
     const int num_rows = H_ele.rows();
     const int max_row_id = num_rows - 1;
 
-    auto compare_and_store_min = [](float new_value, float &current_min, bool &is_changed) {
+    auto compare_and_store_min = [](float new_value, float& current_min, bool& is_changed) {
         if (!std::isnan(new_value))
         {
             if (new_value < current_min || std::isnan(current_min))
@@ -305,7 +337,6 @@ void ElevationMap::minValuesLimited(const std::string& layer_height,
         }
     }
 }
-
 
 void ElevationMap::maxValues(const std::string &layer_height, const std::string &layer_filled)
 {
@@ -634,7 +665,7 @@ void ElevationMap::inpaint(const std::string& layer_height, const std::string& l
         minValues(layer_height, layer_filled);
         break;
     case MINLIMIT: 
-        minValuesLimited(layer_height, layer_filled, 6, true); 
+        minValuesLimited(layer_height, layer_filled, 20, true); 
         break;
     case MAX:
         maxValues(layer_height, layer_filled);
@@ -646,7 +677,7 @@ void ElevationMap::inpaint(const std::string& layer_height, const std::string& l
     }
 }
 
-void ElevationMap::denoise(const std::string &layer_height, int method, int kernel_size)
+void ElevationMap::denoise(const std::string& layer_height, int method, int kernel_size)
 {
     kernel_size = std::clamp(kernel_size, 1, 5);
 
@@ -675,9 +706,17 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres, int ker
     get("passability").setConstant(UNKNOWN);
     std::vector<bool> visited(map_size_grid_ * map_size_grid_, false);
     std::queue<std::pair<int, int>> que;
+
     que.emplace(center, center);
     visited[center + center * map_size_grid_] = true;
     setPassability(Eigen::Array2i(center, center), PASSABLE);
+
+    int bak_x = center * 1.8, bak_y = center;
+    auto bak_idx = grid_map::Index(bak_x, bak_y);
+    que.emplace(bak_x, bak_y);
+    visited[bak_x + bak_y * map_size_grid_] = true;
+    setPassability(Eigen::Array2i(bak_x, bak_y), PASSABLE);
+
 
     const int dx[8] = {1,  1,  0, -1, -1, -1, 0, 1};
     const int dy[8] = {0, -1, -1, -1,  0,  1, 1, 1};
@@ -687,68 +726,61 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres, int ker
     {
         auto [x, y] = que.front();
         que.pop();
-        float cur_height = getAltitude(grid_map::Index(x, y));
-        if (!std::isfinite(cur_height))
+        auto curr_idx = grid_map::Index(x, y);
+        float curr_height = getAltitude(curr_idx);
+        if (!std::isfinite(curr_height))
         {
-            cur_height = GROUD_HEIGHT;
-            setAltitude(grid_map::Index(x, y), cur_height);
+            curr_height = GROUD_HEIGHT;
+            setAltitude(curr_idx, curr_height);
         }
 
         for (int i = 0; i < n_dir; ++i)
         {
             int nx = x + dx[i], ny = y + dy[i];
             if (nx < 0 || nx >= map_size_grid_ || ny < 0 || ny >= map_size_grid_) continue;
+            auto nbr_idx = grid_map::Index(nx, ny);
 
             int idx = nx + ny * map_size_grid_;
             if (visited[idx]) continue;
             visited[idx] = true;
 
-            auto nbr_height = getAltitude(grid_map::Index(nx, ny));
-
-            // if (!std::isfinite(nbr_height))
-            // {
-            //     nbr_height = cur_height;
-            //     setAltitude(grid_map::Index(nx, ny), nbr_height);
-            // }
+            auto nbr_height = getAltitude(nbr_idx);
 
             if (std::isnan(nbr_height))
             {
-                // setPassability(grid_map::Index(nx, ny), IMPASSABLE);
-                setPassability(grid_map::Index(x, y), IMPASSABLE);
                 continue;
             }
             
-            float height_diff = nbr_height - cur_height;
+            float height_diff = nbr_height - curr_height;
             height_diff = std::fabs(projectToBodyZ(height_diff, T_g2b.linear()));
             if (height_diff > drop_thres)
             {
-                setPassability(grid_map::Index(nx, ny), IMPASSABLE);
+                setPassability(nbr_idx, IMPASSABLE);
                 continue;
             }
 
             Eigen::Vector3f mean = Eigen::Vector3f::Zero();
             Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
             auto e = computeError(nx, ny, kernel_size, mean, square);
-            if (!isPassable(e, rough_thres) && cur_height > mean.z())
+            if (!isPassable(e, rough_thres) && curr_height > mean.z())
             {
-                setPassability(grid_map::Index(nx, ny), IMPASSABLE);
+                setPassability(nbr_idx, IMPASSABLE);
                 continue;
             }
     
-            setPassability(grid_map::Index(nx, ny), PASSABLE);
+            setPassability(nbr_idx, PASSABLE);
             que.emplace(nx, ny);
         }
     }
 }
 
-void ElevationMap::fillElevationHoles(const std::string &layer_height,
-                                      const std::string &layer_filled,
+void ElevationMap::fillElevationHoles(const std::string& layer_height,
+                                      const std::string& layer_filled,
                                       float search_radius, int min_neighbors,
                                       const Eigen::Vector2f& bound_min, 
                                       const Eigen::Vector2f& bound_max)
 {
     if (!exists(layer_height) || !exists(layer_filled)) return;
-    // get(layer_filled).setConstant(UNPADDED);
 
     const grid_map::Matrix& H_in = get(layer_height);
     grid_map::Matrix H_out = H_in; // copy
@@ -783,13 +815,11 @@ void ElevationMap::fillElevationHoles(const std::string &layer_height,
                     int nc = c + dc;
                     if (nr < 0 || nr >= map_size_grid_ || nc < 0 || nc >= map_size_grid_) continue;
 
-
                     float h = H_in(nr, nc);
                     if (std::isnan(h)) continue;
 
                     float dist = std::sqrt(dr * dr + dc * dc) * grid_size_;
                     if (dist > search_radius || dist < 1e-6) continue;
-
                     
                     float w = 1.0 / (dist * dist + 1e-6);
                     sum += h * w;
@@ -806,13 +836,11 @@ void ElevationMap::fillElevationHoles(const std::string &layer_height,
             }
         }
     }
-
     add("dummy_height", H_out);
 }
 
-
-void ElevationMap::fillPointCloud(const std::string& layer_height,
-                                  const std::string& layer_filled)
+void ElevationMap::fillPointCloudFromLayer(const std::string& layer_height,
+                                           const std::string& layer_filled)
 {
     if (!exists(layer_height) || !exists(layer_filled)) return;
 
