@@ -26,13 +26,15 @@ endif()
 include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  include/common
   include/passable_node
 )
 
 add_executable(passable_node
   src/elevation_map.cpp
   src/passable_node.cpp
-  src/main.cpp
+  src/lidar_coverage.cpp
+  src/passable_main.cpp
 )
 
 ament_target_dependencies(passable_node
