@@ -76,6 +76,7 @@ private:
     int body_w_;
     bool ele_init_;
     bool lidar_init_;
+    bool enable_blind_check_;
 };
 
 #endif // PASSABLE_NODE_HPP

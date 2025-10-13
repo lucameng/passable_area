@@ -5,6 +5,7 @@ PassableNode::PassableNode()
     : Node("passable_node"),
       ele_init_(false),
       lidar_init_(false),
+      enable_blind_check_(declare_parameter("enable_blind_check", false)),
       map_width_(declare_parameter("map_width", 7.0f)),
       map_height_(declare_parameter("map_height", 2.0f)),
       voxel_width_(declare_parameter("voxel_size", 0.1f)),
@@ -25,10 +26,14 @@ PassableNode::PassableNode()
 
 void PassableNode::initialize()
 {
-    RCLCPP_INFO(get_logger(), "Initializing passable node");
+    RCLCPP_INFO(get_logger(), "Initializing << passable node >>");
+    RCLCPP_INFO(get_logger(), "used frame: %s", used_frame_.c_str());
     elevationInit();
-    lidarCoverInit();
     
+    if (enable_blind_check_)
+    {
+        lidarCoverInit();
+    }
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
         "imu", 10, std::bind(&PassableNode::imuCallback, this, std::placeholders::_1));
     cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -36,20 +41,20 @@ void PassableNode::initialize()
     body_vis_pub_ = create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
     passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("passable_area", 10);
     impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("impassable_area", 10);
-    expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded", 10);
+    // expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("expanded_area", 10);
     grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
 }
 
 void PassableNode::elevationInit()
 {
-    RCLCPP_INFO(get_logger(), "Initializing elevation map");
+    RCLCPP_INFO(get_logger(), "Initializing < elevation map >");
     ele_map_ = std::make_unique<ElevationMap>(map_width_, map_height_, voxel_width_, used_frame_);
     ele_init_ = true;
 }
 
 void PassableNode::lidarCoverInit()
 {
-    RCLCPP_INFO(get_logger(), "Initializing lidar coverage");
+    RCLCPP_INFO(get_logger(), "Initializing < lidar coverage >");
     lidar_cov_ = std::make_unique<LidarCoverage>(shared_from_this());
     lidar_cov_->initialize();
     lidar_init_ = true;
@@ -57,17 +62,17 @@ void PassableNode::lidarCoverInit()
 
 void PassableNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
 {
-    if (used_frame_ == b_frame_) return;
+    if (used_frame_ == b_frame_) return; // no need if it is body frame
 
     Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x,
                          msg->orientation.y, msg->orientation.z);
     q.normalize();
 
     Eigen::Matrix3f R_world2body = q.toRotationMatrix();
-    // ROS_INFO_STREAM("R_world2body:\n" << R_world2body << "\n");
+    // RCLCPP_INFO_STREAM_INFO_STREAM("R_world2body:\n" << R_world2body << "\n");
 
     float yaw = std::atan2(R_world2body(1, 0), R_world2body(0, 0));
-    float pitch = std::asin(-R_world2body(2, 0));
+    float pitch = std::asin(-R_world2body(2, 0));   // N O T
     float roll = std::atan2(R_world2body(2, 1), R_world2body(2, 2));
 
     pitch = -pitch;
@@ -75,7 +80,7 @@ void PassableNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
     Eigen::AngleAxisf Ry(pitch, Eigen::Vector3f::UnitY());
     Eigen::Matrix3f R_gravity2body = (Ry * Rx).toRotationMatrix();
     
-    // ROS_INFO_STREAM("R_baseGravity2body:\n" << R_baseGravity2body << "\n");
+    // RCLCPP_INFO_STREAM("R_baseGravity2body:\n" << R_baseGravity2body << "\n");
 
     std::lock_guard<std::mutex> lock(imu_mutex_);
     T_g2b_.setIdentity();
@@ -85,12 +90,18 @@ void PassableNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
 
 void PassableNode::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
-    if (!ele_init_) return;
+    if (ele_init_)
+    {
+        ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
+                                    enable_blind_check_);
+    }
+
+    if (lidar_init_)
+    {
+        lidar_cov_->processCoverage(*ele_map_, getTransform());
+    }
+
     stamp_ = msg->header.stamp;
-
-    ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform());
-    lidar_cov_->processCoverage(*ele_map_, getTransform());
-
     bodyVisual();
     publishPassableInfo();
     publishGridMap();

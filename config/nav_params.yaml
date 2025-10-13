@@ -12,6 +12,8 @@ passable_node:
     gravity_frame: "base_gravity"
     body_frame:    "body"
     used_frame:    "base_gravity"
+
+    enable_blind_check: false
     
     lidar_front_up:
       pos_body: [0.44367, 0.0, 0.05415]      # m
