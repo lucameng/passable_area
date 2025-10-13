@@ -5,7 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     package_share_dir = get_package_share_directory('passable_node')
-    params_file = PathJoinSubstitution([package_share_dir, 'config', 'passable_params.yaml'])
+    params_file = PathJoinSubstitution([package_share_dir, 'config', 'mapping_params.yaml'])
     # print(f"package_share_dir: {package_share_dir}")
     return LaunchDescription([
         Node(
@@ -15,7 +15,8 @@ def generate_launch_description():
             output='screen',
             parameters=[params_file],
             remappings=[
-                ('cloud_topic', '/cloud_cur')
+                ('cloud_topic', '/cloud_body'),
+                ('imu', '/imu/data')
             ]
         )
     ])
