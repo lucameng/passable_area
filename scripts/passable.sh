@@ -6,7 +6,7 @@ home_path="${JY_COG_PATH}"
 ws_path="${home_path}/${workspace_name}"
 
 
-bash "${ws_path}/scripts/kill_passable_node.sh"
+bash "${ws_path}/scripts/kill_node.sh"
 sleep 1
 
 if [ -f "${ws_path}/install/setup.bash" ]; then
@@ -16,4 +16,4 @@ else
     exit 1
 fi
 
-ros2 launch passable_node passable_launch.py
+ros2 launch passable_node nav.launch.py
