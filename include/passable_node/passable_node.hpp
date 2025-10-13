@@ -56,6 +56,7 @@ private:
     std::string w_frame_;   // world frame
     std::string g_frame_;   // gravity frame
     std::string b_frame_;   // body frame
+    std::string used_frame_;    // frame to be used
     ros::Time stamp_;
 
     std::unique_ptr<ElevationMap> ele_map_;

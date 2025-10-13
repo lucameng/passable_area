@@ -17,7 +17,7 @@ ElevationMap::ElevationMap(float map_s, float max_h, float grid_s, const std::st
     setGeometry(grid_map::Length(map_size_, map_size_), grid_size_);
     setPosition(grid_map::Position(0.0, 0.0));
     get("passability").setConstant(UNKNOWN);
-    get("coverability").setConstant(UNCOVERED);
+    get("coverability").setConstant(COVERED); // Covered
     get("padding").setConstant(UNPADDED);
     get("point_count").setZero();
 }

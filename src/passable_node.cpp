@@ -15,15 +15,19 @@ PassableNode::PassableNode(const ros::NodeHandle& nh)
       w_frame_(nh.param<std::string>("world_frame", "camera_init")),
       g_frame_(nh.param<std::string>("gravity_frame", "base_gravity")),
       b_frame_(nh.param<std::string>("body_frame", "body")),
+      used_frame_(nh.param<std::string>("used_frame", "base_gravity")),
       body_l_(body_length_ / voxel_width_),
-      body_w_(body_width_ / voxel_width_)
+      body_w_(body_width_ / voxel_width_),
+      T_g2b_(Eigen::Affine3f::Identity())
 {
     // Passable node constructor
 }
 
 void PassableNode::initialize()
 {
-    ROS_INFO("Initializing passable node");
+    ROS_INFO("Initializing << passable node >>");
+    ROS_INFO("used frame: %s", used_frame_.c_str());
+
     elevationInit();
     lidarCoverInit();
 
@@ -40,14 +44,14 @@ void PassableNode::initialize()
 
 void PassableNode::elevationInit()
 {
-    ROS_INFO("Initializing elevation map");
+    ROS_INFO("Initializing < elevation map >");
     ele_map_ = std::make_unique<ElevationMap>(map_width_, map_height_, voxel_width_, g_frame_);
     ele_init_ = true;
 }
 
 void PassableNode::lidarCoverInit()
 {
-    ROS_INFO("Initializing lidar coverage");
+    ROS_INFO("Initializing < lidar coverage >");
     lidar_cov_ = std::make_unique<LidarCoverage>(nh_);
     lidar_cov_->initialize();
     lidar_init_ = true;
@@ -55,6 +59,7 @@ void PassableNode::lidarCoverInit()
 
 void PassableNode::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 {
+    if (used_frame_ == b_frame_) return;
     Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x,
                          msg->orientation.y, msg->orientation.z);
     q.normalize();
@@ -193,7 +198,7 @@ void PassableNode::publishPassableInfo()
     sensor_msgs::PointCloud2 ros_expanded;
     finalize(expanded_cloud_);
     pcl::toROSMsg(expanded_cloud_, ros_expanded);
-    ros_expanded.header.frame_id = g_frame_;
+    ros_expanded.header.frame_id = used_frame_;
     ros_expanded.header.stamp = stamp_;
     expanded_pub_.publish(ros_expanded);
     */
@@ -204,6 +209,6 @@ void PassableNode::publishGridMap()
     grid_map_msgs::GridMap ros_map;
     grid_map::GridMapRosConverter::toMessage(*ele_map_, ros_map);
     ros_map.info.header.stamp = stamp_;
-    ros_map.info.header.frame_id = g_frame_;
+    ros_map.info.header.frame_id = used_frame_;
     grid_map_pub_.publish(ros_map);
 }

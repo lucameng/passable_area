@@ -16,4 +16,4 @@ else
     exit 1
 fi
 
-roslaunch passable_node passable_node.launch
+roslaunch passable_node passable_mapping.launch
