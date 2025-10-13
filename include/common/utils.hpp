@@ -147,6 +147,14 @@ inline float projectScalar(float scalar,
     return v_dst.dot(axis_dst.normalized());
 }
 
+template<typename T>
+std::string toString(const T& value) 
+{
+    std::ostringstream ss;
+    ss << value;
+    return ss.str();
+}
+
 } // namespace dr
 
 #endif // DR_UTILS_H

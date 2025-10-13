@@ -1,7 +1,7 @@
 #ifndef DR_MATHS_H
 #define DR_MATHS_H
 
-#include <math.h>
+#include <cmath>
 #include <cstdint>
 
 namespace dr {
@@ -11,7 +11,7 @@ const double kEps = 1e-8;
 inline bool equal(double a, double b)
 {
     //	return a == b;
-    if (isinf(a) && isinf(b))
+    if (std::isinf(a) && std::isinf(b))
     {
         return true;
     }
@@ -33,7 +33,7 @@ inline bool greaterThan(double a, double b)
 inline bool lessEqual(double a, double b)
 {
     //	return a <= b;
-    if (isinf(a) && isinf(b))
+    if (std::isinf(a) && std::isinf(b))
     {
         return true;
     }
@@ -43,7 +43,7 @@ inline bool lessEqual(double a, double b)
 inline bool greaterEqual(double a, double b)
 {
     //	return a >= b;
-    if (isinf(a) && isinf(b))
+    if (std::isinf(a) && std::isinf(b))
     {
         return true;
     }
@@ -53,7 +53,7 @@ inline bool greaterEqual(double a, double b)
 // float compare
 inline bool equal(float a, float b)
 {
-    if (isinf(a) && isinf(b))
+    if (std::isinf(a) && std::isinf(b))
     {
         return true;
     }
@@ -66,7 +66,7 @@ inline bool greaterThan(float a, float b) { return (a - b) > 1e-6; }
 
 inline bool lessEqual(float a, float b)
 {
-    if (isinf(a) && isinf(b))
+    if (std::isinf(a) && std::isinf(b))
     {
         return true;
     }
@@ -75,7 +75,7 @@ inline bool lessEqual(float a, float b)
 
 inline bool greaterEqual(float a, float b)
 {
-    if (isinf(a) && isinf(b))
+    if (std::isinf(a) && std::isinf(b))
     {
         return true;
     }

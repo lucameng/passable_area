@@ -1,6 +1,6 @@
 <launch>
     <node name="passable_node" pkg="passable_node" type="passable_node" output="screen">
-        <rosparam file="$(find passable_node)/config/passable_params.yaml" command="load" />
+        <rosparam file="$(find passable_node)/config/nav_params.yaml" command="load" />
         <remap from="~cloud_topic" to="/accumulate_cloud/cloud_cur" />
         <remap from="~imu"   to="/imu/data"/>
     </node>

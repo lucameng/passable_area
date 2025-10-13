@@ -9,6 +9,7 @@ max_roughness: 0.10
 world_frame:   "camera_init"
 gravity_frame: "base_gravity"
 body_frame:    "body"
+used_frame:    "base_gravity"
 
 lidar_front_up:
   pos_body: [0.44367, 0.0, 0.05415]      # m
