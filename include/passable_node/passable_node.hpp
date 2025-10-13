@@ -53,9 +53,10 @@ private:
     PointCloudXYZ impassable_cloud_;
     PointCloudXYZ expanded_cloud_;
 
-    std::string w_frame_;   // world frame
-    std::string g_frame_;   // gravity frame
-    std::string b_frame_;   // body frame
+    std::string w_frame_;       // world frame
+    std::string g_frame_;       // gravity frame
+    std::string b_frame_;       // body frame
+    std::string used_frame_;    // frame to be used
     builtin_interfaces::msg::Time stamp_;
 
     std::unique_ptr<ElevationMap> ele_map_;
