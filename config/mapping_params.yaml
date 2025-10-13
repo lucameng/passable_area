@@ -11,6 +11,8 @@ gravity_frame: "base_gravity"
 body_frame:    "body"
 used_frame:    "base_link"
 
+enable_blind_check: true
+
 lidar_front_up:
   pos_body: [0.44367, 0.0, 0.05415]      # m
   rpy_body: [0.0, 65.0, 0.0]             # deg

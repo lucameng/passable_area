@@ -5,6 +5,7 @@ PassableNode::PassableNode(const ros::NodeHandle& nh)
     : nh_(nh),
       ele_init_(false),
       lidar_init_(false),
+      enable_blind_check_(nh.param("enable_blind_check", false)),
       map_width_(nh.param("map_width", 7.0f)),
       map_height_(nh.param("map_height", 2.0f)),
       voxel_width_(nh.param("voxel_size", 0.1f)),
@@ -29,7 +30,10 @@ void PassableNode::initialize()
     ROS_INFO("used frame: %s", used_frame_.c_str());
 
     elevationInit();
-    lidarCoverInit();
+    if (enable_blind_check_)
+    {
+        lidarCoverInit();
+    }
 
     imu_sub_ = nh_.subscribe("imu", 50, &PassableNode::imuCallback, this,
                                 ros::TransportHints().tcpNoDelay());
@@ -59,7 +63,8 @@ void PassableNode::lidarCoverInit()
 
 void PassableNode::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 {
-    if (used_frame_ == b_frame_) return;
+    if (used_frame_ == b_frame_) return; // no need if it is body frame
+
     Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x,
                          msg->orientation.y, msg->orientation.z);
     q.normalize();
@@ -86,12 +91,18 @@ void PassableNode::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 
 void PassableNode::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
-    if (!ele_init_) return;
+    if (ele_init_)
+    {
+        ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
+                                    enable_blind_check_);
+    }
+
+    if (lidar_init_)
+    {
+        lidar_cov_->processCoverage(*ele_map_, getTransform());
+    }
+
     stamp_ = msg->header.stamp;
-
-    ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform());
-
-    lidar_cov_->processCoverage(*ele_map_, getTransform());
 
     bodyVisual();
     publishPassableInfo();
