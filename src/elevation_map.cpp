@@ -23,14 +23,17 @@ ElevationMap::ElevationMap(float map_s, float max_h, float grid_s, const std::st
 }
 
 void ElevationMap::processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float rough_thres,
-                                     float drop_thres, const Eigen::Affine3f& T_g2b)
+                                     float drop_thres, const Eigen::Affine3f& T_g2b, bool fill_blind)
 {
     setInputCloud(ros_cloud);
     cloud2Elevation();
     inpaint("elevation", "padding", MINLIMIT);
     denoise("elevation", MEDIAN, 3);
-    fillElevationHoles("elevation", "padding", 1.2f, 10);
-    // fillPointCloudFromLayer("elevation", "padding");
+    if (fill_blind)
+    {
+        fillElevationHoles("elevation", "padding", 1.2f, 10);
+        // fillPointCloudFromLayer("elevation", "padding");
+    }
     judgePassability(rough_thres, drop_thres, 3, T_g2b);
 }
 

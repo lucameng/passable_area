@@ -25,7 +25,7 @@ public:
     explicit ElevationMap(float map_s, float max_h, float grid_s, const std::string& frame_id);
 
     void processPointCloud(const sensor_msgs::PointCloud2& ros_cloud, float roughness_thres,
-                           float drop_thres, const Eigen::Affine3f& T_g2b);
+                           float drop_thres, const Eigen::Affine3f& T_g2b, bool fill_blind = false);
 
     const PointCloudXYZ& getWorkingCloud() const noexcept { return working_cloud_; }
     PointCloudXYZ& getWorkingCloud() noexcept { return working_cloud_; }
