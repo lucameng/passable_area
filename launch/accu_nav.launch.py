@@ -4,7 +4,7 @@ from launch.substitutions import PathJoinSubstitution
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    passable_share_dir = get_package_share_directory('passable_node')
+    passable_share_dir = get_package_share_directory('passable_area')
     passable_params = PathJoinSubstitution([passable_share_dir, 'config', 'nav_params.yaml'])
 
     accu_share_dir = get_package_share_directory('accumulate_cloud')
@@ -18,10 +18,10 @@ def generate_launch_description():
         parameters=[accu_params]
     )
 
-    passable_node = Node(
-        package='passable_node',
-        executable='passable_node',
-        name='passable_node',
+    passable_area_node = Node(
+        package='passable_area',
+        executable='passable_area',
+        name='passable_area',
         output='screen',
         parameters=[passable_params],
         remappings=[
@@ -31,5 +31,5 @@ def generate_launch_description():
     )
     return LaunchDescription([
         accu_node,
-        passable_node
+        passable_area_node
     ])

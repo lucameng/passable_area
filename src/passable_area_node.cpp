@@ -1,8 +1,8 @@
-#include "passable_node.hpp"
+#include "passable_area_node.hpp"
 #include <rclcpp/rclcpp.hpp>
 
-PassableNode::PassableNode()
-    : Node("passable_node"), ele_init_(false), lidar_init_(false),
+PassableAreaNode::PassableAreaNode()
+    : Node("passable_area"), ele_init_(false), lidar_init_(false),
       enable_blind_check_(declare_parameter("enable_blind_check", false)),
       map_width_(declare_parameter("map_width", 7.0f)),
       map_height_(declare_parameter("map_height", 2.0f)),
@@ -16,12 +16,10 @@ PassableNode::PassableNode()
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
       used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
       body_l_(body_length_ / voxel_width_), body_w_(body_width_ / voxel_width_),
-      T_g2b_(Eigen::Affine3f::Identity()) {
-  // Passable node constructor
-}
+      T_g2b_(Eigen::Affine3f::Identity()) {}
 
-void PassableNode::initialize() {
-  RCLCPP_INFO(get_logger(), "Initializing << passable node >>");
+void PassableAreaNode::initialize() {
+  RCLCPP_INFO(get_logger(), "Initializing << passable area >>");
   RCLCPP_INFO(get_logger(), "used frame: %s", used_frame_.c_str());
   elevationInit();
 
@@ -30,10 +28,10 @@ void PassableNode::initialize() {
   }
   imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
       "imu", 10,
-      std::bind(&PassableNode::imuCallback, this, std::placeholders::_1));
+      std::bind(&PassableAreaNode::imuCallback, this, std::placeholders::_1));
   cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       "cloud_topic", 10,
-      std::bind(&PassableNode::cloudCallback, this, std::placeholders::_1));
+      std::bind(&PassableAreaNode::cloudCallback, this, std::placeholders::_1));
   body_vis_pub_ =
       create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
   passable_pub_ =
@@ -45,21 +43,21 @@ void PassableNode::initialize() {
   grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
 }
 
-void PassableNode::elevationInit() {
+void PassableAreaNode::elevationInit() {
   RCLCPP_INFO(get_logger(), "Initializing < elevation map >");
   ele_map_ = std::make_unique<ElevationMap>(map_width_, map_height_,
                                             voxel_width_, used_frame_);
   ele_init_ = true;
 }
 
-void PassableNode::lidarCoverInit() {
+void PassableAreaNode::lidarCoverInit() {
   RCLCPP_INFO(get_logger(), "Initializing < lidar coverage >");
   lidar_cov_ = std::make_unique<LidarCoverage>(shared_from_this());
   lidar_cov_->initialize();
   lidar_init_ = true;
 }
 
-void PassableNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+void PassableAreaNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   if (used_frame_ == b_frame_)
     return; // no need if it is body frame
 
@@ -87,7 +85,7 @@ void PassableNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   T_g2b_.translation() = Eigen::Vector3f::Zero();
 }
 
-void PassableNode::cloudCallback(
+void PassableAreaNode::cloudCallback(
     const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
   if (ele_init_) {
     ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
@@ -104,12 +102,12 @@ void PassableNode::cloudCallback(
   publishGridMap();
 }
 
-Eigen::Affine3f PassableNode::getTransform() const {
+Eigen::Affine3f PassableAreaNode::getTransform() const {
   std::lock_guard<std::mutex> lock(imu_mutex_);
   return T_g2b_;
 }
 
-void PassableNode::bodyVisual() {
+void PassableAreaNode::bodyVisual() {
   visualization_msgs::msg::Marker body;
 
   body.header.frame_id = b_frame_;
@@ -138,7 +136,7 @@ void PassableNode::bodyVisual() {
   body_vis_pub_->publish(body);
 }
 
-void PassableNode::publishPassableInfo() {
+void PassableAreaNode::publishPassableInfo() {
   const auto &cloud = ele_map_->getWorkingCloud();
 
   const float half_w = map_width_ * 0.5f;
@@ -195,7 +193,7 @@ void PassableNode::publishPassableInfo() {
   // expanded_pub_->publish(ros_expanded);
 }
 
-void PassableNode::publishGridMap() {
+void PassableAreaNode::publishGridMap() {
   auto ros_map_ptr = grid_map::GridMapRosConverter::toMessage(*ele_map_);
 
   ros_map_ptr->header.frame_id = used_frame_;

@@ -1,5 +1,5 @@
-#ifndef PASSABLE_NODE_HPP
-#define PASSABLE_NODE_HPP
+#ifndef PASSABLE_AREA_NODE_HPP
+#define PASSABLE_AREA_NODE_HPP
 
 #include "common.hpp"
 #include "elevation_map.hpp"
@@ -23,9 +23,9 @@
 #include <memory>
 #include <unordered_set>
 
-class PassableNode : public rclcpp::Node {
+class PassableAreaNode : public rclcpp::Node {
 public:
-  explicit PassableNode();
+  explicit PassableAreaNode();
   void initialize();
 
 private:
@@ -78,4 +78,4 @@ private:
   bool enable_blind_check_;
 };
 
-#endif // PASSABLE_NODE_HPP
+#endif // PASSABLE_AREA_NODE_HPP

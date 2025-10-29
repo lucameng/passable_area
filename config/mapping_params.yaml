@@ -1,4 +1,4 @@
-passable_node:
+passable_area:
   ros__parameters:
     map_width:     10.0
     map_height:    3.0

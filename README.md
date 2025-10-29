@@ -1,7 +1,7 @@
-# Passable Node
+# Passable Area
 
 ## Overview
-`passable_node` evaluates ground traversability in real time using a fused point cloud and IMU stream. The node maintains a gravity-aligned elevation grid, classifies each cell as passable, impassable, or unknown based on roughness and drop thresholds, and publishes both grid map and point cloud outputs for navigation or mapping stacks.
+`passable_area` evaluates ground traversability in real time using a fused point cloud and IMU stream. The node maintains a gravity-aligned elevation grid, classifies each cell as passable, impassable, or unknown based on roughness and drop thresholds, and publishes both grid map and point cloud outputs for navigation or mapping stacks.
 
 ## Key Features
 - Body-frame safety checks that combine roughness and drop limits to stay stable on slopes.
@@ -18,7 +18,7 @@ This branch targets ROS 2 Humble with `ament_cmake`. Required dependencies:
 
 Build from the workspace root:
 ```bash
-colcon build --packages-select passable_node --symlink-install
+colcon build --packages-select passable_area --symlink-install
 source install/setup.bash
 ```
 Make sure OpenMP support is installed (for example `sudo apt install libomp-dev`) or CMake will abort early.
@@ -28,17 +28,22 @@ Two launch files provide tuned presets:
 
 - Navigation pipeline
   ```bash
-  ros2 launch passable_node nav.launch.py
+  ros2 launch passable_area nav.launch.py
   ```
   Loads `config/nav_params.yaml` and subscribes to the node-local `cloud_topic` and `imu` inputs.
 
 - Mapping pipeline
   ```bash
-  ros2 launch passable_node mapping.launch.py
+  ros2 launch passable_area mapping.launch.py
   ```
   Uses the same executable, pulls parameters from `config/mapping_params.yaml`, and allows remapping the cloud topic (for example to `/accumulate_cloud/cloud_body`).
 
 The RViz layout in `config/passable.rviz` highlights passable/impassable clouds alongside the grid map.
+
+For quick experimentation without launch files, run the node directly:
+```bash
+ros2 run passable_area passable_area
+```
 
 ## Configuration
 `config/nav_params.yaml` and `config/mapping_params.yaml` expose the same parameter set. Key entries:
@@ -78,7 +83,7 @@ All names are relative, so they inherit the node namespace and can be remapped i
 ## Branches
 Maintained branches:
 - ROS 1
-  - [master](https://codeup.aliyun.com/deeprobotics/perception/passable_node/tree/master)
+  - [master](https://codeup.aliyun.com/deeprobotics/perception/passable_area/tree/master)
 - ROS 2
-  - [foxy](https://codeup.aliyun.com/deeprobotics/perception/passable_node/tree/foxy)
-  - [humble](https://codeup.aliyun.com/deeprobotics/perception/passable_node/tree/humble)
+  - [foxy](https://codeup.aliyun.com/deeprobotics/perception/passable_area/tree/foxy)
+  - [humble](https://codeup.aliyun.com/deeprobotics/perception/passable_area/tree/humble)

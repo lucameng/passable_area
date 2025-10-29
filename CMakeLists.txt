@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(passable_node)
+project(passable_area)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 17)
@@ -27,17 +27,17 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   include/common
-  include/passable_node
+  include/passable_area
 )
 
-add_executable(passable_node
+add_executable(passable_area
   src/elevation_map.cpp
-  src/passable_node.cpp
+  src/passable_area_node.cpp
   src/lidar_coverage.cpp
-  src/passable_main.cpp
+  src/passable_area_main.cpp
 )
 
-ament_target_dependencies(passable_node
+ament_target_dependencies(passable_area
   rclcpp
   sensor_msgs
   pcl_conversions
@@ -47,12 +47,12 @@ ament_target_dependencies(passable_node
   grid_map_ros
 )
 
-target_link_libraries(passable_node
+target_link_libraries(passable_area
   ${OpenCV_LIBS}
   OpenMP::OpenMP_CXX
 )
 
-install(TARGETS passable_node
+install(TARGETS passable_area
   DESTINATION lib/${PROJECT_NAME}
 )
 
