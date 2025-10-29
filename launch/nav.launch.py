@@ -15,8 +15,8 @@ def generate_launch_description():
             output='screen',
             parameters=[params_file],
             remappings=[
-                ('cloud_topic', '/cloud_cur'),
-                ('imu', '/imu/data')
+                ('cloud_topic', '/accumulate_cloud/cloud_gravity'),
+                ('imu', '/IMU_YESENSE')
             ]
         )
     ])
