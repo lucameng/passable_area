@@ -1,5 +1,6 @@
 #include "passable_area_node.hpp"
 #include <algorithm>
+#include <chrono>
 #include <rclcpp/rclcpp.hpp>
 
 PassableAreaNode::PassableAreaNode()
@@ -96,8 +97,20 @@ void PassableAreaNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
 void PassableAreaNode::cloudCallback(
     const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
   if (ele_init_) {
+    const auto start_time = std::chrono::steady_clock::now();
+
     ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
                                 enable_blind_check_);
+
+    const auto end_time = std::chrono::steady_clock::now();
+    const auto duration_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
+                                                              start_time)
+            .count();
+    if (duration_ms > 50) {
+      RCLCPP_WARN(get_logger(), "Elevation map updated in %ld ms",
+                  static_cast<long>(duration_ms));
+    }
   }
 
   if (lidar_init_) {
