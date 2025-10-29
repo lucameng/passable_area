@@ -1,22 +1,21 @@
 #include "passable_node.hpp"
 #include <rclcpp/rclcpp.hpp>
 
-int main(int argc, char** argv)
-{
-    rclcpp::init(argc, argv);
+int main(int argc, char **argv) {
+  rclcpp::init(argc, argv);
 
-    auto node = std::make_shared<PassableNode>();
-    
-    node->initialize();
+  auto node = std::make_shared<PassableNode>();
 
-    RCLCPP_INFO(node->get_logger(), "Start spinning passable node");
+  node->initialize();
 
-    rclcpp::executors::MultiThreadedExecutor executor;
+  RCLCPP_INFO(node->get_logger(), "Start spinning passable node");
 
-    executor.add_node(node);
-    executor.spin();
+  rclcpp::executors::MultiThreadedExecutor executor;
 
-    rclcpp::shutdown();
+  executor.add_node(node);
+  executor.spin();
 
-    return 0;
+  rclcpp::shutdown();
+
+  return 0;
 }

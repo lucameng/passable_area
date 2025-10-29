@@ -15,7 +15,7 @@ constexpr float DEG2RAD = PI / 180.0f;
 constexpr float RAD2DEG = 180.0f / PI;
 constexpr float INVALID_VALUE = -100.f;
 constexpr float GROUD_HEIGHT = -0.5f;
-constexpr int   UNKNOWN_OBS_VALID_CNT = 3;
+constexpr int UNKNOWN_OBS_VALID_CNT = 3;
 
 // ============================================================================
 // Point Cloud Type Aliases
@@ -41,39 +41,17 @@ using PointXYZI = pcl::PointXYZI;
 // Enumeration Types
 // ============================================================================
 
-enum Passability : uint8_t
-{
-    PASSABLE = 0,
-    IMPASSABLE = 1,
-    UNKNOWN = 2
+enum Passability : uint8_t { PASSABLE = 0, IMPASSABLE = 1, UNKNOWN = 2 };
+
+enum CoverageStatus : uint8_t { UNCOVERED = 0, COVERED = 1 };
+
+enum Padding : uint8_t {
+  UNPADDED = 0,
+  PADDED = 1,
 };
 
-enum CoverageStatus : uint8_t
-{
-    UNCOVERED = 0,
-    COVERED = 1
-};
+enum Inpaint { MEANONCE, MIN, MAX, CONDITIONAL, MEAN, MINLIMIT };
 
-enum Padding : uint8_t
-{
-    UNPADDED = 0,
-    PADDED = 1,
-};
-
-enum Inpaint
-{
-    MEANONCE,
-    MIN,
-    MAX,
-    CONDITIONAL,
-    MEAN,
-    MINLIMIT
-};
-
-enum Denoise
-{
-    MEDIAN,
-    GAUSS
-};
+enum Denoise { MEDIAN, GAUSS };
 
 #endif // DR_COMMON_H
