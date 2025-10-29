@@ -7,14 +7,22 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <rclcpp/rclcpp.hpp>
 
-ElevationMap::ElevationMap(float map_s, float max_h, float grid_s,
+ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
+                           float max_height, float grid_s,
                            const std::string &frame_id)
     : grid_map::GridMap({"elevation", "passability", "coverability", "padding",
                          "point_count", "dummy_height"}),
-      map_size_(map_s), max_height_(max_h), grid_size_(grid_s),
-      map_size_grid_(map_size_ / grid_size_), frame_(frame_id) {
+      map_length_(std::max(map_length, grid_s)),
+      map_width_(std::max(map_width, grid_s)),
+      min_height_(std::min(min_height, max_height)),
+      max_height_(std::max(min_height, max_height)), grid_size_(grid_s),
+      frame_(frame_id) {
+  if ((max_height_ - min_height_) < grid_size_) {
+    max_height_ = min_height_ + grid_size_;
+  }
   setFrameId(frame_);
-  setGeometry(grid_map::Length(map_size_, map_size_), grid_size_);
+  setGeometry(grid_map::Length(map_length_, map_width_), grid_size_);
+  map_cells_ = getSize();
   setPosition(grid_map::Position(0.0, 0.0));
   get("passability").setConstant(UNKNOWN);
   get("coverability").setConstant(COVERED); // covered
@@ -52,13 +60,13 @@ void ElevationMap::cloud2Elevation() {
   clear("point_count");
   get("point_count").setZero();
 
-  float half_width = map_size_ * 0.5;
-  float half_height = max_height_ * 0.5;
+  const float half_length = map_length_ * 0.5f;
+  const float half_width = map_width_ * 0.5f;
 
 #pragma omp parallel for
   for (const auto &p : working_cloud_) {
-    if (p.x <= -half_width || p.x >= half_width || p.y <= -half_width ||
-        p.y >= half_width || p.z <= -half_height || p.z >= half_height)
+    if (p.x < -half_length || p.x > half_length || p.y < -half_width ||
+        p.y > half_width || p.z < min_height_ || p.z > max_height_)
       continue;
 
     Eigen::Vector2d pos(p.x, p.y);
@@ -632,20 +640,26 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
                                     int kernel_size,
                                     const Eigen::Affine3f &T_g2b) {
   kernel_size = std::clamp(kernel_size, 3, 5);
-  int center = map_size_grid_ / 2;
+  const auto size = getSize();
+  const int size_x = size.x();
+  const int size_y = size.y();
+  const auto linear_index = [size_x](int x, int y) { return x + y * size_x; };
+  const int center_x = size_x / 2;
+  const int center_y = size_y / 2;
 
   get("passability").setConstant(UNKNOWN);
-  std::vector<bool> visited(map_size_grid_ * map_size_grid_, false);
+  std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
 
-  que.emplace(center, center);
-  visited[center + center * map_size_grid_] = true;
-  setPassability(Eigen::Array2i(center, center), PASSABLE);
+  que.emplace(center_x, center_y);
+  visited[linear_index(center_x, center_y)] = true;
+  setPassability(Eigen::Array2i(center_x, center_y), PASSABLE);
 
-  int bak_x = center * 1.8, bak_y = center;
+  int bak_x = std::min(static_cast<int>(center_x * 1.8f), size_x - 1);
+  int bak_y = center_y;
   auto bak_idx = grid_map::Index(bak_x, bak_y);
   que.emplace(bak_x, bak_y);
-  visited[bak_x + bak_y * map_size_grid_] = true;
+  visited[linear_index(bak_x, bak_y)] = true;
   setPassability(Eigen::Array2i(bak_x, bak_y), PASSABLE);
 
   const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
@@ -664,11 +678,11 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
     for (int i = 0; i < n_dir; ++i) {
       int nx = x + dx[i], ny = y + dy[i];
-      if (nx < 0 || nx >= map_size_grid_ || ny < 0 || ny >= map_size_grid_)
+      if (nx < 0 || nx >= size_x || ny < 0 || ny >= size_y)
         continue;
       auto nbr_idx = grid_map::Index(nx, ny);
 
-      int idx = nx + ny * map_size_grid_;
+      int idx = linear_index(nx, ny);
       if (visited[idx])
         continue;
       visited[idx] = true;
@@ -682,7 +696,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       float height_diff = nbr_height - curr_height;
       height_diff = std::fabs(projectToBodyZ(height_diff, T_g2b.linear()));
       if (height_diff > drop_thres) {
-        setPassability(nbr_idx, IMPASSABLE);
+        // setPassability(nbr_idx, IMPASSABLE);
         continue;
       }
 
@@ -714,9 +728,13 @@ void ElevationMap::fillElevationHoles(const std::string &layer_height,
   const int radius_cells =
       static_cast<int>(std::ceil(search_radius / grid_size_));
 
+  const auto size = getSize();
+  const int rows = size.x();
+  const int cols = size.y();
+
 #pragma omp parallel for collapse(2)
-  for (int r = 0; r < map_size_grid_; ++r) {
-    for (int c = 0; c < map_size_grid_; ++c) {
+  for (int r = 0; r < rows; ++r) {
+    for (int c = 0; c < cols; ++c) {
       if (!std::isnan(H_in(r, c)))
         continue;
 
@@ -736,7 +754,7 @@ void ElevationMap::fillElevationHoles(const std::string &layer_height,
         for (int dc = -radius_cells; dc <= radius_cells; ++dc) {
           int nr = r + dr;
           int nc = c + dc;
-          if (nr < 0 || nr >= map_size_grid_ || nc < 0 || nc >= map_size_grid_)
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols)
             continue;
 
           float h = H_in(nr, nc);

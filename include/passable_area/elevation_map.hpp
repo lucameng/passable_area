@@ -21,7 +21,8 @@
 class ElevationMap : public grid_map::GridMap {
 public:
   ElevationMap() = default;
-  explicit ElevationMap(float map_s, float max_h, float grid_s,
+  explicit ElevationMap(float map_length, float map_width, float min_height,
+                        float max_height, float grid_s,
                         const std::string &frame_id);
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
@@ -55,7 +56,7 @@ public:
   int getPointCount(const Eigen::Vector2d &pos) const;
 
   float getGridSize() const noexcept { return grid_size_; }
-  int getMapSizeGrid() const noexcept { return map_size_grid_; }
+  grid_map::Size getCellSize() const noexcept { return map_cells_; }
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -128,10 +129,12 @@ private:
 
 private:
   PointCloudXYZ working_cloud_;
-  float map_size_;
+  float map_length_;
+  float map_width_;
+  float min_height_;
   float max_height_;
   float grid_size_;
-  int map_size_grid_;
+  grid_map::Size map_cells_;
   std::string frame_;
   struct Pixel {
     int r, c;

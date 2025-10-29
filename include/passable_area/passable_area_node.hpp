@@ -63,8 +63,10 @@ private:
   mutable std::mutex imu_mutex_;
   Eigen::Affine3f T_g2b_;
 
+  float map_length_;
   float map_width_;
-  float map_height_;
+  float min_height_;
+  float max_height_;
   float voxel_width_;
   float body_length_;
   float body_width_;

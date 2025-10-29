@@ -1,11 +1,14 @@
 #include "passable_area_node.hpp"
+#include <algorithm>
 #include <rclcpp/rclcpp.hpp>
 
 PassableAreaNode::PassableAreaNode()
     : Node("passable_area"), ele_init_(false), lidar_init_(false),
       enable_blind_check_(declare_parameter("enable_blind_check", false)),
-      map_width_(declare_parameter("map_width", 7.0f)),
-      map_height_(declare_parameter("map_height", 2.0f)),
+      map_length_(declare_parameter("map_length", 10.0f)),
+      map_width_(declare_parameter("map_width", 10.0f)),
+      min_height_(declare_parameter("map_height_min", -1.5f)),
+      max_height_(declare_parameter("map_height_max", 1.5f)),
       voxel_width_(declare_parameter("voxel_size", 0.1f)),
       body_length_(declare_parameter("body_length", 0.6f)),
       body_width_(declare_parameter("body_width", 0.4f)),
@@ -16,7 +19,11 @@ PassableAreaNode::PassableAreaNode()
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
       used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
       body_l_(body_length_ / voxel_width_), body_w_(body_width_ / voxel_width_),
-      T_g2b_(Eigen::Affine3f::Identity()) {}
+      T_g2b_(Eigen::Affine3f::Identity()) {
+  if (min_height_ > max_height_) {
+    std::swap(min_height_, max_height_);
+  }
+}
 
 void PassableAreaNode::initialize() {
   RCLCPP_INFO(get_logger(), "Initializing << passable area >>");
@@ -45,8 +52,9 @@ void PassableAreaNode::initialize() {
 
 void PassableAreaNode::elevationInit() {
   RCLCPP_INFO(get_logger(), "Initializing < elevation map >");
-  ele_map_ = std::make_unique<ElevationMap>(map_width_, map_height_,
-                                            voxel_width_, used_frame_);
+  ele_map_ =
+      std::make_unique<ElevationMap>(map_length_, map_width_, min_height_,
+                                     max_height_, voxel_width_, used_frame_);
   ele_init_ = true;
 }
 
@@ -139,8 +147,8 @@ void PassableAreaNode::bodyVisual() {
 void PassableAreaNode::publishPassableInfo() {
   const auto &cloud = ele_map_->getWorkingCloud();
 
-  const float half_w = map_width_ * 0.5f;
-  const float half_h = map_height_ * 0.5f;
+  const float half_length = map_length_ * 0.5f;
+  const float half_width = map_width_ * 0.5f;
 
   passable_cloud_.clear();
   impassable_cloud_.clear();
@@ -148,8 +156,8 @@ void PassableAreaNode::publishPassableInfo() {
 
   for (int i = 0; i < static_cast<int>(cloud.size()); ++i) {
     const auto &p = cloud[i];
-    if (p.x <= -half_w || p.x >= half_w || p.y <= -half_w || p.y >= half_w ||
-        p.z <= -half_h || p.z >= half_h)
+    if (p.x < -half_length || p.x > half_length || p.y < -half_width ||
+        p.y > half_width || p.z < min_height_ || p.z > max_height_)
       continue;
 
     Eigen::Vector2d pos(p.x, p.y);

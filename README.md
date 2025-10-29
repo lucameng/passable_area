@@ -48,9 +48,12 @@ ros2 run passable_area passable_area
 ## Configuration
 `config/nav_params.yaml` and `config/mapping_params.yaml` expose the same parameter set. Key entries:
 
+Use `map_length` / `map_width` to control the X/Y span and `map_height_min` / `map_height_max` to clamp vertical range.
+
 | Name | Default (nav) | Description |
 | --- | --- | --- |
-| `map_width`, `map_height` | `7.0`, `2.0` | XY span of the elevation map in metres. |
+| `map_length`, `map_width` | `10.0`, `10.0` | Map extents along X/Y in metres. |
+| `map_height_min`, `map_height_max` | `-1.5`, `1.5` | Lower and upper Z bounds of the elevation map (metres). |
 | `voxel_size` | `0.1` | Grid resolution; smaller values increase compute load. |
 | `max_drop` | `0.3` | Maximum allowed drop between neighbouring cells (metres). |
 | `max_roughness` | `0.1` | Roughness threshold used during terrain evaluation. |
