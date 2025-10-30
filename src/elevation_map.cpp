@@ -764,13 +764,14 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       auto nbr_height = getAltitude(nbr_idx);
 
       if (std::isnan(nbr_height)) {
+        // setPassability(curr_idx, Passability::Impassable);
         continue;
       }
 
       float height_diff = nbr_height - curr_height;
       height_diff = std::fabs(projectToBodyZ(height_diff, T_g2b.linear()));
       if (height_diff > drop_thres) {
-        // setPassability(nbr_idx, Passability::Impassable);
+        setPassability(nbr_idx, Passability::Impassable);
         continue;
       }
 
