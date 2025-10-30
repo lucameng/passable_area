@@ -168,7 +168,8 @@ void PassableAreaNode::publishPassableInfo() {
   const float baseline_ground = ele_map_->getBaselineGround(baseline_radius_);
   const bool have_baseline = std::isfinite(baseline_ground);
   if (have_baseline) {
-    RCLCPP_DEBUG(get_logger(), "Baseline ground height: %.3f m", baseline_ground);
+    RCLCPP_DEBUG(get_logger(), "Baseline ground height: %.3f m",
+                 baseline_ground);
   } else {
     RCLCPP_DEBUG(get_logger(), "Baseline ground height unavailable");
   }
@@ -184,26 +185,27 @@ void PassableAreaNode::publishPassableInfo() {
       continue;
 
     Eigen::Vector2d pos(p.x, p.y);
-    uint8_t step = ele_map_->getPassability(pos);
-    uint8_t cover = ele_map_->getCoverability(pos);
+    Passability step = ele_map_->getPassability(pos);
+    CoverageStatus cover = ele_map_->getCoverability(pos);
     const bool near_baseline =
         have_baseline &&
         std::fabs(p.z - baseline_ground) <= clearance_threshold_;
 
-    if (step == PASSABLE) {
+    if (step == Passability::Passable) {
       passable_cloud_.push_back(p);
-    } else if (step == IMPASSABLE && cover == COVERED) {
+    } else if (step == Passability::Impassable &&
+               cover == CoverageStatus::Covered) {
       if (!near_baseline) {
         impassable_cloud_.push_back(p);
       }
-    } else if (step == UNKNOWN) {
+    } else if (step == Passability::Unknown) {
       int cnt = ele_map_->getPointCount(pos);
       if (cnt >= UNKNOWN_OBS_VALID_CNT && !near_baseline) {
         impassable_cloud_.push_back(p);
       }
     }
   }
-  
+
   auto finalize = [](pcl::PointCloud<pcl::PointXYZ> &c) {
     c.width = static_cast<uint32_t>(c.size());
     c.height = 1;

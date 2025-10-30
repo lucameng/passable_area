@@ -47,14 +47,14 @@ public:
   float getGroundHeight(const Eigen::Array2i &idx) const;
   float getGroundHeight(const Eigen::Vector2d &pos) const;
 
-  void setPassability(const Eigen::Array2i &idx, uint8_t passability);
-  void setPassability(const Eigen::Vector2d &pos, uint8_t passability);
+  void setPassability(const Eigen::Array2i &idx, Passability passability);
+  void setPassability(const Eigen::Vector2d &pos, Passability passability);
 
-  uint8_t getPassability(const Eigen::Array2i &idx) const;
-  uint8_t getPassability(const Eigen::Vector2d &pos) const;
+  Passability getPassability(const Eigen::Array2i &idx) const;
+  Passability getPassability(const Eigen::Vector2d &pos) const;
 
-  uint8_t getCoverability(const Eigen::Array2i &idx) const;
-  uint8_t getCoverability(const Eigen::Vector2d &pos) const;
+  CoverageStatus getCoverability(const Eigen::Array2i &idx) const;
+  CoverageStatus getCoverability(const Eigen::Vector2d &pos) const;
 
   int getPointCount(const Eigen::Array2i &idx) const;
   int getPointCount(const Eigen::Vector2d &pos) const;
@@ -117,8 +117,9 @@ private:
   float computeError(int x, int y, int kernel_size, Eigen::Vector3f &mean,
                      Eigen::Matrix3f &square) const;
   void inpaint(const std::string &layer_height, const std::string &layer_filled,
-               int method);
-  void denoise(const std::string &layer_height, int method, int kernel_size);
+               Inpaint method);
+  void denoise(const std::string &layer_height, Denoise method,
+               int kernel_size);
 
   void cloud2Elevation();
   bool isPassable(float variance_error, float roughness_thres) const;

@@ -2,6 +2,7 @@
 #include "maths.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <grid_map_cv/GridMapCvConverter.hpp>
 #include <limits>
 #include <opencv2/imgproc.hpp>
@@ -26,9 +27,9 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   setGeometry(grid_map::Length(map_length_, map_width_), grid_size_);
   map_cells_ = getSize();
   setPosition(grid_map::Position(0.0, 0.0));
-  get("passability").setConstant(UNKNOWN);
-  get("coverability").setConstant(COVERED); // covered
-  get("padding").setConstant(UNPADDED);
+  get("passability").setConstant(toFloat(Passability::Unknown));
+  get("coverability").setConstant(toFloat(CoverageStatus::Covered));
+  get("padding").setConstant(toFloat(Padding::Unpadded));
   get("point_count").setZero();
   get("ground_height").setConstant(std::numeric_limits<float>::quiet_NaN());
 }
@@ -38,8 +39,8 @@ void ElevationMap::processPointCloud(
     float drop_thres, const Eigen::Affine3f &T_g2b, bool fill_blind) {
   setInputCloud(ros_cloud);
   cloud2Elevation();
-  inpaint("elevation", "padding", MINLIMIT);
-  denoise("elevation", MEDIAN, 3);
+  inpaint("elevation", "padding", Inpaint::MinLimit);
+  denoise("elevation", Denoise::Median, 3);
   if (fill_blind) {
     fillElevationHoles("elevation", "padding", 1.2f, 10);
     // fillPointCloudFromLayer("elevation", "padding");
@@ -193,44 +194,42 @@ float ElevationMap::getBaselineGround(float radius) const {
 }
 
 void ElevationMap::setPassability(const Eigen::Array2i &idx,
-                                  uint8_t passability) {
+                                  Passability passability) {
   if (!isIndexValid(idx))
     return;
-  at("passability", grid_map::Index(idx.x(), idx.y())) =
-      static_cast<float>(passability);
+  at("passability", grid_map::Index(idx.x(), idx.y())) = toFloat(passability);
 }
 
 void ElevationMap::setPassability(const Eigen::Vector2d &pos,
-                                  uint8_t passability) {
+                                  Passability passability) {
   if (!isPositionInside(pos))
     return;
-  atPosition("passability", pos) = static_cast<float>(passability);
+  atPosition("passability", pos) = toFloat(passability);
 }
 
-uint8_t ElevationMap::getPassability(const Eigen::Array2i &idx) const {
+Passability ElevationMap::getPassability(const Eigen::Array2i &idx) const {
   if (!isIndexValid(idx))
-    return UNKNOWN;
-  return static_cast<uint8_t>(
-      at("passability", grid_map::Index(idx.x(), idx.y())));
+    return Passability::Unknown;
+  return toPassability(at("passability", grid_map::Index(idx.x(), idx.y())));
 }
 
-uint8_t ElevationMap::getPassability(const Eigen::Vector2d &pos) const {
+Passability ElevationMap::getPassability(const Eigen::Vector2d &pos) const {
   if (!isPositionInside(pos))
-    return UNKNOWN;
-  return static_cast<uint8_t>(atPosition("passability", pos));
+    return Passability::Unknown;
+  return toPassability(atPosition("passability", pos));
 }
 
-uint8_t ElevationMap::getCoverability(const Eigen::Array2i &idx) const {
+CoverageStatus ElevationMap::getCoverability(const Eigen::Array2i &idx) const {
   if (!isIndexValid(idx))
-    return UNKNOWN;
-  return static_cast<uint8_t>(
+    return CoverageStatus::Uncovered;
+  return toCoverageStatus(
       at("coverability", grid_map::Index(idx.x(), idx.y())));
 }
 
-uint8_t ElevationMap::getCoverability(const Eigen::Vector2d &pos) const {
+CoverageStatus ElevationMap::getCoverability(const Eigen::Vector2d &pos) const {
   if (!isPositionInside(pos))
-    return UNKNOWN;
-  return static_cast<uint8_t>(atPosition("coverability", pos));
+    return CoverageStatus::Uncovered;
+  return toCoverageStatus(atPosition("coverability", pos));
 }
 
 int ElevationMap::getPointCount(const Eigen::Array2i &idx) const {
@@ -249,7 +248,7 @@ void ElevationMap::minValues(const std::string &layer_height,
                              const std::string &layer_filled) {
   grid_map::Matrix &H_ele = get(layer_height);
   grid_map::Matrix &H_pad = get(layer_filled);
-  H_pad.setConstant(UNPADDED);
+  H_pad.setConstant(toFloat(Padding::Unpadded));
 
   const int num_cols = H_ele.cols();
   const int max_col_id = num_cols - 1;
@@ -293,7 +292,7 @@ void ElevationMap::minValues(const std::string &layer_height,
                                   is_changed);
 
           if (!std::isnan(middle_value) && is_changed)
-            H_pad(row_id, col_id) = PADDED; // mark as PADDED
+            H_pad(row_id, col_id) = toFloat(Padding::Padded);
         } else {
           has_at_least_one_value = true;
         }
@@ -309,7 +308,7 @@ void ElevationMap::minValuesLimited(const std::string &layer_height,
                                     float center_dist_thresh) {
   grid_map::Matrix &H_ele = get(layer_height);
   grid_map::Matrix &H_pad = get(layer_filled);
-  H_pad.setConstant(UNPADDED);
+  H_pad.setConstant(toFloat(Padding::Unpadded));
 
   const int rows = H_ele.rows(), cols = H_ele.cols();
   std::vector<std::vector<bool>> visited(rows, std::vector<bool>(cols, false));
@@ -382,7 +381,7 @@ void ElevationMap::minValuesLimited(const std::string &layer_height,
             float nb = H_ele(ni, nj);
             if (!std::isnan(nb) && (std::isnan(center) || nb < center)) {
               center = nb;
-              H_pad(i, j) = PADDED;
+              H_pad(i, j) = toFloat(Padding::Padded);
               changed = true;
             }
           }
@@ -397,7 +396,7 @@ void ElevationMap::maxValues(const std::string &layer_height,
   grid_map::Matrix &H_ele = get(layer_height);
   grid_map::Matrix &H_pad = get(layer_filled);
 
-  H_pad.setConstant(UNPADDED);
+  H_pad.setConstant(toFloat(Padding::Unpadded));
 
   const int num_cols = H_ele.cols();
   const int max_col_id = num_cols - 1;
@@ -439,7 +438,7 @@ void ElevationMap::maxValues(const std::string &layer_height,
             compare_and_store_max(H_ele(row_id + 1, col_id), middle_value,
                                   is_changed);
           if (!std::isnan(middle_value) && is_changed)
-            H_pad(row_id, col_id) = PADDED; // mark as PADDED
+            H_pad(row_id, col_id) = toFloat(Padding::Padded);
         } else {
           has_at_least_one_value = true;
         }
@@ -453,7 +452,7 @@ void ElevationMap::meanValues(const std::string &layer_height,
   grid_map::Matrix &H_ele = get(layer_height);
   grid_map::Matrix &H_pad = get(layer_filled);
 
-  H_pad.setConstant(UNPADDED);
+  H_pad.setConstant(toFloat(Padding::Unpadded));
 
   const int num_rows = H_ele.rows();
   const int num_cols = H_ele.cols();
@@ -495,7 +494,7 @@ void ElevationMap::meanValues(const std::string &layer_height,
             float new_value = sum / count;
             if (new_value != mean_value || std::isnan(mean_value)) {
               mean_value = new_value;
-              H_pad(row_id, col_id) = PADDED; // mark as PADDED
+              H_pad(row_id, col_id) = toFloat(Padding::Padded);
               is_changed = true;
             }
           }
@@ -511,7 +510,7 @@ void ElevationMap::meanValuesOnce(const std::string &layer_height,
                                   const std::string &layer_filled) {
   grid_map::Matrix &H_ele = get(layer_height);
   grid_map::Matrix &H_pad = get(layer_filled);
-  H_pad.setConstant(UNPADDED);
+  H_pad.setConstant(toFloat(Padding::Unpadded));
 
   const int num_rows = H_ele.rows();
   const int num_cols = H_ele.cols();
@@ -553,7 +552,7 @@ void ElevationMap::meanValuesOnce(const std::string &layer_height,
         float new_value = sum / count;
         if (fabs(new_value - mean_value) > 1e-3 || std::isnan(mean_value)) {
           mean_value = new_value;
-          H_pad(row, col) = PADDED; // mark as PADDED
+          H_pad(row, col) = toFloat(Padding::Padded);
         }
       }
     }
@@ -672,21 +671,21 @@ float ElevationMap::computeError(int x, int y, int kernel_size,
 }
 
 void ElevationMap::inpaint(const std::string &layer_height,
-                           const std::string &layer_filled, int method) {
+                           const std::string &layer_filled, Inpaint method) {
   switch (method) {
-  case MEANONCE:
+  case Inpaint::MeanOnce:
     meanValuesOnce(layer_height, layer_filled);
     break;
-  case MIN:
+  case Inpaint::Min:
     minValues(layer_height, layer_filled);
     break;
-  case MINLIMIT:
+  case Inpaint::MinLimit:
     minValuesLimited(layer_height, layer_filled, 20, true);
     break;
-  case MAX:
+  case Inpaint::Max:
     maxValues(layer_height, layer_filled);
     break;
-  case MEAN:
+  case Inpaint::Mean:
     meanValues(layer_height, layer_filled);
     break;
   default:
@@ -694,13 +693,13 @@ void ElevationMap::inpaint(const std::string &layer_height,
   }
 }
 
-void ElevationMap::denoise(const std::string &layer_height, int method,
+void ElevationMap::denoise(const std::string &layer_height, Denoise method,
                            int kernel_size) {
   kernel_size = std::clamp(kernel_size, 1, 5);
 
-  if (method == MEDIAN) {
+  if (method == Denoise::Median) {
     medianFilter(layer_height, kernel_size, -0.1f);
-  } else if (method == GAUSS) {
+  } else if (method == Denoise::Gauss) {
     gaussianFilter(layer_height, kernel_size);
   }
 }
@@ -722,20 +721,20 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   const int center_x = size_x / 2;
   const int center_y = size_y / 2;
 
-  get("passability").setConstant(UNKNOWN);
+  get("passability").setConstant(toFloat(Passability::Unknown));
   std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
 
   que.emplace(center_x, center_y);
   visited[linear_index(center_x, center_y)] = true;
-  setPassability(Eigen::Array2i(center_x, center_y), PASSABLE);
+  setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
 
   int bak_x = std::min(static_cast<int>(center_x * 1.8f), size_x - 1);
   int bak_y = center_y;
   auto bak_idx = grid_map::Index(bak_x, bak_y);
   que.emplace(bak_x, bak_y);
   visited[linear_index(bak_x, bak_y)] = true;
-  setPassability(Eigen::Array2i(bak_x, bak_y), PASSABLE);
+  setPassability(Eigen::Array2i(bak_x, bak_y), Passability::Passable);
 
   const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
@@ -771,7 +770,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       float height_diff = nbr_height - curr_height;
       height_diff = std::fabs(projectToBodyZ(height_diff, T_g2b.linear()));
       if (height_diff > drop_thres) {
-        // setPassability(nbr_idx, IMPASSABLE);
+        // setPassability(nbr_idx, Passability::Impassable);
         continue;
       }
 
@@ -779,11 +778,11 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
       auto e = computeError(nx, ny, kernel_size, mean, square);
       if (!isPassable(e, rough_thres) && curr_height > mean.z()) {
-        setPassability(nbr_idx, IMPASSABLE);
+        setPassability(nbr_idx, Passability::Impassable);
         continue;
       }
 
-      setPassability(nbr_idx, PASSABLE);
+      setPassability(nbr_idx, Passability::Passable);
       que.emplace(nx, ny);
     }
   }
@@ -850,7 +849,7 @@ void ElevationMap::fillElevationHoles(const std::string &layer_height,
       if (count >= min_neighbors && weight_sum > 0.0) {
         H_out(r, c) = sum / weight_sum;
         grid_map::Index idx = {r, c};
-        // at(layer_filled, idx) = PADDED;
+        // at(layer_filled, idx) = toFloat(Padding::Padded);
       }
     }
   }
@@ -866,7 +865,7 @@ void ElevationMap::fillPointCloudFromLayer(const std::string &layer_height,
 
   for (grid_map::GridMapIterator it(*this); !it.isPastEnd(); ++it) {
     grid_map::Index idx(*it);
-    if (at(layer_filled, idx) != PADDED)
+    if (at(layer_filled, idx) != toFloat(Padding::Padded))
       continue;
     grid_map::Position pos;
     getPosition(idx, pos);

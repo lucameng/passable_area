@@ -116,7 +116,8 @@ void LidarCoverage::computeCoverage(grid_map::GridMap &ele_map,
   if (!ele_map.exists(layer_covered) || !ele_map.exists(layer_height))
     return;
 
-  ele_map.get(layer_covered).setConstant(COVERED);
+  ele_map.get(layer_covered)
+      .setConstant(static_cast<float>(CoverageStatus::Covered));
 
   for (grid_map::GridMapIterator it(ele_map); !it.isPastEnd(); ++it) {
     const grid_map::Index idx = *it;
@@ -141,14 +142,16 @@ void LidarCoverage::computeCoverage(grid_map::GridMap &ele_map,
     bool is_covered = false;
     for (const auto &lidar : lidars_) {
       if (isCellCoveredByLidar(p_body, lidar)) {
-        // ele_map.at(layer_covered, idx) = COVERED;
+        // ele_map.at(layer_covered, idx) =
+        // static_cast<float>(CoverageStatus::Covered);
         is_covered = true;
         break;
       }
     }
 
     if (!is_covered) {
-      ele_map.at(layer_covered, idx) = UNCOVERED;
+      ele_map.at(layer_covered, idx) =
+          static_cast<float>(CoverageStatus::Uncovered);
     }
   }
   // ROS_INFO("Computation done!");
