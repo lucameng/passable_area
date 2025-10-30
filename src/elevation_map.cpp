@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <grid_map_cv/GridMapCvConverter.hpp>
+#include <limits>
 #include <opencv2/imgproc.hpp>
 #include <pcl_conversions/pcl_conversions.h>
 #include <rclcpp/rclcpp.hpp>
@@ -10,8 +11,9 @@
 ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
                            float max_height, float grid_s,
                            const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "passability", "coverability", "padding",
-                         "point_count", "dummy_height"}),
+    : grid_map::GridMap({"elevation", "ground_height", "passability",
+                         "coverability", "padding", "point_count",
+                         "dummy_height"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
@@ -28,6 +30,7 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   get("coverability").setConstant(COVERED); // covered
   get("padding").setConstant(UNPADDED);
   get("point_count").setZero();
+  get("ground_height").setConstant(std::numeric_limits<float>::quiet_NaN());
 }
 
 void ElevationMap::processPointCloud(
@@ -57,6 +60,7 @@ void ElevationMap::setInputCloud(
 
 void ElevationMap::cloud2Elevation() {
   clear("elevation");
+  clear("ground_height");
   clear("point_count");
   get("point_count").setZero();
 
@@ -71,12 +75,15 @@ void ElevationMap::cloud2Elevation() {
 
     Eigen::Vector2d pos(p.x, p.y);
     float height = getAltitude(pos);
-    if (std::isnan(height)) {
+    if (std::isnan(height) || p.z > height) {
       height = p.z;
-    } else {
-      height = std::max(height, p.z);
+      setAltitude(pos, height);
     }
-    setAltitude(pos, height);
+
+    float ground = getGroundHeight(pos);
+    if (std::isnan(ground) || p.z < ground) {
+      setGroundHeight(pos, p.z);
+    }
 
     grid_map::Index idx;
     if (getIndex(pos, idx)) {
@@ -105,6 +112,18 @@ void ElevationMap::setAltitude(const Eigen::Vector2d &pos, float height) {
   atPosition("elevation", pos) = height;
 }
 
+void ElevationMap::setGroundHeight(const Eigen::Array2i &idx, float height) {
+  if (!isIndexValid(idx))
+    return;
+  at("ground_height", idx) = height;
+}
+
+void ElevationMap::setGroundHeight(const Eigen::Vector2d &pos, float height) {
+  if (!isPositionInside(pos))
+    return;
+  atPosition("ground_height", pos) = height;
+}
+
 float ElevationMap::getAltitude(const Eigen::Array2i &idx) const {
   if (!isIndexValid(idx))
     return NAN;
@@ -115,6 +134,62 @@ float ElevationMap::getAltitude(const Eigen::Vector2d &pos) const {
   if (!isPositionInside(pos))
     return NAN;
   return atPosition("elevation", pos);
+}
+
+float ElevationMap::getGroundHeight(const Eigen::Array2i &idx) const {
+  if (!isIndexValid(idx))
+    return NAN;
+  return at("ground_height", grid_map::Index(idx.x(), idx.y()));
+}
+
+float ElevationMap::getGroundHeight(const Eigen::Vector2d &pos) const {
+  if (!isPositionInside(pos))
+    return NAN;
+  return atPosition("ground_height", pos);
+}
+
+float ElevationMap::getBaselineGround(float radius) const {
+  const auto size = getSize();
+  const int rows = size.x();
+  const int cols = size.y();
+  const int center_r = rows / 2;
+  const int center_c = cols / 2;
+
+  const int max_radius = static_cast<int>(std::floor(radius / grid_size_));
+  float sum = 0.0f;
+  int count = 0;
+
+  auto accumulate_ring = [&](int r_min, int r_max) {
+    for (int dr = -r_max; dr <= r_max; ++dr) {
+      for (int dc = -r_max; dc <= r_max; ++dc) {
+        if (std::max(std::abs(dr), std::abs(dc)) > r_max ||
+            std::max(std::abs(dr), std::abs(dc)) < r_min)
+          continue;
+
+        const int rr = center_r + dr;
+        const int cc = center_c + dc;
+        if (rr < 0 || rr >= rows || cc < 0 || cc >= cols)
+          continue;
+
+        const float ground = at("ground_height", grid_map::Index(rr, cc));
+        if (!std::isnan(ground)) {
+          sum += ground;
+          ++count;
+        }
+      }
+    }
+  };
+
+  for (int r = 0; r <= max_radius; ++r) {
+    accumulate_ring(r == 0 ? 0 : r, r);
+    if (count > 0)
+      break;
+  }
+
+  if (count == 0)
+    return std::numeric_limits<float>::quiet_NaN();
+
+  return sum / static_cast<float>(count);
 }
 
 void ElevationMap::setPassability(const Eigen::Array2i &idx,

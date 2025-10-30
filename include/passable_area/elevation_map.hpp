@@ -39,9 +39,13 @@ public:
 
   void setAltitude(const Eigen::Array2i &idx, float height);
   void setAltitude(const Eigen::Vector2d &pos, float height);
+  void setGroundHeight(const Eigen::Array2i &idx, float height);
+  void setGroundHeight(const Eigen::Vector2d &pos, float height);
 
   float getAltitude(const Eigen::Array2i &idx) const;
   float getAltitude(const Eigen::Vector2d &pos) const;
+  float getGroundHeight(const Eigen::Array2i &idx) const;
+  float getGroundHeight(const Eigen::Vector2d &pos) const;
 
   void setPassability(const Eigen::Array2i &idx, uint8_t passability);
   void setPassability(const Eigen::Vector2d &pos, uint8_t passability);
@@ -57,6 +61,7 @@ public:
 
   float getGridSize() const noexcept { return grid_size_; }
   grid_map::Size getCellSize() const noexcept { return map_cells_; }
+  float getBaselineGround(float radius) const;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);

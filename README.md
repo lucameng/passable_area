@@ -8,13 +8,14 @@
 - Optional blind-spot padding and lidar coverage analysis configured per-sensor pose.
 - Inpainting step that fills holes in the elevation map and re-injects padded points for consistent labeling.
 - One executable serves mapping and navigation scenarios; launch files simply swap parameter presets and topic remaps.
+- Maintains both ground and peak elevation layers so obstacle point clouds omit low-lying floor returns.
 - Publishes `grid_map_msgs/GridMap`, filtered `sensor_msgs/PointCloud2` clouds, and an RViz body marker for quick inspection.
 
 ## Build & Dependencies
 This branch targets ROS 2 Humble with `ament_cmake`. Required dependencies:
 - `rclcpp`, `sensor_msgs`, `pcl_ros`, `pcl_conversions`
 - `grid_map_core`, `grid_map_cv`, `grid_map_ros`
-- Eigen3, OpenCV, and OpenMP
+- `Eigen3`, `OpenCV`, and `OpenMP`
 
 Build from the workspace root:
 ```bash
@@ -45,6 +46,8 @@ For quick experimentation without launch files, run the node directly:
 ros2 run passable_area passable_area
 ```
 
+> **Note:** `third_party/` contains mirrored copies of this package for synchronization purposes. Make changes under `src/passable_area/` only.
+
 ## Configuration
 `config/nav_params.yaml` and `config/mapping_params.yaml` expose the same parameter set. Key entries:
 
@@ -57,6 +60,8 @@ Use `map_length` / `map_width` to control the X/Y span and `map_height_min` / `m
 | `voxel_size` | `0.1` | Grid resolution; smaller values increase compute load. |
 | `max_drop` | `0.3` | Maximum allowed drop between neighbouring cells (metres). |
 | `max_roughness` | `0.1` | Roughness threshold used during terrain evaluation. |
+| `clearance_threshold` | `0.05` | Height margin around ground/baseline used to classify obstacle points. |
+| `baseline_radius` | `0.5` | Radius (m) around the robot used to estimate the baseline ground height. |
 | `body_length`, `body_width` | `0.6`, `0.4` | Robot footprint for padding and visualization. |
 | `world_frame`, `gravity_frame`, `body_frame`, `used_frame` | see YAML | Frame IDs for projecting measurements and publishing outputs. |
 | `enable_blind_check` | `false` | Toggles lidar blind-spot padding and coverage checks. |

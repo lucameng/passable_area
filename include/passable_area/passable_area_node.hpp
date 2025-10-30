@@ -72,6 +72,8 @@ private:
   float body_width_;
   float max_drop_;
   float rough_thres_;
+  float clearance_threshold_;
+  float baseline_radius_;
 
   int body_l_;
   int body_w_;

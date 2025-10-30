@@ -9,6 +9,8 @@ passable_area:
     body_width:    0.4
     max_drop:      0.18
     max_roughness: 0.04
+    clearance_threshold: 0.05
+    baseline_radius: 0.5
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"
