@@ -125,6 +125,11 @@ private:
   bool isPassable(float variance_error, float roughness_thres) const;
   void judgePassability(float rough_thres, float drop_thres, int kernel_size,
                         const Eigen::Affine3f &T_g2b);
+  bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
+                        float drop_thres, int nan_radius_cells,
+                        int nan_min_cells, float drop_buffer,
+                        float far_distance,
+                        std::vector<int8_t> &cliff_cache) const;
   void fillElevationHoles(const std::string &layer_height = "elevation",
                           const std::string &layer_filled = "padding",
                           float search_radius = 1.5f, int min_neighbors = 10,
