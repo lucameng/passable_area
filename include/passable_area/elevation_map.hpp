@@ -66,20 +66,6 @@ public:
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
 
-  float minCoeffOfFinites(const Eigen::MatrixXf &mat) const noexcept {
-    return mat.array()
-        .isFinite()
-        .select(mat, std::numeric_limits<float>::max())
-        .minCoeff();
-  }
-
-  float maxCoeffOfFinites(const Eigen::MatrixXf &mat) const noexcept {
-    return mat.array()
-        .isFinite()
-        .select(mat, std::numeric_limits<float>::lowest())
-        .maxCoeff();
-  }
-
   bool isIndexValid(const Eigen::Array2i &idx) const noexcept {
     return (idx.x() >= 0 && idx.y() >= 0 && idx.x() < getSize().x() &&
             idx.y() < getSize().y());
@@ -93,24 +79,6 @@ private:
   bool isPositionInside(const Eigen::Vector2d &pos) const noexcept {
     return isInside(pos);
   }
-
-  void minValues(const std::string &layer_height,
-                 const std::string &layer_filled);
-  void minValuesLimited(const std::string &layer_height,
-                        const std::string &layer_filled,
-                        int max_hole_pixels = 10,
-                        bool enable_center_padding = false,
-                        float center_dist_thresh = 0.8f);
-  void maxValues(const std::string &layer_height,
-                 const std::string &layer_filled);
-  void meanValues(const std::string &layer_height,
-                  const std::string &layer_filled);
-  void meanValuesOnce(const std::string &layer_height,
-                      const std::string &layer_filled);
-
-  void medianFilter(const std::string &layer_height, int kernel_size,
-                    float threshold = -std::numeric_limits<float>::infinity());
-  void gaussianFilter(const std::string &layer_height, int kernel_size);
 
   float errorFromCovariance(const Eigen::Vector3f &mean,
                             const Eigen::Matrix3f &square) const;
@@ -147,9 +115,6 @@ private:
   float grid_size_;
   grid_map::Size map_cells_;
   std::string frame_;
-  struct Pixel {
-    int r, c;
-  };
 };
 
 #endif // ELEVATION_MAP_HPP
