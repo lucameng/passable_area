@@ -60,6 +60,8 @@ enum class Inpaint : uint8_t {
 
 enum class Denoise : uint8_t { Median, Gauss };
 
+enum class CliffState : int8_t { Unknown = -1, NotCliff = 0, Cliff = 1 };
+
 enum class DogModel : uint8_t { X30 = 0, M20 = 1, Unknown = 2 };
 
 // ============================================================================

@@ -349,9 +349,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       std::max(4, static_cast<int>(0.6f * nan_radius_cells * nan_radius_cells));
   const float drop_buffer = 0.02f;
   const float far_distance = 6.0f;
-
-  std::vector<int8_t> cliff_cache(size_x * size_y, -1);
-
+  std::vector<CliffState> cliff_cache(size_x * size_y, CliffState::Unknown);
   get("passability").setConstant(toFloat(Passability::Unknown));
   std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
@@ -431,20 +429,20 @@ bool ElevationMap::isCliffCandidate(int cx, int cy,
                                     float drop_thres, int nan_radius_cells,
                                     int nan_min_cells, float drop_buffer,
                                     float far_distance,
-                                    std::vector<int8_t> &cliff_cache) const {
+                                    std::vector<CliffState> &cliff_cache) const {
   const auto size = getSize();
   const int size_x = size.x();
   const int size_y = size.y();
   const int idx = cx + cy * size_x;
-  if (cliff_cache[idx] != -1) {
-    return cliff_cache[idx] == 1;
+  if (cliff_cache[idx] != CliffState::Unknown) {
+    return cliff_cache[idx] == CliffState::Cliff;
   }
 
   const auto &height_layer = get("elevation");
   const grid_map::Index center_idx(cx, cy);
   float center_height = height_layer(center_idx.x(), center_idx.y());
   if (!std::isfinite(center_height)) {
-    cliff_cache[idx] = 1;
+    cliff_cache[idx] = CliffState::Cliff;
     return true;
   }
 
@@ -493,7 +491,7 @@ bool ElevationMap::isCliffCandidate(int cx, int cy,
       (center_height - min_neighbor_height) > (drop_thres + drop_buffer);
 
   const bool is_cliff = sufficient_nan && drop_sufficient;
-  cliff_cache[idx] = is_cliff ? 1 : 0;
+  cliff_cache[idx] = is_cliff ? CliffState::Cliff : CliffState::NotCliff;
   return is_cliff;
 }
 

@@ -97,7 +97,7 @@ private:
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
                         float far_distance,
-                        std::vector<int8_t> &cliff_cache) const;
+                        std::vector<CliffState> &cliff_cache) const;
   void fillElevationHoles(const std::string &layer_height = "elevation",
                           const std::string &layer_filled = "padding",
                           float search_radius = 1.5f, int min_neighbors = 10,
