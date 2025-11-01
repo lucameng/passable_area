@@ -1,5 +1,6 @@
 #include "passable_area_node.hpp"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <rclcpp/rclcpp.hpp>
@@ -12,8 +13,6 @@ PassableAreaNode::PassableAreaNode()
       min_height_(declare_parameter("map_height_min", -1.5f)),
       max_height_(declare_parameter("map_height_max", 1.5f)),
       voxel_width_(declare_parameter("voxel_size", 0.1f)),
-      body_length_(declare_parameter("body_length", 0.6f)),
-      body_width_(declare_parameter("body_width", 0.4f)),
       max_drop_(declare_parameter("max_drop", 0.3f)),
       rough_thres_(declare_parameter("max_roughness", 0.1f)),
       clearance_threshold_(declare_parameter("clearance_threshold", 0.05f)),
@@ -22,11 +21,54 @@ PassableAreaNode::PassableAreaNode()
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
       used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
-      body_l_(body_length_ / voxel_width_), body_w_(body_width_ / voxel_width_),
+      dog_model_(declare_parameter<std::string>("dog_model", "m20")),
+      body_length_(0.0f), body_width_(0.0f), body_l_(0), body_w_(0),
       T_g2b_(Eigen::Affine3f::Identity()) {
   if (min_height_ > max_height_) {
     std::swap(min_height_, max_height_);
   }
+  loadBodyGeometry();
+}
+
+void PassableAreaNode::loadBodyGeometry() {
+  std::string model_key = normalizeModelKey(dog_model_);
+  if (model_key != "x30" && model_key != "m20") {
+    RCLCPP_WARN(get_logger(),
+                "Unknown dog_model '%s', defaulting body parameters to 'm20'",
+                dog_model_.c_str());
+    model_key = "m20";
+  }
+
+  const BodyGeometry defaults = defaultBodyGeometry();
+  const std::string base_param = "dog_models." + model_key + ".body_params.";
+
+  body_length_ =
+      declare_parameter<float>(base_param + "body_length", defaults.length);
+  body_width_ =
+      declare_parameter<float>(base_param + "body_width", defaults.width);
+
+  if (voxel_width_ <= 0.0f) {
+    RCLCPP_WARN(get_logger(),
+                "voxel_size must be positive; skipping body geometry scaling.");
+    body_l_ = 0;
+    body_w_ = 0;
+  } else {
+    body_l_ = static_cast<int>(body_length_ / voxel_width_);
+    body_w_ = static_cast<int>(body_width_ / voxel_width_);
+  }
+
+  RCLCPP_INFO(get_logger(),
+              "Body geometry for model '%s': length=%.3f m, width=%.3f m",
+              model_key.c_str(), body_length_, body_width_);
+}
+
+std::string
+PassableAreaNode::normalizeModelKey(const std::string &dog_model) const {
+  std::string normalized = dog_model;
+  std::transform(
+      normalized.begin(), normalized.end(), normalized.begin(),
+      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return normalized;
 }
 
 void PassableAreaNode::initialize() {
@@ -65,7 +107,7 @@ void PassableAreaNode::elevationInit() {
 void PassableAreaNode::lidarCoverInit() {
   RCLCPP_INFO(get_logger(), "Initializing < lidar coverage >");
   lidar_cov_ = std::make_unique<LidarCoverage>(shared_from_this());
-  lidar_cov_->initialize();
+  lidar_cov_->initialize(dog_model_);
   lidar_init_ = true;
 }
 

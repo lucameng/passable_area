@@ -60,6 +60,8 @@ enum class Inpaint : uint8_t {
 
 enum class Denoise : uint8_t { Median, Gauss };
 
+enum class DogModel : uint8_t { X30 = 0, M20 = 1, Unknown = 2 };
+
 // ============================================================================
 // Conversion Helpers
 // ============================================================================

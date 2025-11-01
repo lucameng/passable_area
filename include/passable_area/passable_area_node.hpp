@@ -29,16 +29,6 @@ public:
   void initialize();
 
 private:
-  void elevationInit();
-  void lidarCoverInit();
-  void cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
-  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg);
-  void bodyVisual();
-  void publishPassableInfo();
-  void publishGridMap();
-  Eigen::Affine3f getTransform() const;
-
-private:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
 
@@ -56,6 +46,7 @@ private:
   std::string g_frame_;    // gravity frame
   std::string b_frame_;    // body frame
   std::string used_frame_; // frame to be used
+  std::string dog_model_;
   builtin_interfaces::msg::Time stamp_;
 
   std::unique_ptr<ElevationMap> ele_map_;
@@ -68,18 +59,35 @@ private:
   float min_height_;
   float max_height_;
   float voxel_width_;
-  float body_length_;
-  float body_width_;
   float max_drop_;
   float rough_thres_;
   float clearance_threshold_;
   float baseline_radius_;
 
+  float body_length_;
+  float body_width_;
   int body_l_;
   int body_w_;
   bool ele_init_;
   bool lidar_init_;
   bool enable_blind_check_;
+  struct BodyGeometry {
+    float length;
+    float width;
+  };
+
+private:
+  void elevationInit();
+  void lidarCoverInit();
+  void cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
+  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg);
+  void bodyVisual();
+  void publishPassableInfo();
+  void publishGridMap();
+  Eigen::Affine3f getTransform() const;
+  void loadBodyGeometry();
+  std::string normalizeModelKey(const std::string &dog_model) const;
+  BodyGeometry defaultBodyGeometry() const { return {0.9, 0.4}; }
 };
 
 #endif // PASSABLE_AREA_NODE_HPP

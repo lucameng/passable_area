@@ -1,11 +1,15 @@
 #ifndef LIDAR_COVERAGE_HPP
 #define LIDAR_COVERAGE_HPP
 
+#include "common.hpp"
+
 #include <Eigen/Dense>
 #include <cmath>
 #include <grid_map_core/GridMap.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.h>
+#include <string>
+#include <vector>
 
 struct LidarParam {
   std::string name;
@@ -27,8 +31,10 @@ class LidarCoverage {
 public:
   LidarCoverage() = default;
   explicit LidarCoverage(const rclcpp::Node::SharedPtr &node);
-  void initialize();
-  void addLidar(const std::string &lidar_name);
+  void initialize(const std::string &dog_model);
+  void addLidars(const std::string &model,
+                 const std::vector<std::string> &lidar_names);
+  DogModel parseDogModel(const std::string &dog_model) const;
   void processCoverage(grid_map::GridMap &ele_map,
                        const Eigen::Affine3f &T_g2b);
 
@@ -47,6 +53,10 @@ private:
   Eigen::Vector2f bound_max_;
   Eigen::Vector2f bound_min_;
   std::vector<LidarParam> lidars_;
+  std::string dog_model_;
+  std::string active_model_;
+  const std::vector<std::string> lidar_names_x30_;
+  const std::vector<std::string> lidar_names_m20_;
 };
 
 #endif // LIDAR_COVERAGE_HPP
