@@ -17,6 +17,8 @@ PassableAreaNode::PassableAreaNode()
       rough_thres_(declare_parameter("max_roughness", 0.1f)),
       clearance_threshold_(declare_parameter("clearance_threshold", 0.05f)),
       baseline_radius_(declare_parameter("baseline_radius", 0.5f)),
+      use_legacy_elevation_(declare_parameter("use_legacy_elevation", false)),
+      elevation_solver_bins_(declare_parameter<int>("elevation_solver_bins", 16)),
       w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
@@ -101,6 +103,8 @@ void PassableAreaNode::elevationInit() {
   ele_map_ = std::make_unique<ElevationMap>(
       map_length_, map_width_, min_height_, max_height_, voxel_width_,
       used_frame_, get_logger());
+  ele_map_->setUseLegacyVertical(use_legacy_elevation_);
+  ele_map_->setSolverBins(elevation_solver_bins_);
   ele_init_ = true;
 }
 

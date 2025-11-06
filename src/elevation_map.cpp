@@ -37,6 +37,23 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   get("ceiling_height").setConstant(std::numeric_limits<float>::quiet_NaN());
   get("clearance").setConstant(std::numeric_limits<float>::infinity());
   get("float_mask").setZero();
+
+  solver_params_.min_points = 1;
+  solver_params_.ceiling_window_bins = 2;
+  solver_params_.ceiling_min_points = 6;
+  solver_params_.gap_empty_bins = 2;
+  solver_params_.gap_empty_count_threshold = 0;
+  solver_params_.float_ratio_threshold = 0.8f;
+  solver_params_.neighbor_min_support = 0;
+  solver_params_.neighbor_height_tolerance = 0.25f;
+}
+
+void ElevationMap::setUseLegacyVertical(bool enable) noexcept {
+  solver_params_.use_legacy_vertical = enable;
+}
+
+void ElevationMap::setSolverBins(int bins) noexcept {
+  solver_bins_ = std::max(1, bins);
 }
 
 void ElevationMap::processPointCloud(
@@ -82,7 +99,7 @@ void ElevationMap::cloud2Elevation() {
   const auto size = getSize();
   const int rows = size.x();
   const int cols = size.y();
-  const int bins = std::max(1, vs_params_.bins);
+  const int bins = std::max(1, solver_bins_);
 
   std::vector<uint16_t> histogram(rows * cols * bins, 0);
   std::vector<float> hist_max(rows * cols * bins,
@@ -109,7 +126,7 @@ void ElevationMap::cloud2Elevation() {
     if (!getIndex(pos, idx))
       continue;
 
-    const int linear = linearIndex(idx.x(), idx.y());
+    const int linear = idx.x() * cols + idx.y();
     const int offset = linear * bins;
 
     point_count_layer(idx.x(), idx.y()) += 1.0f;
@@ -128,360 +145,69 @@ void ElevationMap::cloud2Elevation() {
     }
   }
 
-  filterSuspendedObstacles(histogram, hist_max, bin_width);
-}
+  ElevationSolverContext ctx_solver;
+  ctx_solver.rows = rows;
+  ctx_solver.cols = cols;
+  ctx_solver.bins = bins;
+  ctx_solver.min_height = min_height_;
+  ctx_solver.bin_width = bin_width;
+  ctx_solver.counts = &histogram;
+  ctx_solver.peaks = &hist_max;
 
-void ElevationMap::filterSuspendedObstacles(
-    const std::vector<uint16_t> &histogram, const std::vector<float> &hist_max,
-    float bin_width) {
-  if (histogram.empty())
-    return;
-  analyzeVerticalStructure(histogram, hist_max, bin_width);
-}
+  auto solver_params = solver_params_;
+  auto solver_result =
+      ElevationSolver::solve(ctx_solver, solver_params, logger_);
 
-void ElevationMap::analyzeVerticalStructure(
-    const std::vector<uint16_t> &histogram, const std::vector<float> &hist_max,
-    float bin_width) {
-  const auto size = getSize();
-  const int rows = size.x();
-  const int cols = size.y();
-  const int bins = std::max(1, vs_params_.bins);
-  const std::size_t expected_size =
-      static_cast<std::size_t>(rows * cols * bins);
-  if (histogram.size() != expected_size || hist_max.size() != expected_size) {
+  const std::size_t expected_cells =
+      static_cast<std::size_t>(rows) * static_cast<std::size_t>(cols);
+  if (solver_result.ground.size() != expected_cells ||
+      solver_result.ceiling.size() != expected_cells ||
+      solver_result.clearance.size() != expected_cells ||
+      solver_result.float_mask.size() != expected_cells) {
     RCLCPP_WARN(logger_,
-                "Histogram buffers have unexpected size count=%zu max=%zu, "
-                "expected %zu",
-                histogram.size(), hist_max.size(), expected_size);
+                "ElevationSolver returned mismatched result size. "
+                "ground=%zu ceiling=%zu clearance=%zu mask=%zu expected=%zu",
+                solver_result.ground.size(), solver_result.ceiling.size(),
+                solver_result.clearance.size(), solver_result.float_mask.size(),
+                expected_cells);
     return;
   }
 
-  auto &elevation_layer = get("elevation");
-  auto &ground_layer = get("ground_height");
-  auto &ceiling_layer = get("ceiling_height");
-  auto &clearance_layer = get("clearance");
-  auto &float_mask_layer = get("float_mask");
-  auto &point_count_layer = get("point_count");
-
-  const float inf = std::numeric_limits<float>::infinity();
-  std::vector<float> ground_buffer(rows * cols,
-                                   std::numeric_limits<float>::quiet_NaN());
-  std::vector<float> ceiling_buffer(rows * cols,
-                                    std::numeric_limits<float>::quiet_NaN());
-  std::vector<float> ratio_buffer(rows * cols, 1.0f);
-  std::vector<int> gap_buffer(rows * cols, 0);
-  std::vector<bool> ceiling_found(rows * cols, false);
+  const auto &ground_values = solver_result.ground;
+  const auto &ceiling_values = solver_result.ceiling;
+  const auto &clearance_values = solver_result.clearance;
+  const auto &float_mask = solver_result.float_mask;
 
   for (int r = 0; r < rows; ++r) {
     for (int c = 0; c < cols; ++c) {
-      const int linear = linearIndex(r, c);
-      const uint16_t *cell_hist = &histogram[linear * bins];
-      int total_points = 0;
-      for (int b = 0; b < bins; ++b) {
-        total_points += cell_hist[b];
-      }
-      point_count_layer(r, c) = static_cast<float>(total_points);
+      const std::size_t idx =
+          static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) +
+          static_cast<std::size_t>(c);
+      const float ground_z = ground_values[idx];
+      const float ceiling_z = ceiling_values[idx];
+      const float clearance = clearance_values[idx];
+      const uint8_t mask = float_mask[idx];
 
-      if (total_points < std::max(1, vs_params_.min_points)) {
-        continue;
-      }
-
-      if (vs_params_.use_legacy_vertical) {
-        int min_bin = -1;
-        int max_bin = -1;
-        for (int b = 0; b < bins; ++b) {
-          if (cell_hist[b] > 0) {
-            if (min_bin < 0)
-              min_bin = b;
-            max_bin = b;
-          }
-        }
-        if (min_bin < 0)
-          continue;
-
-        float ground_z = binMaxHeight(hist_max, linear, bins, min_bin);
-        if (!std::isfinite(ground_z)) {
-          ground_z = binBottom(min_bin, bin_width);
-        }
-        float ceiling_z = binMaxHeight(hist_max, linear, bins, max_bin);
-        if (!std::isfinite(ceiling_z)) {
-          ceiling_z = binTop(max_bin, bin_width);
-        }
-
-        ground_buffer[linear] = ground_z;
-        ceiling_buffer[linear] = ceiling_z;
-        ratio_buffer[linear] = 1.0f;
-        gap_buffer[linear] = 0;
-        ceiling_found[linear] = true;
-
+      if (std::isfinite(ground_z)) {
         ground_layer(r, c) = ground_z;
+      }
+
+      if (std::isfinite(ceiling_z)) {
         ceiling_layer(r, c) = ceiling_z;
-        clearance_layer(r, c) = std::max(ceiling_z - ground_z, 0.0f);
-        elevation_layer(r, c) = ceiling_z;
-        float_mask_layer(r, c) = 0.0f;
-        continue;
-      }
-
-      bool gap_found = false;
-      const int ground_bin =
-          findGroundBin(cell_hist, bins, total_points, gap_found);
-      if (ground_bin < 0) {
-        continue;
-      }
-
-      float ground_peak = binMaxHeight(hist_max, linear, bins, ground_bin);
-      const float ground_z = std::isfinite(ground_peak)
-                                 ? ground_peak
-                                 : binCenter(ground_bin, bin_width);
-      ground_buffer[linear] = ground_z;
-      ground_layer(r, c) = ground_z;
-      elevation_layer(r, c) = ground_z;
-
-      const int ceiling_bin =
-          findCeilingBin(cell_hist, bins, ground_bin, gap_found);
-
-      if (ceiling_bin < 0) {
-        int legacy_max_bin = -1;
-        for (int b = bins - 1; b >= 0; --b) {
-          if (cell_hist[b] > 0) {
-            legacy_max_bin = b;
-            break;
-          }
-        }
-        if (legacy_max_bin >= 0) {
-          float fallback_peak =
-              binMaxHeight(hist_max, linear, bins, legacy_max_bin);
-          const float fallback_ceiling =
-              std::isfinite(fallback_peak) ? fallback_peak
-                                           : binTop(legacy_max_bin, bin_width);
-
-          ceiling_buffer[linear] = fallback_ceiling;
-          ceiling_found[linear] = true;
-          gap_buffer[linear] = 0;
-          ratio_buffer[linear] = 1.0f;
-
-          ceiling_layer(r, c) = fallback_ceiling;
-          clearance_layer(r, c) = std::max(fallback_ceiling - ground_z, 0.0f);
-          elevation_layer(r, c) = fallback_ceiling;
-        } else {
-          clearance_layer(r, c) = inf;
-        }
-        continue;
-      }
-
-      float ceiling_peak = binMaxHeight(hist_max, linear, bins, ceiling_bin);
-      const float ceiling_z = std::isfinite(ceiling_peak)
-                                  ? ceiling_peak
-                                  : binCenter(ceiling_bin, bin_width);
-      ceiling_buffer[linear] = ceiling_z;
-      ceiling_found[linear] = true;
-
-      gap_buffer[linear] = computeMaxGap(cell_hist, ground_bin, ceiling_bin);
-
-      ratio_buffer[linear] =
-          computeClusterRatio(cell_hist, bins, ceiling_bin, total_points);
-
-      ceiling_layer(r, c) = ceiling_z;
-      clearance_layer(r, c) = std::max(ceiling_z - ground_z, 0.0f);
-    }
-  }
-
-  const int required_gap = std::max(0, vs_params_.gap_empty_bins);
-  const float ratio_threshold = vs_params_.float_ratio_threshold;
-  const int neighbor_requirement = std::max(0, vs_params_.neighbor_min_support);
-
-  for (int r = 0; r < rows; ++r) {
-    for (int c = 0; c < cols; ++c) {
-      const int linear = linearIndex(r, c);
-      const float ground_z = ground_buffer[linear];
-      if (!std::isfinite(ground_z)) {
-        continue;
-      }
-
-      if (!ceiling_found[linear]) {
-        float_mask_layer(r, c) = 0.0f;
-        clearance_layer(r, c) = std::numeric_limits<float>::infinity();
-        ceiling_layer(r, c) = std::numeric_limits<float>::quiet_NaN();
-        elevation_layer(r, c) = ground_z;
-        continue;
-      }
-
-      const float ceiling_z = ceiling_buffer[linear];
-      const int max_gap = gap_buffer[linear];
-      const float ratio = ratio_buffer[linear];
-
-      const bool gap_condition =
-          (required_gap == 0) ? true : (max_gap >= required_gap);
-      const bool sparse_condition = ratio <= ratio_threshold;
-
-      const int neighbor_support = countNeighborSupport(
-          ceiling_buffer, ceiling_found, rows, cols, r, c, ceiling_z);
-
-      const bool weak_neighbor_support =
-          neighbor_requirement > 0 && neighbor_support < neighbor_requirement;
-
-      const bool treat_as_float =
-          gap_condition && sparse_condition &&
-          (neighbor_requirement == 0 ? true : weak_neighbor_support);
-
-      if (treat_as_float) {
-        float_mask_layer(r, c) = 1.0f;
-        ceiling_layer(r, c) = std::numeric_limits<float>::quiet_NaN();
-        clearance_layer(r, c) = std::numeric_limits<float>::infinity();
-        elevation_layer(r, c) = ground_z;
-        RCLCPP_DEBUG(
-            logger_,
-            "Floating points ignored at cell (%d,%d): gap=%d ratio=%.2f "
-            "neighbor_support=%d",
-            r, c, max_gap, ratio, neighbor_support);
       } else {
-        float_mask_layer(r, c) = 0.0f;
-        clearance_layer(r, c) = std::max(ceiling_z - ground_z, 0.0f);
-        ceiling_layer(r, c) = ceiling_z;
-        elevation_layer(r, c) = ceiling_z;
+        ceiling_layer(r, c) = std::numeric_limits<float>::quiet_NaN();
       }
+
+      if (mask == 0 && std::isfinite(ceiling_z)) {
+        elevation_layer(r, c) = ceiling_z;
+      } else if (std::isfinite(ground_z)) {
+        elevation_layer(r, c) = ground_z;
+      }
+
+      clearance_layer(r, c) = clearance;
+      float_mask_layer(r, c) = static_cast<float>(mask);
     }
   }
-}
-
-float ElevationMap::binTop(int bin, float bin_width) const noexcept {
-  return min_height_ + (static_cast<float>(bin) + 1.0f) * bin_width;
-}
-
-float ElevationMap::binCenter(int bin, float bin_width) const noexcept {
-  return min_height_ + (static_cast<float>(bin) + 0.5f) * bin_width;
-}
-
-float ElevationMap::binBottom(int bin, float bin_width) const noexcept {
-  return min_height_ + static_cast<float>(bin) * bin_width;
-}
-
-int ElevationMap::linearIndex(int r, int c) const noexcept {
-  return r * map_cells_.y() + c;
-}
-
-float ElevationMap::binMaxHeight(const std::vector<float> &hist_max, int linear,
-                                 int bins, int bin) const noexcept {
-  if (linear < 0 || bin < 0)
-    return std::numeric_limits<float>::quiet_NaN();
-  const std::size_t idx =
-      static_cast<std::size_t>(linear) * static_cast<std::size_t>(bins) +
-      static_cast<std::size_t>(bin);
-  if (idx >= hist_max.size())
-    return std::numeric_limits<float>::quiet_NaN();
-  return hist_max[idx];
-}
-
-int ElevationMap::findGroundBin(const uint16_t *cell_hist, int bins,
-                                int total_points, bool &gap_found) const {
-  gap_found = false;
-  if (total_points <= 0 || bins <= 0)
-    return -1;
-
-  const int empty_threshold = std::max(0, vs_params_.gap_empty_count_threshold);
-
-  std::vector<bool> has_above(static_cast<std::size_t>(bins), false);
-  bool any_above = false;
-  for (int b = bins - 1; b >= 0; --b) {
-    has_above[b] = any_above;
-    if (static_cast<int>(cell_hist[b]) > empty_threshold) {
-      any_above = true;
-    }
-  }
-
-  int last_non_empty = -1;
-  for (int b = 0; b < bins; ++b) {
-    if (static_cast<int>(cell_hist[b]) > empty_threshold) {
-      last_non_empty = b;
-    } else if (last_non_empty >= 0 && has_above[b]) {
-      gap_found = true;
-      return last_non_empty;
-    }
-  }
-
-  return last_non_empty;
-}
-
-int ElevationMap::findCeilingBin(const uint16_t *cell_hist, int bins,
-                                 int ground_bin, bool gap_found) const {
-  const int window_bins = std::max(1, vs_params_.ceiling_window_bins);
-  const int min_density = std::max(1, vs_params_.ceiling_min_points);
-
-  const int start_bin = std::max(ground_bin + 1, 0);
-  const int end_bin = bins - window_bins;
-  for (int start = start_bin; start <= end_bin; ++start) {
-    int window_sum = 0;
-    for (int k = 0; k < window_bins; ++k) {
-      window_sum += cell_hist[start + k];
-    }
-    if (window_sum >= min_density)
-      return start;
-  }
-
-  if (!gap_found)
-    return ground_bin;
-
-  return -1;
-}
-
-int ElevationMap::computeMaxGap(const uint16_t *cell_hist, int ground_bin,
-                                int ceiling_bin) const {
-  const int empty_threshold = std::max(0, vs_params_.gap_empty_count_threshold);
-
-  int max_gap = 0;
-  int current_gap = 0;
-  for (int b = ground_bin + 1; b < ceiling_bin; ++b) {
-    if (static_cast<int>(cell_hist[b]) <= empty_threshold) {
-      current_gap++;
-      max_gap = std::max(max_gap, current_gap);
-    } else {
-      current_gap = 0;
-    }
-  }
-  return max_gap;
-}
-
-float ElevationMap::computeClusterRatio(const uint16_t *cell_hist, int bins,
-                                        int ceiling_bin,
-                                        int total_points) const {
-  if (total_points <= 0)
-    return 1.0f;
-  int cluster_points = 0;
-  for (int b = ceiling_bin; b < bins; ++b) {
-    cluster_points += cell_hist[b];
-  }
-  return static_cast<float>(cluster_points) / static_cast<float>(total_points);
-}
-
-int ElevationMap::countNeighborSupport(const std::vector<float> &ceiling_buffer,
-                                       const std::vector<bool> &ceiling_found,
-                                       int rows, int cols, int r, int c,
-                                       float ceiling_z) const {
-  int support = 0;
-  const float tol = std::max(0.0f, vs_params_.neighbor_height_tolerance);
-
-  for (int dr = -1; dr <= 1; ++dr) {
-    for (int dc = -1; dc <= 1; ++dc) {
-      if (dr == 0 && dc == 0)
-        continue;
-      const int nr = r + dr;
-      const int nc = c + dc;
-      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols)
-        continue;
-
-      const int nidx = linearIndex(nr, nc);
-      if (!ceiling_found[nidx])
-        continue;
-
-      const float neighbor_ceiling = ceiling_buffer[nidx];
-      if (!std::isfinite(neighbor_ceiling))
-        continue;
-
-      if (std::fabs(neighbor_ceiling - ceiling_z) <= tol)
-        support++;
-    }
-  }
-  return support;
 }
 
 float ElevationMap::getMinheight() const noexcept {

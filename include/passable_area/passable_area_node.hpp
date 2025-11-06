@@ -63,6 +63,8 @@ private:
   float rough_thres_;
   float clearance_threshold_;
   float baseline_radius_;
+  bool use_legacy_elevation_;
+  int elevation_solver_bins_;
 
   float body_length_;
   float body_width_;

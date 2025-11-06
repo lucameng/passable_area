@@ -32,6 +32,7 @@ include_directories(
 
 add_executable(passable_area
   src/elevation_map.cpp
+  src/elevation_solver.cpp
   src/layer_processing.cpp
   src/passable_area_node.cpp
   src/lidar_coverage.cpp
