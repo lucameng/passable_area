@@ -119,8 +119,8 @@ private:
     int ceiling_min_points = 6;
     int gap_empty_bins = 2;
     int gap_empty_count_threshold = 0;
-    float float_ratio_threshold = 0.2f;
-    int neighbor_min_support = 2;
+    float float_ratio_threshold = 0.8f;
+    int neighbor_min_support = 0;
     float neighbor_height_tolerance = 0.25f;
   };
   void analyzeVerticalStructure(const std::vector<uint16_t> &histogram,
