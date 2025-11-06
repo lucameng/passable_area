@@ -98,9 +98,9 @@ void PassableAreaNode::initialize() {
 
 void PassableAreaNode::elevationInit() {
   RCLCPP_INFO(get_logger(), "Initializing < elevation map >");
-  ele_map_ =
-      std::make_unique<ElevationMap>(map_length_, map_width_, min_height_,
-                                     max_height_, voxel_width_, used_frame_);
+  ele_map_ = std::make_unique<ElevationMap>(
+      map_length_, map_width_, min_height_, max_height_, voxel_width_,
+      used_frame_, get_logger());
   ele_init_ = true;
 }
 
