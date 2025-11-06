@@ -782,12 +782,12 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
-        if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
-                             nan_min_cells, drop_buffer, far_distance,
-                             cliff_cache)) {
-          setPassability(curr_idx, Passability::Impassable);
-          curr_is_cliff = true;
-        }
+        // if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
+        //                      nan_min_cells, drop_buffer, far_distance,
+        //                      cliff_cache)) {
+        //   setPassability(curr_idx, Passability::Impassable);
+        //   curr_is_cliff = true;
+        // }
         continue;
       }
       if (visited[idx])
