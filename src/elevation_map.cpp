@@ -50,11 +50,24 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
 }
 
 void ElevationMap::setUseLegacyVertical(bool enable) noexcept {
-  solver_params_.use_legacy_vertical = enable;
+  solver_params_.use_legacy_elevation = enable;
 }
 
 void ElevationMap::setSolverBins(int bins) noexcept {
   solver_bins_ = std::max(1, bins);
+}
+
+void ElevationMap::setSolverRegion(bool enabled, float min_x, float max_x,
+                                   float min_y, float max_y) noexcept {
+  solver_region_.enabled = enabled;
+  if (min_x > max_x)
+    std::swap(min_x, max_x);
+  if (min_y > max_y)
+    std::swap(min_y, max_y);
+  solver_region_.min_x = min_x;
+  solver_region_.max_x = max_x;
+  solver_region_.min_y = min_y;
+  solver_region_.max_y = max_y;
 }
 
 void ElevationMap::processPointCloud(
@@ -154,6 +167,28 @@ void ElevationMap::cloud2Elevation() {
   ctx_solver.bin_width = bin_width;
   ctx_solver.counts = &histogram;
   ctx_solver.peaks = &hist_max;
+  std::vector<uint8_t> region_mask;
+  if (solver_region_.enabled) {
+    region_mask.resize(static_cast<std::size_t>(rows) *
+                       static_cast<std::size_t>(cols),
+                       static_cast<uint8_t>(0));
+    for (int r = 0; r < rows; ++r) {
+      for (int c = 0; c < cols; ++c) {
+        grid_map::Position pos;
+        getPosition({r, c}, pos);
+        if (pos.x() >= solver_region_.min_x &&
+            pos.x() <= solver_region_.max_x && 
+            pos.y() >= solver_region_.min_y &&
+            pos.y() <= solver_region_.max_y) {
+          const std::size_t idx =
+              static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) +
+              static_cast<std::size_t>(c);
+          region_mask[idx] = static_cast<uint8_t>(1);
+        }
+      }
+    }
+    ctx_solver.region_mask = &region_mask;
+  }
 
   auto solver_params = solver_params_;
   auto solver_result =

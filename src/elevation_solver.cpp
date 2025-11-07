@@ -193,39 +193,48 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
   const float min_height = ctx.min_height;
   const float bin_width = ctx.bin_width;
 
+  auto apply_legacy_elevation = [&](int linear) {
+    const uint16_t *cell_hist = &histogram[static_cast<std::size_t>(linear) *
+                                           static_cast<std::size_t>(bins)];
+
+    int min_bin = -1;
+    int max_bin = -1;
+    for (int b = 0; b < bins; ++b) {
+      if (cell_hist[b] > 0) {
+        if (min_bin < 0)
+          min_bin = b;
+        max_bin = b;
+      }
+    }
+    if (min_bin < 0)
+      return;
+
+    float ground_z = binMaxHeight(hist_max, linear, bins, min_bin);
+    if (!std::isfinite(ground_z)) {
+      ground_z = binBottom(min_height, bin_width, min_bin);
+    }
+    float ceiling_z = binMaxHeight(hist_max, linear, bins, max_bin);
+    if (!std::isfinite(ceiling_z)) {
+      ceiling_z = binTop(min_height, bin_width, max_bin);
+    }
+
+    result.ground[linear] = ground_z;
+    result.ceiling[linear] = ceiling_z;
+    result.clearance[linear] = std::max(ceiling_z - ground_z, 0.0f);
+    result.float_mask[linear] = 0;
+    if (linear >= 0 && linear < static_cast<int>(ceiling_buffer.size())) {
+      ceiling_buffer[linear] = ceiling_z;
+      ceiling_found[linear] = true;
+      gap_buffer[linear] = 0;
+      ratio_buffer[linear] = 1.0f;
+    }
+  };
+
   // Legacy path bypasses advanced heuristics.
-  if (params.use_legacy_vertical) {
+  if (params.use_legacy_elevation) {
     for (int r = 0; r < ctx.rows; ++r) {
       for (int c = 0; c < ctx.cols; ++c) {
-        const int linear = linearIndex(r, c, ctx.cols);
-        const uint16_t *cell_hist =
-            &histogram[static_cast<std::size_t>(linear) *
-                       static_cast<std::size_t>(bins)];
-
-        int min_bin = -1;
-        int max_bin = -1;
-        for (int b = 0; b < bins; ++b) {
-          if (cell_hist[b] > 0) {
-            if (min_bin < 0)
-              min_bin = b;
-            max_bin = b;
-          }
-        }
-        if (min_bin < 0)
-          continue;
-
-        float ground_z = binMaxHeight(hist_max, linear, bins, min_bin);
-        if (!std::isfinite(ground_z)) {
-          ground_z = binBottom(min_height, bin_width, min_bin);
-        }
-        float ceiling_z = binMaxHeight(hist_max, linear, bins, max_bin);
-        if (!std::isfinite(ceiling_z)) {
-          ceiling_z = binTop(min_height, bin_width, max_bin);
-        }
-
-        result.ground[linear] = ground_z;
-        result.ceiling[linear] = ceiling_z;
-        result.clearance[linear] = std::max(ceiling_z - ground_z, 0.0f);
+        apply_legacy_elevation(linearIndex(r, c, ctx.cols));
       }
     }
     return result;
@@ -244,13 +253,21 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
       for (int b = 0; b < bins; ++b) {
         total_points += cell_hist[b];
       }
+      if (ctx.region_mask) {
+        const std::size_t mask_idx = static_cast<std::size_t>(linear);
+        if ((*ctx.region_mask)[mask_idx] == 0) {
+          apply_legacy_elevation(linear);
+          continue;
+        }
+      }
+
       if (total_points < std::max(1, params.min_points))
         continue;
 
       bool gap_found = false;
-      const int ground_bin = findGroundBin(
-          cell_hist, bins, total_points, empty_threshold, ground_threshold,
-          gap_found);
+      const int ground_bin =
+          findGroundBin(cell_hist, bins, total_points, empty_threshold,
+                        ground_threshold, gap_found);
       if (ground_bin < 0)
         continue;
 
@@ -261,39 +278,13 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
 
       result.ground[linear] = ground_z;
 
-      const int ceiling_bin =
-          findCeilingBin(cell_hist, bins, ground_bin, gap_found,
-                         std::max(1, params.ceiling_window_bins),
-                         std::max(1, params.ceiling_min_points),
-                         empty_threshold);
+      const int ceiling_bin = findCeilingBin(
+          cell_hist, bins, ground_bin, gap_found,
+          std::max(1, params.ceiling_window_bins),
+          std::max(1, params.ceiling_min_points), empty_threshold);
 
       if (ceiling_bin < 0) {
-        int legacy_max_bin = -1;
-        for (int b = bins - 1; b >= 0; --b) {
-          if (cell_hist[b] > 0) {
-            legacy_max_bin = b;
-            break;
-          }
-        }
-        if (legacy_max_bin >= 0) {
-          float fallback_peak =
-              binMaxHeight(hist_max, linear, bins, legacy_max_bin);
-          const float fallback_ceiling =
-              std::isfinite(fallback_peak)
-                  ? fallback_peak
-                  : binTop(min_height, bin_width, legacy_max_bin);
-
-          ceiling_buffer[linear] = fallback_ceiling;
-          ceiling_found[linear] = true;
-          gap_buffer[linear] = 0;
-          ratio_buffer[linear] = 1.0f;
-
-          result.ceiling[linear] = fallback_ceiling;
-          result.clearance[linear] =
-              std::max(fallback_ceiling - ground_z, 0.0f);
-        } else {
-          result.clearance[linear] = std::numeric_limits<float>::infinity();
-        }
+        apply_legacy_elevation(linear);
         continue;
       }
 

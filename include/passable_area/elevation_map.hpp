@@ -67,6 +67,8 @@ public:
   float getBaselineGround(float radius) const;
   void setUseLegacyVertical(bool enable) noexcept;
   void setSolverBins(int bins) noexcept;
+  void setSolverRegion(bool enabled, float min_x, float max_x, float min_y,
+                       float max_y) noexcept;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -121,8 +123,10 @@ private:
   grid_map::Size map_cells_;
   std::string frame_;
   rclcpp::Logger logger_;
-  ElevationSolverParams solver_params_;
+
   int solver_bins_;
+  ElevationSolverParams solver_params_;
+  ElevationSolverRegion solver_region_;
 };
 
 #endif // ELEVATION_MAP_HPP

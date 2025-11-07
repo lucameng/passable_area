@@ -13,6 +13,11 @@ passable_area:
 
     use_legacy_elevation: false
     elevation_solver_bins: 20
+    solver_region_enabled: true
+    solver_region_min_x: 0.0
+    solver_region_max_x: 3.0
+    solver_region_min_y: -1.0
+    solver_region_max_y: 1.0
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"
