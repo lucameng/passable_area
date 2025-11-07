@@ -40,10 +40,11 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
 
   solver_params_.min_points = 1;
   solver_params_.ceiling_window_bins = 2;
-  solver_params_.ceiling_min_points = 6;
-  solver_params_.gap_empty_bins = 2;
+  solver_params_.ceiling_min_points = 1;
+  solver_params_.gap_empty_bins = 1;
   solver_params_.gap_empty_count_threshold = 0;
-  solver_params_.float_ratio_threshold = 0.8f;
+  solver_params_.ground_min_count = 1;
+  solver_params_.float_ratio_threshold = 0.6f;
   solver_params_.neighbor_min_support = 0;
   solver_params_.neighbor_height_tolerance = 0.25f;
 }

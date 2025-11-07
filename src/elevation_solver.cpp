@@ -33,7 +33,7 @@ float binMaxHeight(const std::vector<float> &peaks, int linear, int bins,
 }
 
 int findGroundBin(const uint16_t *cell_hist, int bins, int total_points,
-                  int empty_threshold, bool &gap_found) {
+                  int empty_threshold, int ground_threshold, bool &gap_found) {
   gap_found = false;
   if (total_points <= 0 || bins <= 0)
     return -1;
@@ -49,19 +49,28 @@ int findGroundBin(const uint16_t *cell_hist, int bins, int total_points,
 
   int last_non_empty = -1;
   for (int b = 0; b < bins; ++b) {
-    if (static_cast<int>(cell_hist[b]) > empty_threshold) {
+    if (static_cast<int>(cell_hist[b]) >= ground_threshold) {
       last_non_empty = b;
-    } else if (last_non_empty >= 0 && has_above[b]) {
+    } else if (last_non_empty >= 0 && has_above[b] &&
+               static_cast<int>(cell_hist[b]) <= empty_threshold) {
       gap_found = true;
       return last_non_empty;
     }
   }
 
-  return last_non_empty;
+  if (last_non_empty >= 0)
+    return last_non_empty;
+
+  for (int b = bins - 1; b >= 0; --b) {
+    if (cell_hist[b] > 0)
+      return b;
+  }
+  return -1;
 }
 
 int findCeilingBin(const uint16_t *cell_hist, int bins, int ground_bin,
-                   bool gap_found, int window_bins, int min_density) {
+                   bool gap_found, int window_bins, int min_density,
+                   int empty_threshold) {
   const int start_bin = std::max(ground_bin + 1, 0);
   const int end_bin = bins - window_bins;
   for (int start = start_bin; start <= end_bin; ++start) {
@@ -69,8 +78,14 @@ int findCeilingBin(const uint16_t *cell_hist, int bins, int ground_bin,
     for (int k = 0; k < window_bins; ++k) {
       window_sum += cell_hist[start + k];
     }
-    if (window_sum >= min_density)
-      return start;
+    if (window_sum >= min_density) {
+      for (int k = 0; k < window_bins; ++k) {
+        const int candidate = start + k;
+        if (static_cast<int>(cell_hist[candidate]) > empty_threshold) {
+          return candidate;
+        }
+      }
+    }
   }
 
   if (!gap_found)
@@ -217,6 +232,7 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
   }
 
   const int empty_threshold = std::max(0, params.gap_empty_count_threshold);
+  const int ground_threshold = std::max(1, params.ground_min_count);
 
   for (int r = 0; r < ctx.rows; ++r) {
     for (int c = 0; c < ctx.cols; ++c) {
@@ -232,8 +248,9 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
         continue;
 
       bool gap_found = false;
-      const int ground_bin = findGroundBin(cell_hist, bins, total_points,
-                                           empty_threshold, gap_found);
+      const int ground_bin = findGroundBin(
+          cell_hist, bins, total_points, empty_threshold, ground_threshold,
+          gap_found);
       if (ground_bin < 0)
         continue;
 
@@ -247,7 +264,8 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
       const int ceiling_bin =
           findCeilingBin(cell_hist, bins, ground_bin, gap_found,
                          std::max(1, params.ceiling_window_bins),
-                         std::max(1, params.ceiling_min_points));
+                         std::max(1, params.ceiling_min_points),
+                         empty_threshold);
 
       if (ceiling_bin < 0) {
         int legacy_max_bin = -1;

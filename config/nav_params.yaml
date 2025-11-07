@@ -12,7 +12,7 @@ passable_area:
     baseline_radius: 0.0
 
     use_legacy_elevation: false
-    elevation_solver_bins: 16
+    elevation_solver_bins: 20
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"

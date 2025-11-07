@@ -21,11 +21,12 @@ struct ElevationSolverParams {
   bool use_legacy_vertical = false;
   int min_points = 1;
   int ceiling_window_bins = 2;
-  int ceiling_min_points = 6;
+  int ceiling_min_points = 1;
   int gap_empty_bins = 2;
   int gap_empty_count_threshold = 0;
-  float float_ratio_threshold = 0.2f;
-  int neighbor_min_support = 2;
+  int ground_min_count = 1;
+  float float_ratio_threshold = 0.5f;
+  int neighbor_min_support = 1;
   float neighbor_height_tolerance = 0.25f;
 };
 
