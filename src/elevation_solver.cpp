@@ -6,14 +6,17 @@
 
 namespace {
 
+// Return the upper bound of the bin interval.
 float binTop(float min_height, float bin_width, int bin) noexcept {
   return min_height + (static_cast<float>(bin) + 1.0f) * bin_width;
 }
 
+// Return the geometric center of the bin interval.
 float binCenter(float min_height, float bin_width, int bin) noexcept {
   return min_height + (static_cast<float>(bin) + 0.5f) * bin_width;
 }
 
+// Return the lower bound of the bin interval.
 float binBottom(float min_height, float bin_width, int bin) noexcept {
   return min_height + static_cast<float>(bin) * bin_width;
 }
@@ -32,6 +35,7 @@ float binMaxHeight(const std::vector<float> &peaks, int linear, int bins,
   return peaks[idx];
 }
 
+// Find the ground bin, optionally detecting a gap above it.
 int findGroundBin(const uint16_t *cell_hist, int bins, int total_points,
                   int empty_threshold, int ground_threshold, bool &gap_found) {
   gap_found = false;
@@ -68,6 +72,7 @@ int findGroundBin(const uint16_t *cell_hist, int bins, int total_points,
   return -1;
 }
 
+// Find the ceiling bin by sliding a density window above the ground.
 int findCeilingBin(const uint16_t *cell_hist, int bins, int ground_bin,
                    bool gap_found, int window_bins, int min_density,
                    int empty_threshold) {
@@ -94,6 +99,7 @@ int findCeilingBin(const uint16_t *cell_hist, int bins, int ground_bin,
   return -1;
 }
 
+// Measure the largest empty stretch between ground and ceiling.
 int computeMaxGap(const uint16_t *cell_hist, int ground_bin, int ceiling_bin,
                   int empty_threshold) {
   int max_gap = 0;
@@ -109,6 +115,7 @@ int computeMaxGap(const uint16_t *cell_hist, int ground_bin, int ceiling_bin,
   return max_gap;
 }
 
+// Ratio of points at/above ceiling relative to all points in the cell.
 float computeClusterRatio(const uint16_t *cell_hist, int bins, int ceiling_bin,
                           int total_points) {
   if (total_points <= 0)
@@ -120,6 +127,7 @@ float computeClusterRatio(const uint16_t *cell_hist, int bins, int ceiling_bin,
   return static_cast<float>(cluster_points) / static_cast<float>(total_points);
 }
 
+// Count how many neighbors support a similar ceiling height.
 int countNeighborSupport(const std::vector<float> &ceiling_buffer,
                          const std::vector<bool> &ceiling_found, int rows,
                          int cols, int r, int c, float ceiling_z,
@@ -222,6 +230,7 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
     result.ceiling[linear] = ceiling_z;
     result.clearance[linear] = std::max(ceiling_z - ground_z, 0.0f);
     result.float_mask[linear] = 0;
+    // Legacy path must also populate the analysis buffers for later stages.
     if (linear >= 0 && linear < static_cast<int>(ceiling_buffer.size())) {
       ceiling_buffer[linear] = ceiling_z;
       ceiling_found[linear] = true;
