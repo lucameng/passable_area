@@ -5,40 +5,71 @@ passable_area:
     map_height_min: -1.5
     map_height_max:  1.5
     voxel_size:    0.05
-    body_length:   0.9
-    body_width:    0.4
     max_drop:      0.18
     max_roughness: 0.04
-    clearance_threshold: 0.05
-    baseline_radius: 0.5
+
+    clearance_threshold: 0.0
+    baseline_radius: 0.0
+
+    use_legacy_elevation: true
+    elevation_solver_bins: 16
+    solver_region_enabled: false
+    solver_region_min_x: 0.0
+    solver_region_max_x: 4.0
+    solver_region_min_y: 0.0
+    solver_region_max_y: 0.0
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"
     body_frame:    "base_link"
     used_frame:    "base_link"
+    dog_model:     "m20"
 
-    enable_blind_check: false
+    enable_blind_check: true
 
-    lidar_front_up:
-      pos_body: [0.44367, 0.0, 0.05415]      # m
-      rpy_body: [0.0, 65.0, 0.0]             # deg
-      fov_up_deg: 46.0
-      fov_down_deg: -4.0
+    dog_models:
+      x30:
+        body_params:
+          body_length: 0.9
+          body_width: 0.4
+        lidar_params:
+          lidar_front_up:
+            pos_body: [0.44367, 0.0, 0.05415]      # m
+            rpy_body: [0.0, 65.0, 0.0]             # deg
+            fov_up_deg: 46.0
+            fov_down_deg: -4.0
 
-    lidar_front_down:
-      pos_body: [0.43297, 0.0, -0.05519]     # m
-      rpy_body: [0.0, 136.0, 0.0]            # deg
-      fov_up_deg: 48.0
-      fov_down_deg: -6.0
+          lidar_front_down:
+            pos_body: [0.43297, 0.0, -0.05519]     # m
+            rpy_body: [0.0, 136.0, 0.0]            # deg
+            fov_up_deg: 48.0
+            fov_down_deg: -6.0
 
-    lidar_rear_up:
-      pos_body: [-0.46576, 0.0, 0.03484]     # m
-      rpy_body: [0.0, -95.0, 0.0]           # deg
-      fov_up_deg: 48.0
-      fov_down_deg: -7.0
+          lidar_rear_up:
+            pos_body: [-0.46576, 0.0, 0.03484]     # m
+            rpy_body: [0.0, -95.0, 0.0]            # deg
+            fov_up_deg: 48.0
+            fov_down_deg: -7.0
 
-    lidar_rear_down:
-      pos_body: [-0.41074, 0.0, -0.05601]    # m
-      rpy_body: [0.0, -146.0, 0.0]          # deg
-      fov_up_deg: 45.0
-      fov_down_deg: -7.0
+          lidar_rear_down:
+            pos_body: [-0.41074, 0.0, -0.05601]    # m
+            rpy_body: [0.0, -146.0, 0.0]           # deg
+            fov_up_deg: 45.0
+            fov_down_deg: -7.0
+
+      m20:
+        body_params:
+          body_length: 0.82
+          body_width: 0.43
+        lidar_params:
+          lidar_front:
+            pos_body: [0.32028, 0.0, -0.013]       # m
+            rpy_body: [0.0, 90.0, 0.0]             # deg
+            fov_up_deg: 90.0
+            fov_down_deg: 0.0
+
+          lidar_rear:
+            pos_body: [-0.32028, 0.0, -0.013]      # m
+            rpy_body: [0.0, -90.0, 0.0]            # deg
+            fov_up_deg: 90.0
+            fov_down_deg: 0.0

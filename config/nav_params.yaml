@@ -3,13 +3,21 @@ passable_area:
     map_length:    6.0
     map_width:     6.0
     map_height_min: -1.0
-    map_height_max:  1.0
+    map_height_max:  0.5
     voxel_size:    0.05
     max_drop:      0.25
     max_roughness: 0.10
 
     clearance_threshold: 0.0
     baseline_radius: 0.0
+
+    use_legacy_elevation: false
+    elevation_solver_bins: 20
+    solver_region_enabled: true
+    solver_region_min_x: -0.5
+    solver_region_max_x: 3.0
+    solver_region_min_y: -1.0
+    solver_region_max_y: 1.0
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"

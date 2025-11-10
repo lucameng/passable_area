@@ -1,6 +1,7 @@
 #ifndef ELEVATION_MAP_HPP
 #define ELEVATION_MAP_HPP
 
+#include "elevation_solver.hpp"
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -16,14 +17,16 @@
 
 #include <grid_map_core/grid_map_core.hpp>
 #include <grid_map_cv/GridMapCvConverter.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 class ElevationMap : public grid_map::GridMap {
 public:
   ElevationMap() = default;
-  explicit ElevationMap(float map_length, float map_width, float min_height,
-                        float max_height, float grid_s,
-                        const std::string &frame_id);
+  explicit ElevationMap(
+      float map_length, float map_width, float min_height, float max_height,
+      float grid_s, const std::string &frame_id,
+      const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
                          float roughness_thres, float drop_thres,
@@ -62,6 +65,10 @@ public:
   float getGridSize() const noexcept { return grid_size_; }
   grid_map::Size getCellSize() const noexcept { return map_cells_; }
   float getBaselineGround(float radius) const;
+  void setUseLegacyVertical(bool enable) noexcept;
+  void setSolverBins(int bins) noexcept;
+  void setSolverRegion(bool enabled, float min_x, float max_x, float min_y,
+                       float max_y) noexcept;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -97,7 +104,7 @@ private:
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
                         float far_distance,
-                        std::vector<int8_t> &cliff_cache) const;
+                        std::vector<CliffState> &cliff_cache) const;
   void fillElevationHoles(const std::string &layer_height = "elevation",
                           const std::string &layer_filled = "padding",
                           float search_radius = 1.5f, int min_neighbors = 10,
@@ -115,6 +122,11 @@ private:
   float grid_size_;
   grid_map::Size map_cells_;
   std::string frame_;
+  rclcpp::Logger logger_;
+
+  int solver_bins_;
+  ElevationSolverParams solver_params_;
+  ElevationSolverRegion solver_region_;
 };
 
 #endif // ELEVATION_MAP_HPP

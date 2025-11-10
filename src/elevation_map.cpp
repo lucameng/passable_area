@@ -11,15 +11,17 @@
 
 ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
                            float max_height, float grid_s,
-                           const std::string &frame_id)
-    : grid_map::GridMap({"elevation", "ground_height", "passability",
+                           const std::string &frame_id,
+                           const rclcpp::Logger &logger)
+    : grid_map::GridMap({"elevation", "ground_height", "ceiling_height",
+                         "clearance", "float_mask", "passability",
                          "coverability", "padding", "point_count",
                          "dummy_height"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
       max_height_(std::max(min_height, max_height)), grid_size_(grid_s),
-      frame_(frame_id) {
+      frame_(frame_id), logger_(logger) {
   if ((max_height_ - min_height_) < grid_size_) {
     max_height_ = min_height_ + grid_size_;
   }
@@ -32,6 +34,40 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   get("padding").setConstant(toFloat(Padding::Unpadded));
   get("point_count").setZero();
   get("ground_height").setConstant(std::numeric_limits<float>::quiet_NaN());
+  get("ceiling_height").setConstant(std::numeric_limits<float>::quiet_NaN());
+  get("clearance").setConstant(std::numeric_limits<float>::infinity());
+  get("float_mask").setZero();
+
+  solver_params_.min_points = 1;
+  solver_params_.ceiling_window_bins = 2;
+  solver_params_.ceiling_min_points = 1;
+  solver_params_.gap_empty_bins = 1;
+  solver_params_.gap_empty_count_threshold = 0;
+  solver_params_.ground_min_count = 1;
+  solver_params_.float_ratio_threshold = 0.6f;
+  solver_params_.neighbor_min_support = 0;
+  solver_params_.neighbor_height_tolerance = 0.25f;
+}
+
+void ElevationMap::setUseLegacyVertical(bool enable) noexcept {
+  solver_params_.use_legacy_elevation = enable;
+}
+
+void ElevationMap::setSolverBins(int bins) noexcept {
+  solver_bins_ = std::max(1, bins);
+}
+
+void ElevationMap::setSolverRegion(bool enabled, float min_x, float max_x,
+                                   float min_y, float max_y) noexcept {
+  solver_region_.enabled = enabled;
+  if (min_x > max_x)
+    std::swap(min_x, max_x);
+  if (min_y > max_y)
+    std::swap(min_y, max_y);
+  solver_region_.min_x = min_x;
+  solver_region_.max_x = max_x;
+  solver_region_.min_y = min_y;
+  solver_region_.max_y = max_y;
 }
 
 void ElevationMap::processPointCloud(
@@ -60,35 +96,152 @@ void ElevationMap::setInputCloud(
 }
 
 void ElevationMap::cloud2Elevation() {
-  clear("elevation");
-  clear("ground_height");
-  clear("point_count");
-  get("point_count").setZero();
+  auto &elevation_layer = get("elevation");
+  auto &ground_layer = get("ground_height");
+  auto &ceiling_layer = get("ceiling_height");
+  auto &clearance_layer = get("clearance");
+  auto &float_mask_layer = get("float_mask");
+  auto &point_count_layer = get("point_count");
+
+  elevation_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
+  ground_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
+  ceiling_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
+  clearance_layer.setConstant(std::numeric_limits<float>::infinity());
+  float_mask_layer.setZero();
+  point_count_layer.setZero();
+
+  const auto size = getSize();
+  const int rows = size.x();
+  const int cols = size.y();
+  const int bins = std::max(1, solver_bins_);
+
+  std::vector<uint16_t> histogram(rows * cols * bins, 0);
+  std::vector<float> hist_max(rows * cols * bins,
+                              -std::numeric_limits<float>::infinity());
 
   const float half_length = map_length_ * 0.5f;
   const float half_width = map_width_ * 0.5f;
+  const float bin_width =
+      (max_height_ - min_height_) / static_cast<float>(bins);
 
-#pragma omp parallel for
+  if (bin_width <= 0.0f) {
+    RCLCPP_WARN(logger_, "Invalid bin width %.3f for vertical structure",
+                bin_width);
+    return;
+  }
+
   for (const auto &p : working_cloud_) {
     if (p.x < -half_length || p.x > half_length || p.y < -half_width ||
         p.y > half_width || p.z < min_height_ || p.z > max_height_)
       continue;
 
     Eigen::Vector2d pos(p.x, p.y);
-    float height = getAltitude(pos);
-    if (std::isnan(height) || p.z > height) {
-      height = p.z;
-      setAltitude(pos, height);
-    }
-
-    float ground = getGroundHeight(pos);
-    if (std::isnan(ground) || p.z < ground) {
-      setGroundHeight(pos, p.z);
-    }
-
     grid_map::Index idx;
-    if (getIndex(pos, idx)) {
-      get("point_count")(idx.x(), idx.y()) += 1.0f;
+    if (!getIndex(pos, idx))
+      continue;
+
+    const int linear = idx.x() * cols + idx.y();
+    const int offset = linear * bins;
+
+    point_count_layer(idx.x(), idx.y()) += 1.0f;
+
+    int bin = static_cast<int>((p.z - min_height_) / bin_width);
+    bin = std::clamp(bin, 0, bins - 1);
+
+    const int slot = offset + bin;
+    auto &bin_count = histogram[slot];
+    if (bin_count < std::numeric_limits<uint16_t>::max()) {
+      bin_count += 1;
+    }
+    auto &bin_peak = hist_max[slot];
+    if (p.z > bin_peak) {
+      bin_peak = p.z;
+    }
+  }
+
+  ElevationSolverContext ctx_solver;
+  ctx_solver.rows = rows;
+  ctx_solver.cols = cols;
+  ctx_solver.bins = bins;
+  ctx_solver.min_height = min_height_;
+  ctx_solver.bin_width = bin_width;
+  ctx_solver.counts = &histogram;
+  ctx_solver.peaks = &hist_max;
+  std::vector<uint8_t> region_mask;
+  if (solver_region_.enabled) {
+    region_mask.resize(static_cast<std::size_t>(rows) *
+                       static_cast<std::size_t>(cols),
+                       static_cast<uint8_t>(0));
+    for (int r = 0; r < rows; ++r) {
+      for (int c = 0; c < cols; ++c) {
+        grid_map::Position pos;
+        getPosition({r, c}, pos);
+        if (pos.x() >= solver_region_.min_x &&
+            pos.x() <= solver_region_.max_x && 
+            pos.y() >= solver_region_.min_y &&
+            pos.y() <= solver_region_.max_y) {
+          const std::size_t idx =
+              static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) +
+              static_cast<std::size_t>(c);
+          region_mask[idx] = static_cast<uint8_t>(1);
+        }
+      }
+    }
+    ctx_solver.region_mask = &region_mask;
+  }
+
+  auto solver_params = solver_params_;
+  auto solver_result =
+      ElevationSolver::solve(ctx_solver, solver_params, logger_);
+
+  const std::size_t expected_cells =
+      static_cast<std::size_t>(rows) * static_cast<std::size_t>(cols);
+  if (solver_result.ground.size() != expected_cells ||
+      solver_result.ceiling.size() != expected_cells ||
+      solver_result.clearance.size() != expected_cells ||
+      solver_result.float_mask.size() != expected_cells) {
+    RCLCPP_WARN(logger_,
+                "ElevationSolver returned mismatched result size. "
+                "ground=%zu ceiling=%zu clearance=%zu mask=%zu expected=%zu",
+                solver_result.ground.size(), solver_result.ceiling.size(),
+                solver_result.clearance.size(), solver_result.float_mask.size(),
+                expected_cells);
+    return;
+  }
+
+  const auto &ground_values = solver_result.ground;
+  const auto &ceiling_values = solver_result.ceiling;
+  const auto &clearance_values = solver_result.clearance;
+  const auto &float_mask = solver_result.float_mask;
+
+  for (int r = 0; r < rows; ++r) {
+    for (int c = 0; c < cols; ++c) {
+      const std::size_t idx =
+          static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) +
+          static_cast<std::size_t>(c);
+      const float ground_z = ground_values[idx];
+      const float ceiling_z = ceiling_values[idx];
+      const float clearance = clearance_values[idx];
+      const uint8_t mask = float_mask[idx];
+
+      if (std::isfinite(ground_z)) {
+        ground_layer(r, c) = ground_z;
+      }
+
+      if (std::isfinite(ceiling_z)) {
+        ceiling_layer(r, c) = ceiling_z;
+      } else {
+        ceiling_layer(r, c) = std::numeric_limits<float>::quiet_NaN();
+      }
+
+      if (mask == 0 && std::isfinite(ceiling_z)) {
+        elevation_layer(r, c) = ceiling_z;
+      } else if (std::isfinite(ground_z)) {
+        elevation_layer(r, c) = ground_z;
+      }
+
+      clearance_layer(r, c) = clearance;
+      float_mask_layer(r, c) = static_cast<float>(mask);
     }
   }
 }
@@ -303,7 +456,7 @@ void ElevationMap::inpaint(const std::string &layer_height,
     dr::fillMinValues(*this, layer_height, layer_filled);
     break;
   case Inpaint::MinLimit:
-    dr::fillMinValuesLimited(*this, layer_height, layer_filled, 20, true, 0.8f);
+    dr::fillMinValuesLimited(*this, layer_height, layer_filled, 200, true, 0.8f);
     break;
   case Inpaint::Max:
     dr::fillMaxValues(*this, layer_height, layer_filled);
@@ -349,9 +502,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       std::max(4, static_cast<int>(0.6f * nan_radius_cells * nan_radius_cells));
   const float drop_buffer = 0.02f;
   const float far_distance = 6.0f;
-
-  std::vector<int8_t> cliff_cache(size_x * size_y, -1);
-
+  std::vector<CliffState> cliff_cache(size_x * size_y, CliffState::Unknown);
   get("passability").setConstant(toFloat(Passability::Unknown));
   std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
@@ -393,12 +544,13 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
-        if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
-                             nan_min_cells, drop_buffer, far_distance,
-                             cliff_cache)) {
-          setPassability(curr_idx, Passability::Impassable);
-          curr_is_cliff = true;
-        }
+        setPassability(curr_idx, Passability::Impassable);
+        // if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
+        //                      nan_min_cells, drop_buffer, far_distance,
+        //                      cliff_cache)) {
+        //   setPassability(curr_idx, Passability::Impassable);
+        //   curr_is_cliff = true;
+        // }
         continue;
       }
       if (visited[idx])
@@ -426,25 +578,23 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   }
 }
 
-bool ElevationMap::isCliffCandidate(int cx, int cy,
-                                    const Eigen::Affine3f &T_g2b,
-                                    float drop_thres, int nan_radius_cells,
-                                    int nan_min_cells, float drop_buffer,
-                                    float far_distance,
-                                    std::vector<int8_t> &cliff_cache) const {
+bool ElevationMap::isCliffCandidate(
+    int cx, int cy, const Eigen::Affine3f &T_g2b, float drop_thres,
+    int nan_radius_cells, int nan_min_cells, float drop_buffer,
+    float far_distance, std::vector<CliffState> &cliff_cache) const {
   const auto size = getSize();
   const int size_x = size.x();
   const int size_y = size.y();
   const int idx = cx + cy * size_x;
-  if (cliff_cache[idx] != -1) {
-    return cliff_cache[idx] == 1;
+  if (cliff_cache[idx] != CliffState::Unknown) {
+    return cliff_cache[idx] == CliffState::Cliff;
   }
 
   const auto &height_layer = get("elevation");
   const grid_map::Index center_idx(cx, cy);
   float center_height = height_layer(center_idx.x(), center_idx.y());
   if (!std::isfinite(center_height)) {
-    cliff_cache[idx] = 1;
+    cliff_cache[idx] = CliffState::Cliff;
     return true;
   }
 
@@ -493,7 +643,7 @@ bool ElevationMap::isCliffCandidate(int cx, int cy,
       (center_height - min_neighbor_height) > (drop_thres + drop_buffer);
 
   const bool is_cliff = sufficient_nan && drop_sufficient;
-  cliff_cache[idx] = is_cliff ? 1 : 0;
+  cliff_cache[idx] = is_cliff ? CliffState::Cliff : CliffState::NotCliff;
   return is_cliff;
 }
 

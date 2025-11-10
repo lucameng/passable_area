@@ -61,6 +61,7 @@ private:
   float voxel_width_;
   float max_drop_;
   float rough_thres_;
+
   float clearance_threshold_;
   float baseline_radius_;
 
@@ -75,6 +76,14 @@ private:
     float length;
     float width;
   };
+
+  bool use_legacy_elevation_;
+  int elevation_solver_bins_;
+  bool solver_region_enabled_;
+  float solver_region_min_x_;
+  float solver_region_max_x_;
+  float solver_region_min_y_;
+  float solver_region_max_y_;
 
 private:
   void elevationInit();
