@@ -1,12 +1,16 @@
-passable_node:
+passable_area:
   ros__parameters:
+    map_length:    10.0
     map_width:     10.0
-    map_height:    3.0
+    map_height_min: -1.5
+    map_height_max:  1.5
     voxel_size:    0.05
     body_length:   0.9
     body_width:    0.4
     max_drop:      0.18
     max_roughness: 0.04
+    clearance_threshold: 0.05
+    baseline_radius: 0.5
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"

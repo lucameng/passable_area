@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>passable_node</name>
+  <name>passable_area</name>
   <version>0.0.2</version>
-  <description>The passable_node package</description>
+  <description>The passable_area package</description>
 
   <maintainer email="deeprobotics@todo.todo">deeprobotics</maintainer>
   <license>TODO</license>
