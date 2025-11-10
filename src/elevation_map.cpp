@@ -456,7 +456,7 @@ void ElevationMap::inpaint(const std::string &layer_height,
     dr::fillMinValues(*this, layer_height, layer_filled);
     break;
   case Inpaint::MinLimit:
-    dr::fillMinValuesLimited(*this, layer_height, layer_filled, 20, true, 0.8f);
+    dr::fillMinValuesLimited(*this, layer_height, layer_filled, 200, true, 0.8f);
     break;
   case Inpaint::Max:
     dr::fillMaxValues(*this, layer_height, layer_filled);
@@ -544,6 +544,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
+        setPassability(curr_idx, Passability::Impassable);
         // if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
         //                      nan_min_cells, drop_buffer, far_distance,
         //                      cliff_cache)) {
