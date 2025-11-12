@@ -41,6 +41,7 @@ PassableAreaNode::PassableAreaNode()
   }
   loadBodyGeometry();
   loadElevationSolverParams();
+  loadTraversalCostParams();
 }
 
 void PassableAreaNode::loadBodyGeometry() {
@@ -84,6 +85,39 @@ void PassableAreaNode::loadElevationSolverParams() {
       declare_parameter<float>(base + "region_min_y", 0.0f);
   solver_params_.region.max_y =
       declare_parameter<float>(base + "region_max_y", 0.0f);
+}
+
+void PassableAreaNode::loadTraversalCostParams() {
+  traversal_cost_params_.enabled =
+      declare_parameter("traversal_cost.enable", true);
+  traversal_cost_params_.slope_free_deg =
+      declare_parameter("traversal_cost.slope_free_deg", 5.0f);
+  traversal_cost_params_.slope_block_deg =
+      declare_parameter("traversal_cost.slope_block_deg", 30.0f);
+  traversal_cost_params_.rough_free =
+      declare_parameter("traversal_cost.rough_free", 0.02f);
+  traversal_cost_params_.rough_block =
+      declare_parameter("traversal_cost.rough_block", 0.08f);
+  traversal_cost_params_.step_free =
+      declare_parameter("traversal_cost.step_free", 0.05f);
+  traversal_cost_params_.step_block =
+      declare_parameter("traversal_cost.step_block", 0.18f);
+  traversal_cost_params_.slope_weight =
+      declare_parameter("traversal_cost.slope_weight", 0.4f);
+  traversal_cost_params_.roughness_weight =
+      declare_parameter("traversal_cost.roughness_weight", 0.3f);
+  traversal_cost_params_.step_weight =
+      declare_parameter("traversal_cost.step_weight", 0.3f);
+  traversal_cost_params_.easy_cost =
+      declare_parameter("traversal_cost.easy_cost", 1.0f);
+  traversal_cost_params_.hard_cost =
+      declare_parameter("traversal_cost.hard_cost", 60.0f);
+  traversal_cost_params_.max_cost =
+      declare_parameter("traversal_cost.max_cost", 100.0f);
+  traversal_cost_params_.curve_power =
+      declare_parameter("traversal_cost.curve_power", 3.0f);
+  traversal_cost_params_.roughness_window =
+      declare_parameter<int>("traversal_cost.roughness_window", 1);
 }
 
 std::string
@@ -134,9 +168,10 @@ void PassableAreaNode::elevationInit() {
   ele_map_ = std::make_unique<ElevationMap>(
       map_length_, map_width_, min_height_, max_height_, voxel_width_,
       used_frame_, get_logger());
-  ele_map_->setSolverParams(solver_params_);
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
+  ele_map_->setSolverParams(solver_params_);
+  ele_map_->setTraversalCostParams(traversal_cost_params_);
   ele_init_ = true;
 }
 

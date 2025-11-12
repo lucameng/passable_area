@@ -16,7 +16,8 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
     : grid_map::GridMap({"elevation", "ground_height", "ceiling_height",
                          "clearance", "float_mask", "passability",
                          "coverability", "padding", "point_count",
-                         "dummy_height"}),
+                         "dummy_height", "slope", "terrain_roughness",
+                         "step_height", "traversal_cost"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
@@ -38,6 +39,10 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   get("ceiling_height").setConstant(std::numeric_limits<float>::quiet_NaN());
   get("clearance").setConstant(std::numeric_limits<float>::infinity());
   get("float_mask").setZero();
+  get("slope").setConstant(std::numeric_limits<float>::quiet_NaN());
+  get("terrain_roughness").setConstant(std::numeric_limits<float>::quiet_NaN());
+  get("step_height").setConstant(std::numeric_limits<float>::quiet_NaN());
+  get("traversal_cost").setConstant(std::numeric_limits<float>::quiet_NaN());
 
   solver_params_.min_points = 1;
   solver_params_.ceiling_window_bins = 2;
@@ -71,6 +76,37 @@ void ElevationMap::setCenterPaddingParams(bool enabled, float radius) noexcept {
   center_padding_radius_ = std::max(0.0f, radius);
 }
 
+void ElevationMap::setTraversalCostParams(
+    const TraversalCostParams &params) noexcept {
+  traversal_params_ = params;
+  traversal_params_.roughness_window =
+      std::max(1, traversal_params_.roughness_window);
+  const float weight_sum = traversal_params_.slope_weight +
+                           traversal_params_.roughness_weight +
+                           traversal_params_.step_weight;
+  if (weight_sum <= 0.0f) {
+    traversal_params_.slope_weight = 1.0f;
+    traversal_params_.roughness_weight = 0.0f;
+    traversal_params_.step_weight = 0.0f;
+  }
+  if (traversal_params_.curve_power <= 0.0f) {
+    traversal_params_.curve_power = 1.0f;
+  }
+  traversal_params_.hard_cost =
+      std::min(traversal_params_.hard_cost, traversal_params_.max_cost);
+  traversal_params_.easy_cost =
+      std::min(traversal_params_.easy_cost, traversal_params_.hard_cost);
+  if (traversal_params_.slope_block_deg <= traversal_params_.slope_free_deg) {
+    traversal_params_.slope_block_deg = traversal_params_.slope_free_deg + 1.0f;
+  }
+  if (traversal_params_.rough_block <= traversal_params_.rough_free) {
+    traversal_params_.rough_block = traversal_params_.rough_free + 0.01f;
+  }
+  if (traversal_params_.step_block <= traversal_params_.step_free) {
+    traversal_params_.step_block = traversal_params_.step_free + 0.01f;
+  }
+}
+
 void ElevationMap::processPointCloud(
     const sensor_msgs::msg::PointCloud2 &ros_cloud, float rough_thres,
     float drop_thres, const Eigen::Affine3f &T_g2b, bool fill_blind) {
@@ -82,7 +118,10 @@ void ElevationMap::processPointCloud(
     fillElevationHoles("elevation", "padding", 1.2f, 10);
     // fillPointCloudFromLayer("elevation", "padding");
   }
-  judgePassability(rough_thres, drop_thres, 3, T_g2b);
+  const int rough_kernel =
+      std::clamp(2 * traversal_params_.roughness_window + 1, 3, 7);
+  judgePassability(rough_thres, drop_thres, rough_kernel, T_g2b);
+  updateTraversalCostLayer();
 }
 
 void ElevationMap::setInputCloud(
@@ -397,8 +436,8 @@ int ElevationMap::getPointCount(const Eigen::Vector2d &pos) const {
   return static_cast<int>(atPosition("point_count", pos));
 }
 
-float ElevationMap::errorFromCovariance(const Eigen::Vector3f &mean,
-                                        const Eigen::Matrix3f &square) const {
+float ElevationMap::extractVariance(const Eigen::Vector3f &mean,
+                                    const Eigen::Matrix3f &square) const {
   const Eigen::Matrix3f covari_matrix = square - mean * mean.transpose();
 
   Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver;
@@ -414,9 +453,9 @@ float ElevationMap::errorFromCovariance(const Eigen::Vector3f &mean,
   }
 }
 
-float ElevationMap::computeError(int x, int y, int kernel_size,
-                                 Eigen::Vector3f &mean,
-                                 Eigen::Matrix3f &square) const {
+float ElevationMap::computeRoughness(int x, int y, int kernel_size,
+                                     Eigen::Vector3f &mean,
+                                     Eigen::Matrix3f &square) const {
   int N = 0;
   int bias = (kernel_size - 1) / 2;
   Eigen::Vector3f sum = Eigen::Vector3f::Zero();
@@ -442,7 +481,7 @@ float ElevationMap::computeError(int x, int y, int kernel_size,
   else {
     mean = sum / N;
     square = sum_square / N;
-    return errorFromCovariance(mean, square);
+    return extractVariance(mean, square);
   }
 }
 
@@ -506,12 +545,36 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   const float far_distance = 6.0f;
   std::vector<CliffState> cliff_cache(size_x * size_y, CliffState::Unknown);
   get("passability").setConstant(toFloat(Passability::Unknown));
+  auto &rough_layer = get("terrain_roughness");
+  auto &step_layer = get("step_height");
+  rough_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
+  step_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
   std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
 
   que.emplace(center_x, center_y);
   visited[linear_index(center_x, center_y)] = true;
   setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
+  auto assign_roughness = [&](int cell_x, int cell_y) {
+    if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
+      return;
+    float &slot = rough_layer(cell_x, cell_y);
+    if (std::isfinite(slot))
+      return;
+    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+    Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
+    float variance =
+        computeRoughness(cell_x, cell_y, kernel_size, mean, square);
+    slot = std::sqrt(std::max(0.0f, variance));
+  };
+  auto update_step = [&](const grid_map::Index &idx, float diff) {
+    if (idx.x() < 0 || idx.x() >= size_x || idx.y() < 0 || idx.y() >= size_y)
+      return;
+    float &slot = step_layer(idx.x(), idx.y());
+    if (!std::isfinite(slot) || diff > slot)
+      slot = diff;
+  };
+  assign_roughness(center_x, center_y);
 
   int back_x = std::min(static_cast<int>(center_x * 1.8f), size_x - 1);
   int back_y = center_y;
@@ -519,6 +582,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   que.emplace(back_x, back_y);
   visited[linear_index(back_x, back_y)] = true;
   setPassability(Eigen::Array2i(back_x, back_y), Passability::Passable);
+  assign_roughness(back_x, back_y);
 
   const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
@@ -561,6 +625,8 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       float height_diff = nbr_height - curr_height;
       height_diff = std::fabs(projectToBodyZ(height_diff, T_g2b.linear()));
+      update_step(curr_idx, height_diff);
+      update_step(nbr_idx, height_diff);
       if (height_diff > drop_thres) {
         setPassability(nbr_idx, Passability::Impassable);
         continue;
@@ -568,13 +634,15 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       Eigen::Vector3f mean = Eigen::Vector3f::Zero();
       Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
-      auto e = computeError(nx, ny, kernel_size, mean, square);
+      auto e = computeRoughness(nx, ny, kernel_size, mean, square);
+      rough_layer(nx, ny) = std::sqrt(std::max(0.0f, e));
       if (!isPassable(e, rough_thres) && curr_height > mean.z()) {
         setPassability(nbr_idx, Passability::Impassable);
         continue;
       }
 
       setPassability(nbr_idx, Passability::Passable);
+      assign_roughness(nx, ny);
       que.emplace(nx, ny);
     }
   }
@@ -743,4 +811,138 @@ void ElevationMap::fillPointCloudFromLayer(const std::string &layer_height,
   cloud.width = cloud.points.size();
   cloud.height = 1;
   cloud.is_dense = true;
+}
+
+void ElevationMap::updateTraversalCostLayer() {
+  auto &slope_layer = get("slope");
+  const auto &rough_layer = get("terrain_roughness");
+  const auto &step_layer = get("step_height");
+  auto &cost_layer = get("traversal_cost");
+  const auto &elevation_layer = get("elevation");
+  const auto &passability_layer = get("passability");
+
+  slope_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
+
+  if (!traversal_params_.enabled) {
+    cost_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
+    return;
+  }
+
+  cost_layer.setConstant(traversal_params_.max_cost);
+
+  const auto size = getSize();
+  const int rows = size.x();
+  const int cols = size.y();
+  const float weight_sum =
+      std::max(1e-3f, traversal_params_.slope_weight +
+                          traversal_params_.roughness_weight +
+                          traversal_params_.step_weight);
+
+  for (int r = 0; r < rows; ++r) {
+    for (int c = 0; c < cols; ++c) {
+      const float height = elevation_layer(r, c);
+      if (!std::isfinite(height)) {
+        continue;
+      }
+
+      const Passability pass = toPassability(passability_layer(r, c));
+      if (pass == Passability::Impassable) {
+        cost_layer(r, c) = traversal_params_.max_cost;
+        continue;
+      }
+
+      const float slope_deg = computeSlopeDeg(r, c, elevation_layer);
+      float roughness = rough_layer(r, c);
+      float step = step_layer(r, c);
+      if (!std::isfinite(roughness) || !std::isfinite(step)) {
+        cost_layer(r, c) = traversal_params_.max_cost;
+        continue;
+      }
+
+      slope_layer(r, c) = slope_deg;
+
+      const bool beyond_limit =
+          slope_deg >= traversal_params_.slope_block_deg ||
+          roughness >= traversal_params_.rough_block ||
+          step >= traversal_params_.step_block;
+      if (beyond_limit) {
+        cost_layer(r, c) = traversal_params_.max_cost;
+        continue;
+      }
+
+      if (pass == Passability::Unknown) {
+        cost_layer(r, c) = traversal_params_.hard_cost;
+        continue;
+      }
+
+      const float slope_ratio =
+          normalizeMetric(slope_deg, traversal_params_.slope_free_deg,
+                          traversal_params_.slope_block_deg);
+      const float rough_ratio =
+          normalizeMetric(roughness, traversal_params_.rough_free,
+                          traversal_params_.rough_block);
+      const float step_ratio = normalizeMetric(
+          step, traversal_params_.step_free, traversal_params_.step_block);
+
+      float difficulty = (slope_ratio * traversal_params_.slope_weight +
+                          rough_ratio * traversal_params_.roughness_weight +
+                          step_ratio * traversal_params_.step_weight) /
+                         weight_sum;
+      difficulty = std::clamp(difficulty, 0.0f, 1.0f);
+
+      const float curve_power = std::max(0.1f, traversal_params_.curve_power);
+      const float shaped = std::pow(difficulty, curve_power);
+      float cost =
+          traversal_params_.easy_cost +
+          (traversal_params_.hard_cost - traversal_params_.easy_cost) * shaped;
+      cost = std::clamp(cost, traversal_params_.easy_cost,
+                        traversal_params_.hard_cost);
+      cost_layer(r, c) = cost;
+    }
+  }
+}
+
+float ElevationMap::computeSlopeDeg(int row, int col,
+                                    const grid_map::Matrix &elevation) const {
+  const float center = elevation(row, col);
+  if (!std::isfinite(center))
+    return 0.0f;
+
+  const auto size = getSize();
+  const int rows = size.x();
+  const int cols = size.y();
+  const auto sample = [&](int r, int c) -> float {
+    if (r < 0 || r >= rows || c < 0 || c >= cols)
+      return std::numeric_limits<float>::quiet_NaN();
+    return elevation(r, c);
+  };
+
+  const float resolution = grid_size_;
+  const auto gradientAlong = [&](float neg, float pos) -> float {
+    if (std::isfinite(neg) && std::isfinite(pos)) {
+      return (pos - neg) * 0.5f / resolution;
+    }
+    if (std::isfinite(pos)) {
+      return (pos - center) / resolution;
+    }
+    if (std::isfinite(neg)) {
+      return (center - neg) / resolution;
+    }
+    return 0.0f;
+  };
+
+  const float dzdx = gradientAlong(sample(row, col - 1), sample(row, col + 1));
+  const float dzdy = gradientAlong(sample(row - 1, col), sample(row + 1, col));
+  const float slope_rad = std::atan(std::sqrt(dzdx * dzdx + dzdy * dzdy));
+  return slope_rad * RAD2DEG;
+}
+
+float ElevationMap::normalizeMetric(float value, float free_threshold,
+                                    float block_threshold) const noexcept {
+  if (block_threshold <= free_threshold) {
+    return value > free_threshold ? 1.0f : 0.0f;
+  }
+  const float normalized =
+      (value - free_threshold) / (block_threshold - free_threshold);
+  return std::clamp(normalized, 0.0f, 1.0f);
 }

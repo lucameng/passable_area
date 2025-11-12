@@ -22,6 +22,7 @@
 
 class ElevationMap : public grid_map::GridMap {
 public:
+  struct TraversalCostParams;
   ElevationMap() = default;
   explicit ElevationMap(
       float map_length, float map_width, float min_height, float max_height,
@@ -65,9 +66,28 @@ public:
   float getGridSize() const noexcept { return grid_size_; }
   grid_map::Size getCellSize() const noexcept { return map_cells_; }
   float getBaselineGround(float radius) const;
-  void setSolverParams(const ElevationSolverParams &params) noexcept;
   void setMaxInpaintPixels(int max_pixels) noexcept;
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
+  void setSolverParams(const ElevationSolverParams &params) noexcept;
+  void setTraversalCostParams(const TraversalCostParams &params) noexcept;
+
+  struct TraversalCostParams {
+    bool enabled{false};
+    float slope_free_deg{5.0f};
+    float slope_block_deg{30.0f};
+    float rough_free{0.02f};
+    float rough_block{0.08f};
+    float step_free{0.05f};
+    float step_block{0.18f};
+    float slope_weight{0.4f};
+    float roughness_weight{0.3f};
+    float step_weight{0.3f};
+    float easy_cost{1.0f};
+    float hard_cost{60.0f};
+    float max_cost{100.0f};
+    float curve_power{3.0f};
+    int roughness_window{1};
+  };
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -86,10 +106,10 @@ private:
     return isInside(pos);
   }
 
-  float errorFromCovariance(const Eigen::Vector3f &mean,
-                            const Eigen::Matrix3f &square) const;
-  float computeError(int x, int y, int kernel_size, Eigen::Vector3f &mean,
-                     Eigen::Matrix3f &square) const;
+  float extractVariance(const Eigen::Vector3f &mean,
+                        const Eigen::Matrix3f &square) const;
+  float computeRoughness(int x, int y, int kernel_size, Eigen::Vector3f &mean,
+                         Eigen::Matrix3f &square) const;
   void inpaint(const std::string &layer_height, const std::string &layer_filled,
                Inpaint method);
   void denoise(const std::string &layer_height, Denoise method,
@@ -111,6 +131,11 @@ private:
                           const Eigen::Vector2f &bound_max = {4.f, 0.7f});
   void fillPointCloudFromLayer(const std::string &layer_height = "elevation",
                                const std::string &layer_filled = "padding");
+  void updateTraversalCostLayer();
+  float computeSlopeDeg(int row, int col,
+                        const grid_map::Matrix &elevation) const;
+  float normalizeMetric(float value, float free_threshold,
+                        float block_threshold) const noexcept;
 
 private:
   PointCloudXYZ working_cloud_;
@@ -127,6 +152,7 @@ private:
   rclcpp::Logger logger_;
 
   ElevationSolverParams solver_params_;
+  TraversalCostParams traversal_params_;
 };
 
 #endif // ELEVATION_MAP_HPP

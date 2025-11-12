@@ -79,6 +79,7 @@ private:
   bool ele_init_;
   bool lidar_init_;
   bool enable_blind_check_;
+  ElevationMap::TraversalCostParams traversal_cost_params_;
   struct BodyGeometry {
     float length;
     float width;
@@ -98,6 +99,7 @@ private:
   Eigen::Affine3f getTransform() const;
   void loadBodyGeometry();
   void loadElevationSolverParams();
+  void loadTraversalCostParams();
   std::string normalizeModelKey(const std::string &dog_model) const;
   BodyGeometry defaultBodyGeometry() const { return {0.9f, 0.4f, 0.5f}; }
 };
