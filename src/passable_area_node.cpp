@@ -29,8 +29,8 @@ PassableAreaNode::PassableAreaNode()
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
       used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
       dog_model_(declare_parameter<std::string>("dog_model", "m20")),
-      body_length_(0.0f), body_width_(0.0f), body_height_(0.0f), body_l_(0),
-      body_w_(0), T_g2b_(Eigen::Affine3f::Identity()) {
+      body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
+      T_g2b_(Eigen::Affine3f::Identity()) {
   if (min_height_ > max_height_) {
     std::swap(min_height_, max_height_);
   }
@@ -55,16 +55,6 @@ void PassableAreaNode::loadBodyGeometry() {
       declare_parameter<float>(base_param + "body_width", defaults.width);
   body_height_ =
       declare_parameter<float>(base_param + "body_height", defaults.height);
-
-  if (voxel_width_ <= 0.0f) {
-    RCLCPP_WARN(get_logger(),
-                "voxel_size must be positive; skipping body geometry scaling.");
-    body_l_ = 0;
-    body_w_ = 0;
-  } else {
-    body_l_ = static_cast<int>(body_length_ / voxel_width_);
-    body_w_ = static_cast<int>(body_width_ / voxel_width_);
-  }
 
   RCLCPP_INFO(get_logger(),
               "Body geometry for model '%s': length=%.3f m, width=%.3f m, "

@@ -68,8 +68,6 @@ private:
   float body_length_;
   float body_width_;
   float body_height_;
-  int body_l_;
-  int body_w_;
   bool ele_init_;
   bool lidar_init_;
   bool enable_blind_check_;
