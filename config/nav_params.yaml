@@ -26,13 +26,3 @@ passable_area:
     dog_model:     "m20"
 
     enable_blind_check: true
-
-    dog_models:
-      x30:
-        body_params:
-          body_length: 0.9
-          body_width: 0.4
-      m20:
-        body_params:
-          body_length: 0.82
-          body_width: 0.43

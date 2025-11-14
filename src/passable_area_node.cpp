@@ -29,7 +29,7 @@ PassableAreaNode::PassableAreaNode()
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
       used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
       dog_model_(declare_parameter<std::string>("dog_model", "m20")),
-      body_length_(0.0f), body_width_(0.0f), body_l_(0), body_w_(0),
+      body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
       T_g2b_(Eigen::Affine3f::Identity()) {
   if (min_height_ > max_height_) {
     std::swap(min_height_, max_height_);
@@ -47,26 +47,19 @@ void PassableAreaNode::loadBodyGeometry() {
   }
 
   const BodyGeometry defaults = defaultBodyGeometry();
-  const std::string base_param = "dog_models." + model_key + ".body_params.";
+  const std::string base_param = "body_params." + model_key + ".";
 
   body_length_ =
       declare_parameter<float>(base_param + "body_length", defaults.length);
   body_width_ =
       declare_parameter<float>(base_param + "body_width", defaults.width);
-
-  if (voxel_width_ <= 0.0f) {
-    RCLCPP_WARN(get_logger(),
-                "voxel_size must be positive; skipping body geometry scaling.");
-    body_l_ = 0;
-    body_w_ = 0;
-  } else {
-    body_l_ = static_cast<int>(body_length_ / voxel_width_);
-    body_w_ = static_cast<int>(body_width_ / voxel_width_);
-  }
+  body_height_ =
+      declare_parameter<float>(base_param + "body_height", defaults.height);
 
   RCLCPP_INFO(get_logger(),
-              "Body geometry for model '%s': length=%.3f m, width=%.3f m",
-              model_key.c_str(), body_length_, body_width_);
+              "Body geometry for model '%s': length=%.3f m, width=%.3f m, "
+              "height=%.3f m",
+              model_key.c_str(), body_length_, body_width_, body_height_);
 }
 
 std::string
@@ -204,7 +197,7 @@ void PassableAreaNode::bodyVisual() {
 
   body.scale.x = body_length_;
   body.scale.y = body_width_;
-  body.scale.z = 0.3;
+  body.scale.z = body_height_;
 
   body.color.r = 0.0;
   body.color.g = 0.0;
