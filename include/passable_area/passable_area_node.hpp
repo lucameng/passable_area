@@ -67,6 +67,7 @@ private:
 
   float body_length_;
   float body_width_;
+  float body_height_;
   int body_l_;
   int body_w_;
   bool ele_init_;
@@ -75,6 +76,7 @@ private:
   struct BodyGeometry {
     float length;
     float width;
+    float height;
   };
 
   bool use_legacy_elevation_;
@@ -96,7 +98,7 @@ private:
   Eigen::Affine3f getTransform() const;
   void loadBodyGeometry();
   std::string normalizeModelKey(const std::string &dog_model) const;
-  BodyGeometry defaultBodyGeometry() const { return {0.9, 0.4}; }
+  BodyGeometry defaultBodyGeometry() const { return {0.9f, 0.4f, 0.5f}; }
 };
 
 #endif // PASSABLE_AREA_NODE_HPP

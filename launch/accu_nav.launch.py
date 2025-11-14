@@ -7,6 +7,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     passable_share_dir = get_package_share_directory('passable_area')
     passable_params = PathJoinSubstitution([passable_share_dir, 'config', 'nav_params.yaml'])
+    body_params_file = PathJoinSubstitution([passable_share_dir, 'config', 'body_params.yaml'])
     lidar_params_file = PathJoinSubstitution([passable_share_dir, 'config', 'lidar_params.yaml'])
     log_level = LaunchConfiguration('log_level')
 
@@ -26,7 +27,7 @@ def generate_launch_description():
         executable='passable_area',
         name='passable_area',
         output='screen',
-        parameters=[passable_params, lidar_params_file],
+        parameters=[passable_params, body_params_file, lidar_params_file],
         arguments=['--ros-args', '--log-level', log_level],
         remappings=[
             ('cloud_topic', '/accumulate_cloud/cloud_gravity'),

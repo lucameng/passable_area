@@ -1,0 +1,12 @@
+passable_area:
+  ros__parameters:
+    body_params:
+      x30:
+        body_length: 0.9
+        body_width: 0.4
+        body_height: 0.5
+
+      m20:
+        body_length: 0.82
+        body_width: 0.43
+        body_height: 0.5
