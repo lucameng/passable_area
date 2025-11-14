@@ -29,7 +29,7 @@ def generate_launch_description():
         arguments=['--ros-args', '--log-level', log_level],
         remappings=[
             ('cloud_topic', '/accumulate_cloud/cloud_gravity'),
-            ('imu', '/imu/data')
+            ('imu', '/IMU_YESENSE')
         ]
     )
     return LaunchDescription([
