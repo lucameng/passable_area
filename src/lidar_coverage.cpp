@@ -80,7 +80,7 @@ void LidarCoverage::addLidars(const std::string &model,
     LidarParam param;
     param.name = lidar_name;
     const std::string prefix =
-        "dog_models." + model + ".lidar_params." + lidar_name;
+        "lidar_params." + model + "." + lidar_name;
 
     // ----------- pos_body -----------
     std::vector<double> pos_vec;
