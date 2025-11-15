@@ -61,6 +61,7 @@ private:
   float voxel_width_;
   float max_drop_;
   float rough_thres_;
+  int max_inpaint_pixels_;
 
   float clearance_threshold_;
   float baseline_radius_;

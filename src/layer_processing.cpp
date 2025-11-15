@@ -138,27 +138,46 @@ void fillMinValuesLimited(grid_map::GridMap &map,
         }
       }
 
-      bool skip_hole = comp.size() > static_cast<size_t>(max_hole_pixels);
+      const bool hole_too_big =
+          comp.size() > static_cast<size_t>(max_hole_pixels);
+      const bool allow_center_override =
+          enable_center_padding && center_dist_thresh > 0.0f;
 
-      if (enable_center_padding) {
-        float r_avg = r_sum / comp.size();
-        float c_avg = c_sum / comp.size();
-        float dist_to_center =
-            map.getResolution() *
-            std::sqrt((r_avg - r_center) * (r_avg - r_center) +
-                      (c_avg - c_center) * (c_avg - c_center));
-        if (dist_to_center < center_dist_thresh) {
-          skip_hole = false;
+      auto cell_distance = [&](float r_idx, float c_idx) {
+        const float dr = r_idx - r_center;
+        const float dc = c_idx - c_center;
+        return map.getResolution() * std::hypot(dr, dc);
+      };
+
+      auto canFill = [&](const Pixel &px) {
+        if (!hole_too_big)
+          return true;
+        if (!allow_center_override)
+          return false;
+        return cell_distance(static_cast<float>(px.r),
+                             static_cast<float>(px.c)) < center_dist_thresh;
+      };
+
+      if (hole_too_big && !allow_center_override)
+        continue;
+
+      bool has_fillable_cell = false;
+      for (const auto &px : comp) {
+        if (canFill(px)) {
+          has_fillable_cell = true;
+          break;
         }
       }
 
-      if (skip_hole)
+      if (!has_fillable_cell)
         continue;
 
       bool changed = true;
       for (int iter = 0; iter < 3 && changed; ++iter) {
         changed = false;
         for (auto &px : comp) {
+          if (!canFill(px))
+            continue;
           int i = px.r, j = px.c;
           float &center = H_ele(i, j);
           for (int k = 0; k < 4; ++k) {
