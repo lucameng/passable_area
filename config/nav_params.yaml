@@ -8,6 +8,8 @@ passable_area:
     max_drop:      0.25
     max_roughness: 0.10
     max_inpaint_pixels: 200
+    enable_center_padding: true
+    center_dist_thresh: 0.8
     clearance_threshold: 0.0
     baseline_radius: 0.0
 

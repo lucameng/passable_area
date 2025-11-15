@@ -20,8 +20,9 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
-      max_height_(std::max(min_height, max_height)), max_inpaint_pixels_(20),
-      grid_size_(grid_s), frame_(frame_id), logger_(logger) {
+      max_height_(std::max(min_height, max_height)), grid_size_(grid_s),
+      max_inpaint_pixels_(200), center_padding_enabled_(true),
+      center_padding_radius_(0.8f), frame_(frame_id), logger_(logger) {
   if ((max_height_ - min_height_) < grid_size_) {
     max_height_ = min_height_ + grid_size_;
   }
@@ -71,7 +72,12 @@ void ElevationMap::setSolverRegion(bool enabled, float min_x, float max_x,
 }
 
 void ElevationMap::setMaxInpaintPixels(int max_pixels) noexcept {
-  max_inpaint_pixels_ = std::max(0, max_pixels);
+  max_inpaint_pixels_ = std::max(1, max_pixels);
+}
+
+void ElevationMap::setCenterPaddingParams(bool enabled, float radius) noexcept {
+  center_padding_enabled_ = enabled;
+  center_padding_radius_ = std::max(0.0f, radius);
 }
 
 void ElevationMap::processPointCloud(
@@ -461,7 +467,8 @@ void ElevationMap::inpaint(const std::string &layer_height,
     break;
   case Inpaint::MinLimit:
     dr::fillMinValuesLimited(*this, layer_height, layer_filled,
-                             max_inpaint_pixels_, true, 0.8f);
+                             max_inpaint_pixels_, center_padding_enabled_,
+                             center_padding_radius_);
     break;
   case Inpaint::Max:
     dr::fillMaxValues(*this, layer_height, layer_filled);
