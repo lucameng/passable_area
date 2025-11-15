@@ -47,7 +47,7 @@ passable_area:
       roughness_weight: 0.3
       step_weight: 0.3
       easy_cost: 1.0
-      hard_cost: 70.0
-      max_cost: 100.0
+      hard_cost: 127.0
+      max_cost: 254.0
       curve_power: 3.0
       roughness_window: 1

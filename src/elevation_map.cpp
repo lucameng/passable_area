@@ -16,7 +16,7 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
     : grid_map::GridMap({"elevation", "ground_height", "ceiling_height",
                          "clearance", "float_mask", "passability",
                          "coverability", "padding", "point_count",
-                         "dummy_height", "slope", "terrain_roughness",
+                         "dummy_height", "slope", "roughness",
                          "step_height", "traversal_cost"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
@@ -40,7 +40,7 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   get("clearance").setConstant(std::numeric_limits<float>::infinity());
   get("float_mask").setZero();
   get("slope").setConstant(std::numeric_limits<float>::quiet_NaN());
-  get("terrain_roughness").setConstant(std::numeric_limits<float>::quiet_NaN());
+  get("roughness").setConstant(std::numeric_limits<float>::quiet_NaN());
   get("step_height").setConstant(std::numeric_limits<float>::quiet_NaN());
   get("traversal_cost").setConstant(std::numeric_limits<float>::quiet_NaN());
 
@@ -81,6 +81,12 @@ void ElevationMap::setTraversalCostParams(
   traversal_params_ = params;
   traversal_params_.roughness_window =
       std::max(1, traversal_params_.roughness_window);
+  traversal_params_.max_cost =
+      std::clamp(traversal_params_.max_cost, 0.0f, 254.0f);
+  traversal_params_.hard_cost =
+      std::clamp(traversal_params_.hard_cost, 0.0f, traversal_params_.max_cost);
+  traversal_params_.easy_cost = std::clamp(traversal_params_.easy_cost, 0.0f,
+                                           traversal_params_.hard_cost);
   const float weight_sum = traversal_params_.slope_weight +
                            traversal_params_.roughness_weight +
                            traversal_params_.step_weight;
@@ -545,7 +551,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   const float far_distance = 6.0f;
   std::vector<CliffState> cliff_cache(size_x * size_y, CliffState::Unknown);
   get("passability").setConstant(toFloat(Passability::Unknown));
-  auto &rough_layer = get("terrain_roughness");
+  auto &rough_layer = get("roughness");
   auto &step_layer = get("step_height");
   rough_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
   step_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
@@ -555,6 +561,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   que.emplace(center_x, center_y);
   visited[linear_index(center_x, center_y)] = true;
   setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
+
   auto assign_roughness = [&](int cell_x, int cell_y) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
       return;
@@ -567,6 +574,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         computeRoughness(cell_x, cell_y, kernel_size, mean, square);
     slot = std::sqrt(std::max(0.0f, variance));
   };
+
   auto update_step = [&](const grid_map::Index &idx, float diff) {
     if (idx.x() < 0 || idx.x() >= size_x || idx.y() < 0 || idx.y() >= size_y)
       return;
@@ -574,6 +582,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
     if (!std::isfinite(slot) || diff > slot)
       slot = diff;
   };
+
   assign_roughness(center_x, center_y);
 
   int back_x = std::min(static_cast<int>(center_x * 1.8f), size_x - 1);
@@ -815,7 +824,7 @@ void ElevationMap::fillPointCloudFromLayer(const std::string &layer_height,
 
 void ElevationMap::updateTraversalCostLayer() {
   auto &slope_layer = get("slope");
-  const auto &rough_layer = get("terrain_roughness");
+  const auto &rough_layer = get("roughness");
   const auto &step_layer = get("step_height");
   auto &cost_layer = get("traversal_cost");
   const auto &elevation_layer = get("elevation");
