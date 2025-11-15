@@ -70,6 +70,7 @@ public:
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
   void setSolverParams(const ElevationSolverParams &params) noexcept;
   void setTraversalCostParams(const TraversalCostParams &params) noexcept;
+  void setMaxSlopeDeg(float deg) noexcept;
 
   struct TraversalCostParams {
     bool enabled{false};
@@ -153,6 +154,7 @@ private:
 
   ElevationSolverParams solver_params_;
   TraversalCostParams traversal_params_;
+  float max_slope_deg_;
 };
 
 #endif // ELEVATION_MAP_HPP

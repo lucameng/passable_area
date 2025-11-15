@@ -16,14 +16,15 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
     : grid_map::GridMap({"elevation", "ground_height", "ceiling_height",
                          "clearance", "float_mask", "passability",
                          "coverability", "padding", "point_count",
-                         "dummy_height", "slope", "roughness",
-                         "step_height", "traversal_cost"}),
+                         "dummy_height", "slope", "roughness", "step_height",
+                         "traversal_cost"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
       max_height_(std::max(min_height, max_height)), grid_size_(grid_s),
-      max_inpaint_pixels_(200), center_padding_enabled_(true),
-      center_padding_radius_(0.8f), frame_(frame_id), logger_(logger) {
+      max_slope_deg_(40.0f), max_inpaint_pixels_(200),
+      center_padding_enabled_(true), center_padding_radius_(0.8f),
+      frame_(frame_id), logger_(logger) {
   if ((max_height_ - min_height_) < grid_size_) {
     max_height_ = min_height_ + grid_size_;
   }
@@ -74,6 +75,10 @@ void ElevationMap::setMaxInpaintPixels(int max_pixels) noexcept {
 void ElevationMap::setCenterPaddingParams(bool enabled, float radius) noexcept {
   center_padding_enabled_ = enabled;
   center_padding_radius_ = std::max(0.0f, radius);
+}
+
+void ElevationMap::setMaxSlopeDeg(float deg) noexcept {
+  max_slope_deg_ = std::clamp(deg, 0.0f, 89.0f);
 }
 
 void ElevationMap::setTraversalCostParams(
@@ -540,6 +545,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   const auto size = getSize();
   const int size_x = size.x();
   const int size_y = size.y();
+  const auto &elevation_layer = get("elevation");
   const auto linear_index = [size_x](int x, int y) { return x + y * size_x; };
   const int center_x = size_x / 2;
   const int center_y = size_y / 2;
@@ -646,6 +652,12 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       auto e = computeRoughness(nx, ny, kernel_size, mean, square);
       rough_layer(nx, ny) = std::sqrt(std::max(0.0f, e));
       if (!isPassable(e, rough_thres) && curr_height > mean.z()) {
+        setPassability(nbr_idx, Passability::Impassable);
+        continue;
+      }
+
+      float slope_deg = computeSlopeDeg(nx, ny, elevation_layer);
+      if (slope_deg > max_slope_deg_) {
         setPassability(nbr_idx, Passability::Impassable);
         continue;
       }
@@ -828,7 +840,6 @@ void ElevationMap::updateTraversalCostLayer() {
   const auto &step_layer = get("step_height");
   auto &cost_layer = get("traversal_cost");
   const auto &elevation_layer = get("elevation");
-  const auto &passability_layer = get("passability");
 
   slope_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
 
@@ -851,12 +862,7 @@ void ElevationMap::updateTraversalCostLayer() {
     for (int c = 0; c < cols; ++c) {
       const float height = elevation_layer(r, c);
       if (!std::isfinite(height)) {
-        continue;
-      }
-
-      const Passability pass = toPassability(passability_layer(r, c));
-      if (pass == Passability::Impassable) {
-        cost_layer(r, c) = traversal_params_.max_cost;
+        cost_layer(r, c) = traversal_params_.easy_cost;
         continue;
       }
 
@@ -864,7 +870,7 @@ void ElevationMap::updateTraversalCostLayer() {
       float roughness = rough_layer(r, c);
       float step = step_layer(r, c);
       if (!std::isfinite(roughness) || !std::isfinite(step)) {
-        cost_layer(r, c) = traversal_params_.max_cost;
+        cost_layer(r, c) = traversal_params_.easy_cost;
         continue;
       }
 
@@ -876,11 +882,6 @@ void ElevationMap::updateTraversalCostLayer() {
           step >= traversal_params_.step_block;
       if (beyond_limit) {
         cost_layer(r, c) = traversal_params_.max_cost;
-        continue;
-      }
-
-      if (pass == Passability::Unknown) {
-        cost_layer(r, c) = traversal_params_.hard_cost;
         continue;
       }
 

@@ -15,6 +15,7 @@ PassableAreaNode::PassableAreaNode()
       voxel_width_(declare_parameter("voxel_size", 0.1f)),
       max_drop_(declare_parameter("max_drop", 0.3f)),
       rough_thres_(declare_parameter("max_roughness", 0.1f)),
+      max_slope_deg_(declare_parameter("max_slope_deg", 40.0f)),
       max_inpaint_pixels_(declare_parameter<int>("max_inpaint_pixels", 200)),
       enable_center_padding_(declare_parameter("enable_center_padding", true)),
       center_dist_thresh_(declare_parameter("center_dist_thresh", 0.8f)),
@@ -171,6 +172,7 @@ void PassableAreaNode::elevationInit() {
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_map_->setSolverParams(solver_params_);
+  ele_map_->setMaxSlopeDeg(max_slope_deg_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
   ele_init_ = true;
 }

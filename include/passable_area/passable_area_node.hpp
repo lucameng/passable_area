@@ -66,6 +66,7 @@ private:
   float voxel_width_;
   float max_drop_;
   float rough_thres_;
+  float max_slope_deg_;
   int max_inpaint_pixels_;
   bool enable_center_padding_;
   float center_dist_thresh_;
