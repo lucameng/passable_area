@@ -837,7 +837,7 @@ void ElevationMap::updateTraversalCostLayer() {
     return;
   }
 
-  cost_layer.setConstant(traversal_params_.max_cost);
+  cost_layer.setConstant(traversal_params_.easy_cost);
 
   const auto size = getSize();
   const int rows = size.x();
