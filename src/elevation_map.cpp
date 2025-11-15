@@ -20,8 +20,8 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
-      max_height_(std::max(min_height, max_height)), grid_size_(grid_s),
-      frame_(frame_id), logger_(logger) {
+      max_height_(std::max(min_height, max_height)), max_inpaint_pixels_(20),
+      grid_size_(grid_s), frame_(frame_id), logger_(logger) {
   if ((max_height_ - min_height_) < grid_size_) {
     max_height_ = min_height_ + grid_size_;
   }
@@ -68,6 +68,10 @@ void ElevationMap::setSolverRegion(bool enabled, float min_x, float max_x,
   solver_region_.max_x = max_x;
   solver_region_.min_y = min_y;
   solver_region_.max_y = max_y;
+}
+
+void ElevationMap::setMaxInpaintPixels(int max_pixels) noexcept {
+  max_inpaint_pixels_ = std::max(0, max_pixels);
 }
 
 void ElevationMap::processPointCloud(
@@ -170,14 +174,14 @@ void ElevationMap::cloud2Elevation() {
   std::vector<uint8_t> region_mask;
   if (solver_region_.enabled) {
     region_mask.resize(static_cast<std::size_t>(rows) *
-                       static_cast<std::size_t>(cols),
+                           static_cast<std::size_t>(cols),
                        static_cast<uint8_t>(0));
     for (int r = 0; r < rows; ++r) {
       for (int c = 0; c < cols; ++c) {
         grid_map::Position pos;
         getPosition({r, c}, pos);
         if (pos.x() >= solver_region_.min_x &&
-            pos.x() <= solver_region_.max_x && 
+            pos.x() <= solver_region_.max_x &&
             pos.y() >= solver_region_.min_y &&
             pos.y() <= solver_region_.max_y) {
           const std::size_t idx =
@@ -456,7 +460,8 @@ void ElevationMap::inpaint(const std::string &layer_height,
     dr::fillMinValues(*this, layer_height, layer_filled);
     break;
   case Inpaint::MinLimit:
-    dr::fillMinValuesLimited(*this, layer_height, layer_filled, 200, true, 0.8f);
+    dr::fillMinValuesLimited(*this, layer_height, layer_filled,
+                             max_inpaint_pixels_, true, 0.8f);
     break;
   case Inpaint::Max:
     dr::fillMaxValues(*this, layer_height, layer_filled);

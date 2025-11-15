@@ -7,6 +7,7 @@ passable_area:
     voxel_size:    0.05
     max_drop:      0.18
     max_roughness: 0.04
+    max_inpaint_pixels: 200
 
     clearance_threshold: 0.0
     baseline_radius: 0.0

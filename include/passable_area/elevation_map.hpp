@@ -69,6 +69,7 @@ public:
   void setSolverBins(int bins) noexcept;
   void setSolverRegion(bool enabled, float min_x, float max_x, float min_y,
                        float max_y) noexcept;
+  void setMaxInpaintPixels(int max_pixels) noexcept;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -120,6 +121,7 @@ private:
   float min_height_;
   float max_height_;
   float grid_size_;
+  int max_inpaint_pixels_;
   grid_map::Size map_cells_;
   std::string frame_;
   rclcpp::Logger logger_;
