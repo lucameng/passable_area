@@ -38,16 +38,16 @@ passable_area:
 
     traversal_cost:
       enable: true
-      slope_free_deg: 5.0
-      slope_block_deg: 32.0
+      slope_free_deg: 8.0
+      slope_block_deg: 40.0
       rough_free: 0.02
-      rough_block: 0.09
-      step_free: 0.05
-      step_block: 0.18
-      slope_weight: 0.4
-      roughness_weight: 0.3
-      step_weight: 0.3
-      easy_cost: 1.0
+      rough_block: 0.10
+      step_free: 0.08
+      step_block: 0.25
+      slope_weight: 0.3
+      roughness_weight: 0.2
+      step_weight: 0.5
+      easy_cost: 0.0
       hard_cost: 127.0
       max_cost: 254.0
       curve_power: 3.0
