@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_ELEVATION_SOLVER_HPP_
-#define PASSABLE_AREA_ELEVATION_SOLVER_HPP_
+#ifndef ELEVATION_SOLVER_HPP_
+#define ELEVATION_SOLVER_HPP_
 
 #include <cstdint>
 #include <limits>
