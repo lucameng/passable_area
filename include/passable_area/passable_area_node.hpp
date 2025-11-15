@@ -62,6 +62,8 @@ private:
   float max_drop_;
   float rough_thres_;
   int max_inpaint_pixels_;
+  bool enable_center_padding_;
+  float center_dist_thresh_;
 
   float clearance_threshold_;
   float baseline_radius_;

@@ -70,6 +70,7 @@ public:
   void setSolverRegion(bool enabled, float min_x, float max_x, float min_y,
                        float max_y) noexcept;
   void setMaxInpaintPixels(int max_pixels) noexcept;
+  void setCenterPaddingParams(bool enabled, float radius) noexcept;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -122,6 +123,8 @@ private:
   float max_height_;
   float grid_size_;
   int max_inpaint_pixels_;
+  bool center_padding_enabled_;
+  float center_padding_radius_;
   grid_map::Size map_cells_;
   std::string frame_;
   rclcpp::Logger logger_;
