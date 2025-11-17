@@ -32,6 +32,15 @@ PassableAreaNode::PassableAreaNode()
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
       used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
       dog_model_(declare_parameter<std::string>("dog_model", "m20")),
+      accumulate_cloud_topic_(declare_parameter<std::string>(
+          "accumulate_cloud_topic", "cloud_topic")),
+      imu_topic_(declare_parameter<std::string>("imu_topic", "imu")),
+      passable_cloud_topic_(declare_parameter<std::string>(
+          "passable_cloud_topic", "passable_area")),
+      impassable_cloud_topic_(declare_parameter<std::string>(
+          "impassable_cloud_topic", "impassable_area")),
+      grid_map_topic_(
+          declare_parameter<std::string>("grid_map_topic", "grid_map")),
       body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
       T_g2b_(Eigen::Affine3f::Identity()) {
   if (min_height_ > max_height_) {
@@ -77,26 +86,35 @@ PassableAreaNode::normalizeModelKey(const std::string &dog_model) const {
 void PassableAreaNode::initialize() {
   RCLCPP_INFO(get_logger(), "Initializing << passable area >>");
   RCLCPP_INFO(get_logger(), "used frame: %s", used_frame_.c_str());
+  RCLCPP_INFO(get_logger(),
+              "Topic configuration:\n"
+              "  cloud: %s\n"
+              "  imu: %s\n"
+              "  passable: %s\n"
+              "  impassable: %s\n"
+              "  grid_map: %s",
+              accumulate_cloud_topic_.c_str(), imu_topic_.c_str(),
+              passable_cloud_topic_.c_str(), impassable_cloud_topic_.c_str(),
+              grid_map_topic_.c_str());
   elevationInit();
 
   if (enable_blind_check_) {
     lidarCoverInit();
   }
   imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
-      "imu", 10,
+      imu_topic_, 10,
       std::bind(&PassableAreaNode::imuCallback, this, std::placeholders::_1));
   cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-      "cloud_topic", 10,
+      accumulate_cloud_topic_, 10,
       std::bind(&PassableAreaNode::cloudCallback, this, std::placeholders::_1));
   body_vis_pub_ =
       create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
-  passable_pub_ =
-      create_publisher<sensor_msgs::msg::PointCloud2>("passable_area", 10);
-  impassable_pub_ =
-      create_publisher<sensor_msgs::msg::PointCloud2>("impassable_area", 10);
-  // expanded_pub_ =
-  // create_publisher<sensor_msgs::msg::PointCloud2>("expanded_area", 10);
-  grid_map_pub_ = create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
+  passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+      passable_cloud_topic_, 10);
+  impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+      impassable_cloud_topic_, 10);
+  grid_map_pub_ =
+      create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
 }
 
 void PassableAreaNode::elevationInit() {
@@ -110,8 +128,7 @@ void PassableAreaNode::elevationInit() {
                             solver_region_max_x_, solver_region_min_y_,
                             solver_region_max_y_);
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
-  ele_map_->setCenterPaddingParams(enable_center_padding_,
-                                   center_dist_thresh_);
+  ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_init_ = true;
 }
 
