@@ -47,6 +47,11 @@ private:
   std::string b_frame_;    // body frame
   std::string used_frame_; // frame to be used
   std::string dog_model_;
+  std::string accumulate_cloud_topic_;
+  std::string imu_topic_;
+  std::string passable_cloud_topic_;
+  std::string impassable_cloud_topic_;
+  std::string grid_map_topic_;
   builtin_interfaces::msg::Time stamp_;
 
   std::unique_ptr<ElevationMap> ele_map_;

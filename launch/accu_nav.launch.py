@@ -28,11 +28,7 @@ def generate_launch_description():
         name='passable_area',
         output='screen',
         parameters=[passable_params, body_params_file, lidar_params_file],
-        arguments=['--ros-args', '--log-level', log_level],
-        remappings=[
-            ('cloud_topic', '/accumulate_cloud/cloud_gravity'),
-            ('imu', '/IMU_YESENSE')
-        ]
+        arguments=['--ros-args', '--log-level', log_level]
     )
     return LaunchDescription([
         DeclareLaunchArgument(
