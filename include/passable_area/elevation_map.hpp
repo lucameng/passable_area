@@ -71,6 +71,9 @@ public:
   void setSolverParams(const ElevationSolverParams &params) noexcept;
   void setTraversalCostParams(const TraversalCostParams &params) noexcept;
   void setMaxSlopeDeg(float deg) noexcept;
+  void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
+    current_T_g2b_ = T_g2b;
+  }
 
   struct TraversalCostParams {
     bool enabled{false};
@@ -118,8 +121,7 @@ private:
 
   void cloud2Elevation();
   bool isPassable(float variance_error, float roughness_thres) const;
-  void judgePassability(float rough_thres, float drop_thres, int kernel_size,
-                        const Eigen::Affine3f &T_g2b);
+  void judgePassability(float rough_thres, float drop_thres, int kernel_size);
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
@@ -155,6 +157,7 @@ private:
   ElevationSolverParams solver_params_;
   TraversalCostParams traversal_params_;
   float max_slope_deg_;
+  Eigen::Affine3f current_T_g2b_;
 };
 
 #endif // ELEVATION_MAP_HPP
