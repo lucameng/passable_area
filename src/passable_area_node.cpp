@@ -87,8 +87,12 @@ void PassableAreaNode::initialize() {
   RCLCPP_INFO(get_logger(), "Initializing << passable area >>");
   RCLCPP_INFO(get_logger(), "used frame: %s", used_frame_.c_str());
   RCLCPP_INFO(get_logger(),
-              "Topic configuration | cloud: %s | imu: %s | passable: %s | "
-              "impassable: %s | grid_map: %s",
+              "Topic configuration:\n"
+              "  cloud: %s\n"
+              "  imu: %s\n"
+              "  passable: %s\n"
+              "  impassable: %s\n"
+              "  grid_map: %s",
               accumulate_cloud_topic_.c_str(), imu_topic_.c_str(),
               passable_cloud_topic_.c_str(), impassable_cloud_topic_.c_str(),
               grid_map_topic_.c_str());
