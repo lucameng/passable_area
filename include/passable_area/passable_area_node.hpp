@@ -8,6 +8,7 @@
 #include <grid_map_core/grid_map_core.hpp>
 #include <grid_map_msgs/msg/grid_map.hpp>
 #include <grid_map_ros/GridMapRosConverter.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -37,6 +38,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr expanded_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr body_vis_pub_;
   rclcpp::Publisher<grid_map_msgs::msg::GridMap>::SharedPtr grid_map_pub_;
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr traversal_cost_pub_;
 
   PointCloudXYZ passable_cloud_;
   PointCloudXYZ impassable_cloud_;
@@ -97,6 +99,7 @@ private:
   void bodyVisual();
   void publishPassableInfo();
   void publishGridMap();
+  void publishTraversalCost();
   Eigen::Affine3f getTransform() const;
   void loadBodyGeometry();
   void loadElevationSolverParams();

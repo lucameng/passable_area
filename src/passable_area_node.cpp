@@ -162,6 +162,8 @@ void PassableAreaNode::initialize() {
       impassable_cloud_topic_, 10);
   grid_map_pub_ =
       create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
+  traversal_cost_pub_ =
+      create_publisher<nav_msgs::msg::OccupancyGrid>("traversal_cost", 10);
 }
 
 void PassableAreaNode::elevationInit() {
@@ -225,7 +227,7 @@ void PassableAreaNode::cloudCallback(
         std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                               start_time)
             .count();
-    if (duration_ms > 30) {
+    if (duration_ms > 50) {
       RCLCPP_WARN(get_logger(), "Elevation map updated in %ld ms",
                   static_cast<long>(duration_ms));
     }
@@ -239,6 +241,7 @@ void PassableAreaNode::cloudCallback(
   bodyVisual();
   publishPassableInfo();
   publishGridMap();
+  publishTraversalCost();
 }
 
 Eigen::Affine3f PassableAreaNode::getTransform() const {
@@ -354,4 +357,19 @@ void PassableAreaNode::publishGridMap() {
   ros_map_ptr->header.stamp = stamp_;
 
   grid_map_pub_->publish(*ros_map_ptr);
+
+}
+
+void PassableAreaNode::publishTraversalCost() {
+  if (!traversal_cost_params_.enabled || !traversal_cost_pub_ ||
+      !ele_map_->exists("traversal_cost"))
+    return;
+
+  nav_msgs::msg::OccupancyGrid occ;
+  grid_map::GridMapRosConverter::toOccupancyGrid(
+      *ele_map_, "traversal_cost", traversal_cost_params_.easy_cost,
+      traversal_cost_params_.max_cost, occ);
+  occ.header.frame_id = used_frame_;
+  occ.header.stamp = stamp_;
+  traversal_cost_pub_->publish(occ);
 }

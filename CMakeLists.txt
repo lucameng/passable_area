@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(grid_map_core REQUIRED)
@@ -47,6 +48,7 @@ ament_target_dependencies(passable_area
   grid_map_core
   grid_map_cv
   grid_map_ros
+  nav_msgs
 )
 
 target_link_libraries(passable_area
