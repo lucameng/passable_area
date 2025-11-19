@@ -1,13 +1,13 @@
 passable_area:
   ros__parameters:
-    map_length:    6.0
-    map_width:     6.0
+    map_length:    10.0
+    map_width:     10.0
     map_height_min: -1.0
-    map_height_max:  0.5
+    map_height_max:  1.0
     voxel_size:    0.05
     max_drop:      0.25
     max_roughness: 0.10
-    max_slope_deg: 40.0
+    max_slope_deg: 89.0
     max_inpaint_pixels: 200
     enable_center_padding: true
     center_dist_thresh: 0.8
@@ -38,17 +38,17 @@ passable_area:
 
     traversal_cost:
       enable: true
-      slope_free_deg: 8.0
-      slope_block_deg: 40.0
-      rough_free: 0.02
-      rough_block: 0.10
+      slope_free_deg: 10.0
+      slope_block_deg: 45.0
+      rough_free: 0.01
+      rough_block: 0.04
       step_free: 0.08
-      step_block: 0.25
+      step_block: 0.35
       slope_weight: 0.3
-      roughness_weight: 0.2
-      step_weight: 0.5
+      roughness_weight: 0.3
+      step_weight: 0.4
       easy_cost: 0.0
       hard_cost: 127.0
       max_cost: 254.0
-      curve_power: 3.0
-      roughness_window: 1
+      curve_power: 1.5
+      terrain_sample_window: 1

@@ -85,8 +85,8 @@ void ElevationMap::setMaxSlopeDeg(float deg) noexcept {
 void ElevationMap::setTraversalCostParams(
     const TraversalCostParams &params) noexcept {
   traversal_params_ = params;
-  traversal_params_.roughness_window =
-      std::max(1, traversal_params_.roughness_window);
+  traversal_params_.terrain_sample_window =
+      std::max(1, traversal_params_.terrain_sample_window);
   traversal_params_.max_cost =
       std::clamp(traversal_params_.max_cost, 0.0f, 254.0f);
   traversal_params_.hard_cost =
@@ -132,7 +132,7 @@ void ElevationMap::processPointCloud(
     // fillPointCloudFromLayer("elevation", "padding");
   }
   const int rough_kernel =
-      std::clamp(2 * traversal_params_.roughness_window + 1, 3, 7);
+      std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
   judgePassability(rough_thres, drop_thres, rough_kernel);
   updateTraversalCostLayer();
 }
@@ -658,8 +658,10 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         continue;
       }
 
-      float slope_deg = computeSlopeDeg(nx, ny, elevation_layer);
-      if (slope_deg > max_slope_deg_) {
+      float slope_rad = computeSlopeRad(nx, ny, elevation_layer);
+      float max_slope_rad = static_cast<float>(
+          dr::degreeToRadian(static_cast<double>(max_slope_deg_)));
+      if (slope_rad > max_slope_rad) {
         setPassability(nbr_idx, Passability::Impassable);
         continue;
       }
@@ -855,12 +857,18 @@ void ElevationMap::updateTraversalCostLayer() {
   const auto size = getSize();
   const int rows = size.x();
   const int cols = size.y();
+  const int center_r = rows / 2;
+  const int center_c = cols / 2;
   const float weight_sum =
       std::max(1e-3f, traversal_params_.slope_weight +
                           traversal_params_.roughness_weight +
                           traversal_params_.step_weight);
   const int rough_kernel =
-      std::clamp(2 * traversal_params_.roughness_window + 1, 3, 7);
+      std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
+  const float slope_free_rad = static_cast<float>(
+      dr::degreeToRadian(static_cast<double>(traversal_params_.slope_free_deg)));
+  const float slope_block_rad = static_cast<float>(
+      dr::degreeToRadian(static_cast<double>(traversal_params_.slope_block_deg)));
 
   auto fallback_roughness = [&](int row, int col) -> float {
     Eigen::Vector3f mean = Eigen::Vector3f::Zero();
@@ -908,7 +916,7 @@ void ElevationMap::updateTraversalCostLayer() {
         continue;
       }
 
-      const float slope_deg = computeSlopeDeg(r, c, elevation_layer);
+      const float slope_rad = computeSlopeRad(r, c, elevation_layer);
       float roughness = rough_layer(r, c);
       float step = step_layer(r, c);
       if (!std::isfinite(roughness)) {
@@ -923,15 +931,22 @@ void ElevationMap::updateTraversalCostLayer() {
           step_layer(r, c) = step;
         }
       }
+      // if (std::abs(r - center_r) <= 1 && std::abs(c - center_c) <= 1) {
+      //   const float slope_deg_log = static_cast<float>(
+      //       dr::radianToDegree(static_cast<double>(slope_rad)));
+      //   RCLCPP_INFO(logger_,
+      //               "Cell(%d,%d): slope=%.2f deg rough=%.4f step=%.3f",
+      //               r, c, slope_deg_log, roughness, step);
+      // }
       if (!std::isfinite(roughness) || !std::isfinite(step)) {
         cost_layer(r, c) = traversal_params_.easy_cost;
         continue;
       }
 
-      slope_layer(r, c) = slope_deg;
+      slope_layer(r, c) = slope_rad;
 
       const bool beyond_limit =
-          slope_deg >= traversal_params_.slope_block_deg ||
+          slope_rad >= slope_block_rad ||
           roughness >= traversal_params_.rough_block ||
           step >= traversal_params_.step_block;
       if (beyond_limit) {
@@ -940,8 +955,7 @@ void ElevationMap::updateTraversalCostLayer() {
       }
 
       const float slope_ratio =
-          normalizeMetric(slope_deg, traversal_params_.slope_free_deg,
-                          traversal_params_.slope_block_deg);
+          normalizeMetric(slope_rad, slope_free_rad, slope_block_rad);
       const float rough_ratio =
           normalizeMetric(roughness, traversal_params_.rough_free,
                           traversal_params_.rough_block);
@@ -966,39 +980,68 @@ void ElevationMap::updateTraversalCostLayer() {
   }
 }
 
-float ElevationMap::computeSlopeDeg(int row, int col,
+float ElevationMap::computeSlopeRad(int row, int col,
                                     const grid_map::Matrix &elevation) const {
-  const float center = elevation(row, col);
-  if (!std::isfinite(center))
-    return 0.0f;
-
   const auto size = getSize();
   const int rows = size.x();
   const int cols = size.y();
-  const auto sample = [&](int r, int c) -> float {
-    if (r < 0 || r >= rows || c < 0 || c >= cols)
-      return std::numeric_limits<float>::quiet_NaN();
-    return elevation(r, c);
-  };
+  const int kernel =
+      std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
+  const int radius = kernel / 2;
 
-  const float resolution = grid_size_;
-  const auto gradientAlong = [&](float neg, float pos) -> float {
-    if (std::isfinite(neg) && std::isfinite(pos)) {
-      return (pos - neg) * 0.5f / resolution;
+  Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+  int count = 0;
+  for (int dr = -radius; dr <= radius; ++dr) {
+    for (int dc = -radius; dc <= radius; ++dc) {
+      const int rr = row + dr;
+      const int cc = col + dc;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols)
+        continue;
+      const float z = elevation(rr, cc);
+      if (!std::isfinite(z))
+        continue;
+      Eigen::Vector3f p(static_cast<float>(rr) * grid_size_,
+                        static_cast<float>(cc) * grid_size_, z);
+      mean += p;
+      ++count;
     }
-    if (std::isfinite(pos)) {
-      return (pos - center) / resolution;
-    }
-    if (std::isfinite(neg)) {
-      return (center - neg) / resolution;
-    }
+  }
+
+  if (count < 3)
     return 0.0f;
-  };
 
-  const float dzdx = gradientAlong(sample(row, col - 1), sample(row, col + 1));
-  const float dzdy = gradientAlong(sample(row - 1, col), sample(row + 1, col));
-  const float slope_rad = std::atan(std::sqrt(dzdx * dzdx + dzdy * dzdy));
-  return static_cast<float>(dr::radianToDegree(static_cast<double>(slope_rad)));
+  mean /= static_cast<float>(count);
+
+  Eigen::Matrix3f cov = Eigen::Matrix3f::Zero();
+  for (int dr = -radius; dr <= radius; ++dr) {
+    for (int dc = -radius; dc <= radius; ++dc) {
+      const int rr = row + dr;
+      const int cc = col + dc;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols)
+        continue;
+      const float z = elevation(rr, cc);
+      if (!std::isfinite(z))
+        continue;
+      Eigen::Vector3f p(static_cast<float>(rr) * grid_size_,
+                        static_cast<float>(cc) * grid_size_, z);
+      Eigen::Vector3f centered = p - mean;
+      cov.noalias() += centered * centered.transpose();
+    }
+  }
+
+  cov /= static_cast<float>(std::max(1, count - 1));
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver;
+  solver.compute(cov);
+  Eigen::Vector3f normal = solver.eigenvectors().col(0);
+  if (!normal.allFinite() || normal.norm() < 1e-6f)
+    return 0.0f;
+  normal.normalize();
+
+  float cos_theta = std::abs(normal.dot(Eigen::Vector3f::UnitZ()));
+  cos_theta = std::clamp(cos_theta, 0.0f, 1.0f);
+  float slope_rad = std::acos(cos_theta);
+  return slope_rad;
 }
 
 float ElevationMap::normalizeMetric(float value, float free_threshold,

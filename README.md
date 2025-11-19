@@ -70,7 +70,7 @@ The `traversal_cost.*` namespace (see the YAML files) tunes the new geometric co
 - `slope_*`, `rough_*`, and `step_*` thresholds describe when each feature transitions from easy → hard → impassable.
 - `*_weight` terms weight the contribution of slope, roughness, and steps to the aggregate difficulty score.
 - `easy_cost`, `hard_cost`, `max_cost`, and `curve_power` shape how the normalized difficulty is converted into the published cost.
-- `roughness_window` controls the kernel (in cell units) used when computing the local elevation variance.
+- `terrain_sample_window` controls the kernel (in cell units) used when computing local roughness/slope.
 
 Per-lidar blocks (for example `lidar_front_up`) define:
 - `pos_body`: `[x, y, z]` mount position in the body frame (metres)

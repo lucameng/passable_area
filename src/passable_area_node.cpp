@@ -117,8 +117,8 @@ void PassableAreaNode::loadTraversalCostParams() {
       declare_parameter("traversal_cost.max_cost", 100.0f);
   traversal_cost_params_.curve_power =
       declare_parameter("traversal_cost.curve_power", 3.0f);
-  traversal_cost_params_.roughness_window =
-      declare_parameter<int>("traversal_cost.roughness_window", 1);
+  traversal_cost_params_.terrain_sample_window =
+      declare_parameter<int>("traversal_cost.terrain_sample_window", 1);
 }
 
 std::string

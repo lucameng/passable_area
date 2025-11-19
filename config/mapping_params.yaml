@@ -51,4 +51,4 @@ passable_area:
       hard_cost: 127.0
       max_cost: 254.0
       curve_power: 2.5
-      roughness_window: 1
+      terrain_sample_window: 1

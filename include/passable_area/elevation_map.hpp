@@ -90,7 +90,7 @@ public:
     float hard_cost{60.0f};
     float max_cost{100.0f};
     float curve_power{3.0f};
-    int roughness_window{1};
+    int terrain_sample_window{1};
   };
 
 private:
@@ -135,7 +135,7 @@ private:
   void fillPointCloudFromLayer(const std::string &layer_height = "elevation",
                                const std::string &layer_filled = "padding");
   void updateTraversalCostLayer();
-  float computeSlopeDeg(int row, int col,
+  float computeSlopeRad(int row, int col,
                         const grid_map::Matrix &elevation) const;
   float normalizeMetric(float value, float free_threshold,
                         float block_threshold) const noexcept;
