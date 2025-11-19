@@ -44,11 +44,12 @@ passable_area:
       rough_block: 0.04
       step_free: 0.08
       step_block: 0.35
-      slope_weight: 0.3
-      roughness_weight: 0.3
+      slope_weight: 0.2
+      roughness_weight: 0.4
       step_weight: 0.4
       easy_cost: 0.0
       hard_cost: 127.0
       max_cost: 254.0
       curve_power: 1.5
       terrain_sample_window: 1
+      safe_zone_side_length: 1.0

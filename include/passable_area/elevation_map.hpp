@@ -91,6 +91,7 @@ public:
     float max_cost{100.0f};
     float curve_power{3.0f};
     int terrain_sample_window{1};
+    float safe_zone_side_length{1.0f};
   };
 
 private:

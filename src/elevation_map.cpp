@@ -938,12 +938,25 @@ void ElevationMap::updateTraversalCostLayer() {
       //               "Cell(%d,%d): slope=%.2f deg rough=%.4f step=%.3f",
       //               r, c, slope_deg_log, roughness, step);
       // }
+      grid_map::Position pos;
+      const bool have_pos = getPosition(grid_map::Index(r, c), pos);
+      const float half_extent =
+          0.5f * traversal_params_.safe_zone_side_length;
+      const bool in_safe_zone =
+          have_pos && std::fabs(pos.x()) <= half_extent &&
+          std::fabs(pos.y()) <= half_extent;
+
       if (!std::isfinite(roughness) || !std::isfinite(step)) {
         cost_layer(r, c) = traversal_params_.easy_cost;
         continue;
       }
 
       slope_layer(r, c) = slope_rad;
+
+      if (in_safe_zone) {
+        cost_layer(r, c) = traversal_params_.easy_cost;
+        continue;
+      }
 
       const bool beyond_limit =
           slope_rad >= slope_block_rad ||
