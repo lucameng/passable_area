@@ -19,13 +19,14 @@ passable_area:
     impassable_cloud_topic: "/impassable_area"
     grid_map_topic: "/grid_map"
 
-    use_legacy_elevation: true
-    elevation_solver_bins: 16
-    solver_region_enabled: false
-    solver_region_min_x: 0.0
-    solver_region_max_x: 4.0
-    solver_region_min_y: 0.0
-    solver_region_max_y: 0.0
+    elevation_solver:
+      use_histogram_solver: false
+      histogram_bins: 16
+      region_enabled: false
+      region_min_x: 0.0
+      region_max_x: 4.0
+      region_min_y: 0.0
+      region_max_y: 0.0
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"

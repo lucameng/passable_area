@@ -50,25 +50,16 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   solver_params_.neighbor_height_tolerance = 0.25f;
 }
 
-void ElevationMap::setUseLegacyVertical(bool enable) noexcept {
-  solver_params_.use_legacy_elevation = enable;
-}
-
-void ElevationMap::setSolverBins(int bins) noexcept {
-  solver_bins_ = std::max(1, bins);
-}
-
-void ElevationMap::setSolverRegion(bool enabled, float min_x, float max_x,
-                                   float min_y, float max_y) noexcept {
-  solver_region_.enabled = enabled;
-  if (min_x > max_x)
-    std::swap(min_x, max_x);
-  if (min_y > max_y)
-    std::swap(min_y, max_y);
-  solver_region_.min_x = min_x;
-  solver_region_.max_x = max_x;
-  solver_region_.min_y = min_y;
-  solver_region_.max_y = max_y;
+void ElevationMap::setSolverParams(
+    const ElevationSolverParams &params) noexcept {
+  solver_params_.use_histogram_solver = params.use_histogram_solver;
+  solver_params_.histogram_bins = std::max(1, params.histogram_bins);
+  solver_params_.region = params.region;
+  auto &region = solver_params_.region;
+  if (region.min_x > region.max_x)
+    std::swap(region.min_x, region.max_x);
+  if (region.min_y > region.max_y)
+    std::swap(region.min_y, region.max_y);
 }
 
 void ElevationMap::setMaxInpaintPixels(int max_pixels) noexcept {
@@ -123,7 +114,7 @@ void ElevationMap::cloud2Elevation() {
   const auto size = getSize();
   const int rows = size.x();
   const int cols = size.y();
-  const int bins = std::max(1, solver_bins_);
+  const int bins = std::max(1, solver_params_.histogram_bins);
 
   std::vector<uint16_t> histogram(rows * cols * bins, 0);
   std::vector<float> hist_max(rows * cols * bins,
@@ -178,7 +169,8 @@ void ElevationMap::cloud2Elevation() {
   ctx_solver.counts = &histogram;
   ctx_solver.peaks = &hist_max;
   std::vector<uint8_t> region_mask;
-  if (solver_region_.enabled) {
+  const auto &region = solver_params_.region;
+  if (region.enabled) {
     region_mask.resize(static_cast<std::size_t>(rows) *
                            static_cast<std::size_t>(cols),
                        static_cast<uint8_t>(0));
@@ -186,10 +178,8 @@ void ElevationMap::cloud2Elevation() {
       for (int c = 0; c < cols; ++c) {
         grid_map::Position pos;
         getPosition({r, c}, pos);
-        if (pos.x() >= solver_region_.min_x &&
-            pos.x() <= solver_region_.max_x &&
-            pos.y() >= solver_region_.min_y &&
-            pos.y() <= solver_region_.max_y) {
+        if (pos.x() >= region.min_x && pos.x() <= region.max_x &&
+            pos.y() >= region.min_y && pos.y() <= region.max_y) {
           const std::size_t idx =
               static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) +
               static_cast<std::size_t>(c);
