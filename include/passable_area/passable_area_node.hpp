@@ -85,13 +85,7 @@ private:
     float height;
   };
 
-  bool use_legacy_elevation_;
-  int elevation_solver_bins_;
-  bool solver_region_enabled_;
-  float solver_region_min_x_;
-  float solver_region_max_x_;
-  float solver_region_min_y_;
-  float solver_region_max_y_;
+  ElevationSolverParams solver_params_;
 
 private:
   void elevationInit();
@@ -103,6 +97,7 @@ private:
   void publishGridMap();
   Eigen::Affine3f getTransform() const;
   void loadBodyGeometry();
+  void loadElevationSolverParams();
   std::string normalizeModelKey(const std::string &dog_model) const;
   BodyGeometry defaultBodyGeometry() const { return {0.9f, 0.4f, 0.5f}; }
 };

@@ -240,7 +240,7 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
   };
 
   // Legacy path bypasses advanced heuristics.
-  if (params.use_legacy_elevation) {
+  if (!params.use_histogram_solver) {
     for (int r = 0; r < ctx.rows; ++r) {
       for (int c = 0; c < ctx.cols; ++c) {
         apply_legacy_elevation(linearIndex(r, c, ctx.cols));

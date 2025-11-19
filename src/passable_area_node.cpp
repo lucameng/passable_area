@@ -20,13 +20,6 @@ PassableAreaNode::PassableAreaNode()
       center_dist_thresh_(declare_parameter("center_dist_thresh", 0.8f)),
       clearance_threshold_(declare_parameter("clearance_threshold", 0.05f)),
       baseline_radius_(declare_parameter("baseline_radius", 0.5f)),
-      use_legacy_elevation_(declare_parameter("use_legacy_elevation", false)),
-      elevation_solver_bins_(declare_parameter<int>("elevation_solver_bins", 16)),
-      solver_region_enabled_(declare_parameter("solver_region_enabled", false)),
-      solver_region_min_x_(declare_parameter("solver_region_min_x", 0.0f)),
-      solver_region_max_x_(declare_parameter("solver_region_max_x", 0.0f)),
-      solver_region_min_y_(declare_parameter("solver_region_min_y", 0.0f)),
-      solver_region_max_y_(declare_parameter("solver_region_max_y", 0.0f)),
       w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
@@ -47,6 +40,7 @@ PassableAreaNode::PassableAreaNode()
     std::swap(min_height_, max_height_);
   }
   loadBodyGeometry();
+  loadElevationSolverParams();
 }
 
 void PassableAreaNode::loadBodyGeometry() {
@@ -72,6 +66,24 @@ void PassableAreaNode::loadBodyGeometry() {
               "Body geometry for model '%s': length=%.3f m, width=%.3f m, "
               "height=%.3f m",
               model_key.c_str(), body_length_, body_width_, body_height_);
+}
+
+void PassableAreaNode::loadElevationSolverParams() {
+  const std::string base = "elevation_solver.";
+  solver_params_.use_histogram_solver =
+      declare_parameter<bool>(base + "use_histogram_solver", true);
+  solver_params_.histogram_bins =
+      declare_parameter<int>(base + "histogram_bins", 16);
+  solver_params_.region.enabled =
+      declare_parameter<bool>(base + "region_enabled", false);
+  solver_params_.region.min_x =
+      declare_parameter<float>(base + "region_min_x", 0.0f);
+  solver_params_.region.max_x =
+      declare_parameter<float>(base + "region_max_x", 0.0f);
+  solver_params_.region.min_y =
+      declare_parameter<float>(base + "region_min_y", 0.0f);
+  solver_params_.region.max_y =
+      declare_parameter<float>(base + "region_max_y", 0.0f);
 }
 
 std::string
@@ -122,11 +134,7 @@ void PassableAreaNode::elevationInit() {
   ele_map_ = std::make_unique<ElevationMap>(
       map_length_, map_width_, min_height_, max_height_, voxel_width_,
       used_frame_, get_logger());
-  ele_map_->setUseLegacyVertical(use_legacy_elevation_);
-  ele_map_->setSolverBins(elevation_solver_bins_);
-  ele_map_->setSolverRegion(solver_region_enabled_, solver_region_min_x_,
-                            solver_region_max_x_, solver_region_min_y_,
-                            solver_region_max_y_);
+  ele_map_->setSolverParams(solver_params_);
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_init_ = true;
