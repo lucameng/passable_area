@@ -7,6 +7,9 @@
 #include <string>
 #include <vector>
 
+// -----------------------------------------------------------------------------
+// Basic enum class.
+// -----------------------------------------------------------------------------
 enum class Passability : uint8_t { Passable = 0, Impassable = 1, Unknown = 2 };
 
 enum class CoverageStatus : uint8_t { Uncovered = 0, Covered = 1 };
@@ -38,7 +41,13 @@ struct BodyGeometry {
   float height{0.0f};
 };
 
-struct LidarParam {
+struct PassabilityParams {
+  float roughness_threshold{0.1f};
+  float drop_threshold{0.3f};
+  float max_slope_deg{40.0f};
+};
+
+struct LidarParams {
   std::string name;
   Eigen::Vector3f pos_body = Eigen::Vector3f::Zero();
   Eigen::Vector3f rpy_body_deg = Eigen::Vector3f::Zero();
@@ -114,6 +123,9 @@ struct ElevationSolverResult {
   std::vector<uint8_t> float_mask;
 };
 
+// -----------------------------------------------------------------------------
+// common used methods.
+// -----------------------------------------------------------------------------
 inline float toFloat(Passability value) {
   return static_cast<float>(static_cast<uint8_t>(value));
 }

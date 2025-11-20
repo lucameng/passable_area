@@ -30,7 +30,7 @@ public:
       const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
-                         float roughness_thres, float drop_thres,
+                         const PassabilityParams &passability,
                          const Eigen::Affine3f &T_g2b, bool fill_blind = false);
 
   const PointCloudXYZ &getWorkingCloud() const noexcept {
@@ -70,7 +70,6 @@ public:
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
   void setSolverParams(const ElevationSolverParams &params) noexcept;
   void setTraversalCostParams(const TraversalCostParams &params) noexcept;
-  void setMaxSlopeDeg(float deg) noexcept;
   void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
     current_T_g2b_ = T_g2b;
   }
@@ -112,7 +111,8 @@ private:
 
   void cloud2Elevation();
   bool isPassable(float variance_error, float roughness_thres) const;
-  void judgePassability(float rough_thres, float drop_thres, int kernel_size);
+  void judgePassability(float rough_thres, float drop_thres,
+                        float max_slope_deg, int kernel_size);
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
@@ -137,13 +137,11 @@ private:
   bool center_padding_enabled_;
   float center_padding_radius_;
   grid_map::Size map_cells_;
+  Eigen::Affine3f current_T_g2b_;
   std::string frame_;
   rclcpp::Logger logger_;
-
   ElevationSolverParams solver_params_;
   TraversalCostParams traversal_params_;
-  float max_slope_deg_;
-  Eigen::Affine3f current_T_g2b_;
 };
 
 #endif // ELEVATION_MAP_HPP

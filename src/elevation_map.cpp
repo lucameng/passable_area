@@ -22,10 +22,9 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
       max_height_(std::max(min_height, max_height)), grid_size_(grid_s),
-      max_inpaint_pixels_(200),
-      center_padding_enabled_(true), center_padding_radius_(0.8f),
-      frame_(frame_id), logger_(logger), max_slope_deg_(40.0f),
-      current_T_g2b_(Eigen::Affine3f::Identity()) {
+      max_inpaint_pixels_(200), center_padding_enabled_(true),
+      center_padding_radius_(0.8f), current_T_g2b_(Eigen::Affine3f::Identity()),
+      frame_(frame_id), logger_(logger) {
   if ((max_height_ - min_height_) < grid_size_) {
     max_height_ = min_height_ + grid_size_;
   }
@@ -78,10 +77,6 @@ void ElevationMap::setCenterPaddingParams(bool enabled, float radius) noexcept {
   center_padding_radius_ = std::max(0.0f, radius);
 }
 
-void ElevationMap::setMaxSlopeDeg(float deg) noexcept {
-  max_slope_deg_ = std::clamp(deg, 0.0f, 89.0f);
-}
-
 void ElevationMap::setTraversalCostParams(
     const TraversalCostParams &params) noexcept {
   traversal_params_ = params;
@@ -120,8 +115,9 @@ void ElevationMap::setTraversalCostParams(
 }
 
 void ElevationMap::processPointCloud(
-    const sensor_msgs::msg::PointCloud2 &ros_cloud, float rough_thres,
-    float drop_thres, const Eigen::Affine3f &T_g2b, bool fill_blind) {
+    const sensor_msgs::msg::PointCloud2 &ros_cloud,
+    const PassabilityParams &pass_params, const Eigen::Affine3f &T_g2b,
+    bool fill_blind) {
   current_T_g2b_ = T_g2b;
   setInputCloud(ros_cloud);
   cloud2Elevation();
@@ -133,7 +129,8 @@ void ElevationMap::processPointCloud(
   }
   const int rough_kernel =
       std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
-  judgePassability(rough_thres, drop_thres, rough_kernel);
+  judgePassability(pass_params.roughness_threshold, pass_params.drop_threshold,
+                   pass_params.max_slope_deg, rough_kernel);
 }
 
 void ElevationMap::setInputCloud(
@@ -540,7 +537,7 @@ bool ElevationMap::isPassable(float variance_error,
 }
 
 void ElevationMap::judgePassability(float rough_thres, float drop_thres,
-                                    int kernel_size) {
+                                    float max_slope_deg, int kernel_size) {
   kernel_size = std::clamp(kernel_size, 3, 5);
   const auto size = getSize();
   const int size_x = size.x();
@@ -659,7 +656,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       float slope_rad = computeSlopeRad(nx, ny, elevation_layer);
       float max_slope_rad = static_cast<float>(
-          dr::degreeToRadian(static_cast<double>(max_slope_deg_)));
+          dr::degreeToRadian(static_cast<double>(max_slope_deg)));
       if (slope_rad > max_slope_rad) {
         setPassability(nbr_idx, Passability::Impassable);
         continue;

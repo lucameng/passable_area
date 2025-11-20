@@ -69,9 +69,6 @@ private:
   float min_height_;
   float max_height_;
   float voxel_width_;
-  float max_drop_;
-  float rough_thres_;
-  float max_slope_deg_;
   int max_inpaint_pixels_;
   bool enable_center_padding_;
   float center_dist_thresh_;
@@ -85,6 +82,7 @@ private:
   bool ele_init_;
   bool lidar_init_;
   bool enable_blind_check_;
+  PassabilityParams passability_params_;
   TraversalCostParams traversal_cost_params_;
   ElevationSolverParams solver_params_;
 
@@ -99,6 +97,7 @@ private:
   void publishTraversalCost();
   Eigen::Affine3f getTransform() const;
   void loadBodyGeometry();
+  void loadPassabilityParams();
   void loadElevationSolverParams();
   void loadTraversalCostParams();
   std::string normalizeModelKey(const std::string &dog_model) const;

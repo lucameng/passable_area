@@ -13,9 +13,6 @@ PassableAreaNode::PassableAreaNode()
       min_height_(declare_parameter("map_height_min", -1.5f)),
       max_height_(declare_parameter("map_height_max", 1.5f)),
       voxel_width_(declare_parameter("voxel_size", 0.1f)),
-      max_drop_(declare_parameter("max_drop", 0.3f)),
-      rough_thres_(declare_parameter("max_roughness", 0.1f)),
-      max_slope_deg_(declare_parameter("max_slope_deg", 40.0f)),
       max_inpaint_pixels_(declare_parameter<int>("max_inpaint_pixels", 200)),
       enable_center_padding_(declare_parameter("enable_center_padding", true)),
       center_dist_thresh_(declare_parameter("center_dist_thresh", 0.8f)),
@@ -43,6 +40,7 @@ PassableAreaNode::PassableAreaNode()
     std::swap(min_height_, max_height_);
   }
   loadBodyGeometry();
+  loadPassabilityParams();
   loadElevationSolverParams();
   loadTraversalCostParams();
 }
@@ -125,6 +123,15 @@ void PassableAreaNode::loadTraversalCostParams() {
       declare_parameter("traversal_cost.safe_zone_side_length", 1.0f);
 }
 
+void PassableAreaNode::loadPassabilityParams() {
+  passability_params_.drop_threshold =
+      declare_parameter("max_drop", 0.3f);
+  passability_params_.roughness_threshold =
+      declare_parameter("max_roughness", 0.1f);
+  passability_params_.max_slope_deg =
+      declare_parameter("max_slope_deg", 45.0f);
+}
+
 std::string
 PassableAreaNode::normalizeModelKey(const std::string &dog_model) const {
   std::string normalized = dog_model;
@@ -178,7 +185,6 @@ void PassableAreaNode::elevationInit() {
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_map_->setSolverParams(solver_params_);
-  ele_map_->setMaxSlopeDeg(max_slope_deg_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
   traversal_cost_ = std::make_unique<TraversalCost>(
       *ele_map_, ele_map_->getTraversalCostParams(), get_logger());
@@ -225,7 +231,7 @@ void PassableAreaNode::cloudCallback(
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
-    ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
+    ele_map_->processPointCloud(*msg, passability_params_, getTransform(),
                                 enable_blind_check_);
     if (traversal_cost_) {
       traversal_cost_->updateCostLayer();

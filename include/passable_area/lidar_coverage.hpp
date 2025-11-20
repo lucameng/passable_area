@@ -25,7 +25,7 @@ public:
 
 private:
   bool isCellCoveredByLidar(const Eigen::Vector3f &p_body,
-                            const LidarParam &lidar) const;
+                            const LidarParams &lidar) const;
   void computeCoverage(grid_map::GridMap &ele_map, const Eigen::Affine3f &T_g2b,
                        const std::string &layer_height = "elevation",
                        const std::string &layer_covered = "coverability") const;
@@ -37,7 +37,7 @@ private:
   const float ground_height_;
   Eigen::Vector2f bound_max_;
   Eigen::Vector2f bound_min_;
-  std::vector<LidarParam> lidars_;
+  std::vector<LidarParams> lidars_;
   std::string dog_model_;
   std::string active_model_;
   const std::vector<std::string> lidar_names_x30_;
