@@ -2,8 +2,8 @@
 #define ELEVATION_MAP_HPP
 
 #include "elevation_solver.hpp"
-#include "traversal_cost.hpp"
 #include "common.hpp"
+#include "common_types.hpp"
 #include "utils.hpp"
 
 #include <cmath>

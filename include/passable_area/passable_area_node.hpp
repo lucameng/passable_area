@@ -86,12 +86,6 @@ private:
   bool lidar_init_;
   bool enable_blind_check_;
   TraversalCostParams traversal_cost_params_;
-  struct BodyGeometry {
-    float length;
-    float width;
-    float height;
-  };
-
   ElevationSolverParams solver_params_;
 
 private:

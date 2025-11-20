@@ -2,6 +2,7 @@
 #define LIDAR_COVERAGE_HPP
 
 #include "common.hpp"
+#include "common_types.hpp"
 
 #include <Eigen/Dense>
 #include <cmath>
@@ -10,22 +11,6 @@
 #include <sensor_msgs/msg/imu.h>
 #include <string>
 #include <vector>
-
-struct LidarParam {
-  std::string name;
-  Eigen::Vector3f pos_body;     // body frame
-  Eigen::Vector3f rpy_body_deg; // body frame
-  Eigen::Vector3f rpy_body_rad; // body frame
-  Eigen::Matrix3f R_mount;      // rotation
-
-  double fov_up_deg = 52.0;   // deg
-  double fov_down_deg = -7.0; // deg
-  double fov_up_rad;          // rad
-  double fov_down_rad;        // rad
-
-  double min_range = 0.01; // m
-  double max_range = 30.0; // m
-};
 
 class LidarCoverage {
 public:

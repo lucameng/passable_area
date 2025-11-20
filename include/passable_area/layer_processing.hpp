@@ -2,6 +2,7 @@
 #define LAYER_PROCESSING_HPP
 
 #include "common.hpp"
+#include "common_types.hpp"
 
 #include <Eigen/Dense>
 #include <grid_map_core/grid_map_core.hpp>
