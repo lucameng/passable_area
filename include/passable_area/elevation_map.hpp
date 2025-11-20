@@ -30,7 +30,7 @@ public:
       const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
-                         const PassabilityParams &passability,
+                         const PassabilityParams &pass_params,
                          const Eigen::Affine3f &T_g2b, bool fill_blind = false);
 
   const PointCloudXYZ &getWorkingCloud() const noexcept {
@@ -87,6 +87,8 @@ public:
                          Eigen::Matrix3f &square) const;
   float computeSlopeRad(int row, int col,
                         const grid_map::Matrix &elevation) const;
+  float computeStepHeight(int row, int col,
+                          const grid_map::Matrix &elevation) const;
   float normalizeMetric(float value, float free_threshold,
                         float block_threshold) const noexcept;
 
@@ -110,7 +112,7 @@ private:
                int kernel_size);
 
   void cloud2Elevation();
-  bool isPassable(float variance_error, float roughness_thres) const;
+  bool isPassable(float roughness_value, float roughness_thres) const;
   void judgePassability(float rough_thres, float drop_thres,
                         float max_slope_deg, int kernel_size);
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,

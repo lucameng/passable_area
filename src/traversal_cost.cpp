@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <functional>
 #include <grid_map_ros/GridMapRosConverter.hpp>
 #include <limits>
 
@@ -47,45 +48,18 @@ bool TraversalCost::updateCostLayer() {
       dr::degreeToRadian(static_cast<double>(params.slope_free_deg)));
   const float slope_block_rad = static_cast<float>(
       dr::degreeToRadian(static_cast<double>(params.slope_block_deg)));
-  const Eigen::Matrix3f R_g2b = map_.getCurrentTransform().linear();
   const float half_extent = 0.5f * params.safe_zone_side_length;
 
-  auto fallback_roughness = [&](int row, int col) -> float {
-    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-    Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
-    float variance =
-        map_.computeRoughness(row, col, rough_kernel, mean, square);
-    if (variance <= 0.0f)
-      return std::numeric_limits<float>::quiet_NaN();
-    return std::sqrt(std::max(0.0f, variance));
-  };
-
-  auto fallback_step = [&](int row, int col) -> float {
-    const float center = elevation_layer(row, col);
-    if (!std::isfinite(center))
-      return std::numeric_limits<float>::quiet_NaN();
-    float max_diff = 0.0f;
-    bool has_neighbor = false;
-    for (int dr = -1; dr <= 1; ++dr) {
-      for (int dc = -1; dc <= 1; ++dc) {
-        if (dr == 0 && dc == 0)
-          continue;
-        const int rr = row + dr;
-        const int cc = col + dc;
-        if (rr < 0 || rr >= rows || cc < 0 || cc >= cols)
-          continue;
-        const float nh = elevation_layer(rr, cc);
-        if (!std::isfinite(nh))
-          continue;
-        has_neighbor = true;
-        const float diff = std::fabs(map_.projectToBodyZ(center - nh, R_g2b));
-        if (diff > max_diff)
-          max_diff = diff;
+  auto fetchMetric = [&](float &slot,
+                         const std::function<float()> &compute) -> float {
+    float value = slot;
+    if (!std::isfinite(value)) {
+      value = compute();
+      if (std::isfinite(value)) {
+        slot = value;
       }
     }
-    if (!has_neighbor)
-      return std::numeric_limits<float>::quiet_NaN();
-    return max_diff;
+    return value;
   };
 
   for (int r = 0; r < rows; ++r) {
@@ -96,21 +70,22 @@ bool TraversalCost::updateCostLayer() {
         continue;
       }
 
-      const float slope_rad = map_.computeSlopeRad(r, c, elevation_layer);
-      float roughness = rough_layer(r, c);
-      float step = step_layer(r, c);
-      if (!std::isfinite(roughness)) {
-        roughness = fallback_roughness(r, c);
-        if (std::isfinite(roughness)) {
-          rough_layer(r, c) = roughness;
-        }
-      }
-      if (!std::isfinite(step)) {
-        step = fallback_step(r, c);
-        if (std::isfinite(step)) {
-          step_layer(r, c) = step;
-        }
-      }
+      const float slope_rad = fetchMetric(
+          slope_layer(r, c),
+          [&]() { return map_.computeSlopeRad(r, c, elevation_layer); });
+      const float roughness = fetchMetric(
+          rough_layer(r, c), [&]() {
+            Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+            Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
+            float variance =
+                map_.computeRoughness(r, c, rough_kernel, mean, square);
+            if (variance <= 0.0f)
+              return std::numeric_limits<float>::quiet_NaN();
+            return std::sqrt(std::max(0.0f, variance));
+          });
+      const float step = fetchMetric(
+          step_layer(r, c),
+          [&]() { return map_.computeStepHeight(r, c, elevation_layer); });
 
       grid_map::Position pos;
       const bool have_pos = map_.getPosition(grid_map::Index(r, c), pos);
