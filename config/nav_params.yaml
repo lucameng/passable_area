@@ -7,17 +7,26 @@ passable_area:
     voxel_size:    0.05
     max_drop:      0.25
     max_roughness: 0.10
+    max_slope_deg: 89.0
     max_inpaint_pixels: 200
     enable_center_padding: true
     center_dist_thresh: 0.8
     clearance_threshold: 0.0
     baseline_radius: 0.0
+    enable_blind_check: true
 
     accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
     imu_topic: "/IMU_YESENSE"
     passable_cloud_topic: "/passable_area"
     impassable_cloud_topic: "/impassable_area"
     grid_map_topic: "/grid_map"
+    traversal_cost_topic: "/traversal_cost"
+
+    world_frame:   "camera_init"
+    gravity_frame: "base_gravity"
+    body_frame:    "base_link"
+    used_frame:    "base_gravity"
+    dog_model:     "m20"
 
     elevation_solver:
       use_histogram_solver: true
@@ -28,11 +37,20 @@ passable_area:
       region_min_y: -1.0
       region_max_y: 1.0
 
-
-    world_frame:   "camera_init"
-    gravity_frame: "base_gravity"
-    body_frame:    "base_link"
-    used_frame:    "base_gravity"
-    dog_model:     "m20"
-
-    enable_blind_check: true
+    traversal_cost:
+      enable: true
+      slope_free_deg: 10.0
+      slope_block_deg: 45.0
+      rough_free: 0.01
+      rough_block: 0.04
+      step_free: 0.08
+      step_block: 0.35
+      slope_weight: 0.2
+      roughness_weight: 0.4
+      step_weight: 0.4
+      easy_cost: 0.0
+      hard_cost: 50.0
+      max_cost: 100.0
+      curve_power: 1.5
+      terrain_sample_window: 1
+      safe_zone_side_length: 1.0

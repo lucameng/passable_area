@@ -3,6 +3,7 @@
 
 #include "elevation_solver.hpp"
 #include "common.hpp"
+#include "common_types.hpp"
 #include "utils.hpp"
 
 #include <cmath>
@@ -29,7 +30,7 @@ public:
       const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
-                         float roughness_thres, float drop_thres,
+                         const PassabilityParams &pass_params,
                          const Eigen::Affine3f &T_g2b, bool fill_blind = false);
 
   const PointCloudXYZ &getWorkingCloud() const noexcept {
@@ -65,9 +66,31 @@ public:
   float getGridSize() const noexcept { return grid_size_; }
   grid_map::Size getCellSize() const noexcept { return map_cells_; }
   float getBaselineGround(float radius) const;
-  void setSolverParams(const ElevationSolverParams &params) noexcept;
   void setMaxInpaintPixels(int max_pixels) noexcept;
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
+  void setSolverParams(const ElevationSolverParams &params) noexcept;
+  void setTraversalCostParams(const TraversalCostParams &params) noexcept;
+  void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
+    current_T_g2b_ = T_g2b;
+  }
+  const Eigen::Affine3f &getCurrentTransform() const noexcept {
+    return current_T_g2b_;
+  }
+  float projectToBodyZ(float scalar_g, const Eigen::Matrix3f &R_g2b) const {
+    return dr::projectScalar(scalar_g, R_g2b, Eigen::Vector3f::UnitZ(),
+                             Eigen::Vector3f::UnitZ());
+  }
+  const TraversalCostParams &getTraversalCostParams() const noexcept {
+    return traversal_params_;
+  }
+  float computeRoughness(int x, int y, int kernel_size, Eigen::Vector3f &mean,
+                         Eigen::Matrix3f &square) const;
+  float computeSlopeRad(int row, int col,
+                        const grid_map::Matrix &elevation) const;
+  float computeStepHeight(int row, int col,
+                          const grid_map::Matrix &elevation) const;
+  float normalizeMetric(float value, float free_threshold,
+                        float block_threshold) const noexcept;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -77,28 +100,21 @@ private:
             idx.y() < getSize().y());
   }
 
-  float projectToBodyZ(float scalar_g, const Eigen::Matrix3f &R_g2b) const {
-    return dr::projectScalar(scalar_g, R_g2b, Eigen::Vector3f::UnitZ(),
-                             Eigen::Vector3f::UnitZ());
-  }
-
   bool isPositionInside(const Eigen::Vector2d &pos) const noexcept {
     return isInside(pos);
   }
 
-  float errorFromCovariance(const Eigen::Vector3f &mean,
-                            const Eigen::Matrix3f &square) const;
-  float computeError(int x, int y, int kernel_size, Eigen::Vector3f &mean,
-                     Eigen::Matrix3f &square) const;
+  float extractVariance(const Eigen::Vector3f &mean,
+                        const Eigen::Matrix3f &square) const;
   void inpaint(const std::string &layer_height, const std::string &layer_filled,
                Inpaint method);
   void denoise(const std::string &layer_height, Denoise method,
                int kernel_size);
 
   void cloud2Elevation();
-  bool isPassable(float variance_error, float roughness_thres) const;
-  void judgePassability(float rough_thres, float drop_thres, int kernel_size,
-                        const Eigen::Affine3f &T_g2b);
+  bool isPassable(float roughness_value, float roughness_thres) const;
+  void judgePassability(float rough_thres, float drop_thres,
+                        float max_slope_deg, int kernel_size);
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
@@ -123,10 +139,11 @@ private:
   bool center_padding_enabled_;
   float center_padding_radius_;
   grid_map::Size map_cells_;
+  Eigen::Affine3f current_T_g2b_;
   std::string frame_;
   rclcpp::Logger logger_;
-
   ElevationSolverParams solver_params_;
+  TraversalCostParams traversal_params_;
 };
 
 #endif // ELEVATION_MAP_HPP

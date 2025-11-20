@@ -66,6 +66,12 @@ Use `map_length` / `map_width` to control the X/Y span and `map_height_min` / `m
 | `world_frame`, `gravity_frame`, `body_frame`, `used_frame` | see YAML | Frame IDs for projecting measurements and publishing outputs. |
 | `enable_blind_check` | `false` | Toggles lidar blind-spot padding and coverage checks. |
 
+The `traversal_cost.*` namespace (see the YAML files) tunes the new geometric cost layer:
+- `slope_*`, `rough_*`, and `step_*` thresholds describe when each feature transitions from easy → hard → impassable.
+- `*_weight` terms weight the contribution of slope, roughness, and steps to the aggregate difficulty score.
+- `easy_cost`, `hard_cost`, `max_cost`, and `curve_power` shape how the normalized difficulty is converted into the published cost.
+- `terrain_sample_window` controls the kernel (in cell units) used when computing local roughness/slope.
+
 Per-lidar blocks (for example `lidar_front_up`) define:
 - `pos_body`: `[x, y, z]` mount position in the body frame (metres)
 - `rpy_body`: Euler angles in degrees

@@ -1,7 +1,8 @@
-#ifndef PASSABLE_AREA_LAYER_PROCESSING_HPP
-#define PASSABLE_AREA_LAYER_PROCESSING_HPP
+#ifndef LAYER_PROCESSING_HPP
+#define LAYER_PROCESSING_HPP
 
 #include "common.hpp"
+#include "common_types.hpp"
 
 #include <Eigen/Dense>
 #include <grid_map_core/grid_map_core.hpp>

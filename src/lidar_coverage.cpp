@@ -77,7 +77,7 @@ void LidarCoverage::initialize(const std::string &dog_model) {
 void LidarCoverage::addLidars(const std::string &model,
                               const std::vector<std::string> &lidar_names) {
   for (const auto &lidar_name : lidar_names) {
-    LidarParam param;
+    LidarParams param;
     param.name = lidar_name;
     const std::string prefix =
         "lidar_params." + model + "." + lidar_name;
@@ -147,7 +147,7 @@ void LidarCoverage::processCoverage(grid_map::GridMap &ele_map,
 }
 
 bool LidarCoverage::isCellCoveredByLidar(const Eigen::Vector3f &p_body,
-                                         const LidarParam &lidar) const {
+                                         const LidarParams &lidar) const {
   Eigen::Vector3f v_body = p_body - lidar.pos_body;
   float dist = v_body.norm();
   if (dist < lidar.min_range || dist > lidar.max_range)

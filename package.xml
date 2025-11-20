@@ -4,13 +4,14 @@
   <version>0.0.2</version>
   <description>The passable_area package</description>
 
-  <maintainer email="deeprobotics@todo.todo">deeprobotics</maintainer>
+  <maintainer email="support@deeprobotics.cn">Lucas Meng</maintainer>
   <license>TODO</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <build_depend>rclcpp</build_depend>
   <build_depend>sensor_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
   <build_depend>pcl_conversions</build_depend>
   <build_depend>pcl_ros</build_depend>
   <build_depend>grid_map_core</build_depend>
@@ -18,6 +19,7 @@
   <build_depend>grid_map_ros</build_depend>
 
   <exec_depend>rclcpp</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>pcl_conversions</exec_depend>
   <exec_depend>pcl_ros</exec_depend>
