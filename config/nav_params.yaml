@@ -20,6 +20,7 @@ passable_area:
     passable_cloud_topic: "/passable_area"
     impassable_cloud_topic: "/impassable_area"
     grid_map_topic: "/grid_map"
+    traversal_cost_topic: "/traversal_cost"
 
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"
@@ -53,4 +54,3 @@ passable_area:
       curve_power: 1.5
       terrain_sample_window: 1
       safe_zone_side_length: 1.0
-      topic_name: "traversal_cost"

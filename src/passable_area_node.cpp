@@ -33,7 +33,7 @@ PassableAreaNode::PassableAreaNode()
       grid_map_topic_(
           declare_parameter<std::string>("grid_map_topic", "grid_map")),
       traversal_cost_topic_(declare_parameter<std::string>(
-          "traversal_cost.topic_name", "traversal_cost")),
+          "traversal_cost_topic", "traversal_cost")),
       body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
       T_g2b_(Eigen::Affine3f::Identity()) {
   if (min_height_ > max_height_) {
