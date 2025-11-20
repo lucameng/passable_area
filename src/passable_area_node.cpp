@@ -180,6 +180,8 @@ void PassableAreaNode::elevationInit() {
   ele_map_->setSolverParams(solver_params_);
   ele_map_->setMaxSlopeDeg(max_slope_deg_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
+  traversal_cost_processor_ = std::make_unique<TraversalCost>(
+      *ele_map_, ele_map_->getTraversalCostParams(), get_logger());
   ele_init_ = true;
 }
 
@@ -225,6 +227,10 @@ void PassableAreaNode::cloudCallback(
 
     ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
                                 enable_blind_check_);
+    if (traversal_cost_processor_) {
+      traversal_cost_processor_->setParams(ele_map_->getTraversalCostParams());
+      traversal_cost_processor_->updateCostLayer();
+    }
 
     const auto end_time = std::chrono::steady_clock::now();
     const auto duration_ms =
@@ -364,15 +370,7 @@ void PassableAreaNode::publishGridMap() {
 }
 
 void PassableAreaNode::publishTraversalCost() {
-  if (!traversal_cost_params_.enabled || !traversal_cost_pub_ ||
-      !ele_map_->exists("traversal_cost"))
+  if (!traversal_cost_processor_ || !traversal_cost_pub_)
     return;
-
-  nav_msgs::msg::OccupancyGrid occ;
-  grid_map::GridMapRosConverter::toOccupancyGrid(
-      *ele_map_, "traversal_cost", traversal_cost_params_.easy_cost,
-      traversal_cost_params_.max_cost, occ);
-  occ.header.frame_id = used_frame_;
-  occ.header.stamp = stamp_;
-  traversal_cost_pub_->publish(occ);
+  traversal_cost_processor_->publish(traversal_cost_pub_, used_frame_, stamp_);
 }

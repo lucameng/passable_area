@@ -4,6 +4,7 @@
 #include "common.hpp"
 #include "elevation_map.hpp"
 #include "lidar_coverage.hpp"
+#include "traversal_cost.hpp"
 
 #include <grid_map_core/grid_map_core.hpp>
 #include <grid_map_msgs/msg/grid_map.hpp>
@@ -59,6 +60,7 @@ private:
 
   std::unique_ptr<ElevationMap> ele_map_;
   std::unique_ptr<LidarCoverage> lidar_cov_;
+  std::unique_ptr<TraversalCost> traversal_cost_processor_;
   mutable std::mutex imu_mutex_;
   Eigen::Affine3f T_g2b_;
 
@@ -83,7 +85,7 @@ private:
   bool ele_init_;
   bool lidar_init_;
   bool enable_blind_check_;
-  ElevationMap::TraversalCostParams traversal_cost_params_;
+  TraversalCostParams traversal_cost_params_;
   struct BodyGeometry {
     float length;
     float width;

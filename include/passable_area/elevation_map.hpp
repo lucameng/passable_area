@@ -2,6 +2,7 @@
 #define ELEVATION_MAP_HPP
 
 #include "elevation_solver.hpp"
+#include "traversal_cost.hpp"
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -22,7 +23,6 @@
 
 class ElevationMap : public grid_map::GridMap {
 public:
-  struct TraversalCostParams;
   ElevationMap() = default;
   explicit ElevationMap(
       float map_length, float map_width, float min_height, float max_height,
@@ -74,25 +74,22 @@ public:
   void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
     current_T_g2b_ = T_g2b;
   }
-
-  struct TraversalCostParams {
-    bool enabled{false};
-    float slope_free_deg{5.0f};
-    float slope_block_deg{30.0f};
-    float rough_free{0.02f};
-    float rough_block{0.08f};
-    float step_free{0.05f};
-    float step_block{0.18f};
-    float slope_weight{0.4f};
-    float roughness_weight{0.3f};
-    float step_weight{0.3f};
-    float easy_cost{1.0f};
-    float hard_cost{60.0f};
-    float max_cost{100.0f};
-    float curve_power{3.0f};
-    int terrain_sample_window{1};
-    float safe_zone_side_length{1.0f};
-  };
+  const Eigen::Affine3f &getCurrentTransform() const noexcept {
+    return current_T_g2b_;
+  }
+  float projectToBodyZ(float scalar_g, const Eigen::Matrix3f &R_g2b) const {
+    return dr::projectScalar(scalar_g, R_g2b, Eigen::Vector3f::UnitZ(),
+                             Eigen::Vector3f::UnitZ());
+  }
+  const TraversalCostParams &getTraversalCostParams() const noexcept {
+    return traversal_params_;
+  }
+  float computeRoughness(int x, int y, int kernel_size, Eigen::Vector3f &mean,
+                         Eigen::Matrix3f &square) const;
+  float computeSlopeRad(int row, int col,
+                        const grid_map::Matrix &elevation) const;
+  float normalizeMetric(float value, float free_threshold,
+                        float block_threshold) const noexcept;
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -102,19 +99,12 @@ private:
             idx.y() < getSize().y());
   }
 
-  float projectToBodyZ(float scalar_g, const Eigen::Matrix3f &R_g2b) const {
-    return dr::projectScalar(scalar_g, R_g2b, Eigen::Vector3f::UnitZ(),
-                             Eigen::Vector3f::UnitZ());
-  }
-
   bool isPositionInside(const Eigen::Vector2d &pos) const noexcept {
     return isInside(pos);
   }
 
   float extractVariance(const Eigen::Vector3f &mean,
                         const Eigen::Matrix3f &square) const;
-  float computeRoughness(int x, int y, int kernel_size, Eigen::Vector3f &mean,
-                         Eigen::Matrix3f &square) const;
   void inpaint(const std::string &layer_height, const std::string &layer_filled,
                Inpaint method);
   void denoise(const std::string &layer_height, Denoise method,
@@ -135,11 +125,6 @@ private:
                           const Eigen::Vector2f &bound_max = {4.f, 0.7f});
   void fillPointCloudFromLayer(const std::string &layer_height = "elevation",
                                const std::string &layer_filled = "padding");
-  void updateTraversalCostLayer();
-  float computeSlopeRad(int row, int col,
-                        const grid_map::Matrix &elevation) const;
-  float normalizeMetric(float value, float free_threshold,
-                        float block_threshold) const noexcept;
 
 private:
   PointCloudXYZ working_cloud_;

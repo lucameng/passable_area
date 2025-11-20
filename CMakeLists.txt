@@ -37,6 +37,7 @@ add_executable(passable_area
   src/layer_processing.cpp
   src/passable_area_node.cpp
   src/lidar_coverage.cpp
+  src/traversal_cost.cpp
   src/passable_area_main.cpp
 )
 
