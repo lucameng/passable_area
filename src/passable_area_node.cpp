@@ -35,6 +35,8 @@ PassableAreaNode::PassableAreaNode()
           "impassable_cloud_topic", "impassable_area")),
       grid_map_topic_(
           declare_parameter<std::string>("grid_map_topic", "grid_map")),
+      traversal_cost_topic_(declare_parameter<std::string>(
+          "traversal_cost.topic_name", "traversal_cost")),
       body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
       T_g2b_(Eigen::Affine3f::Identity()) {
   if (min_height_ > max_height_) {
@@ -165,7 +167,7 @@ void PassableAreaNode::initialize() {
   grid_map_pub_ =
       create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
   traversal_cost_pub_ =
-      create_publisher<nav_msgs::msg::OccupancyGrid>("traversal_cost", 10);
+      create_publisher<nav_msgs::msg::OccupancyGrid>(traversal_cost_topic_, 10);
 }
 
 void PassableAreaNode::elevationInit() {
@@ -359,7 +361,6 @@ void PassableAreaNode::publishGridMap() {
   ros_map_ptr->header.stamp = stamp_;
 
   grid_map_pub_->publish(*ros_map_ptr);
-
 }
 
 void PassableAreaNode::publishTraversalCost() {
