@@ -180,7 +180,7 @@ void PassableAreaNode::elevationInit() {
   ele_map_->setSolverParams(solver_params_);
   ele_map_->setMaxSlopeDeg(max_slope_deg_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
-  traversal_cost_processor_ = std::make_unique<TraversalCost>(
+  traversal_cost_ = std::make_unique<TraversalCost>(
       *ele_map_, ele_map_->getTraversalCostParams(), get_logger());
   ele_init_ = true;
 }
@@ -227,9 +227,8 @@ void PassableAreaNode::cloudCallback(
 
     ele_map_->processPointCloud(*msg, rough_thres_, max_drop_, getTransform(),
                                 enable_blind_check_);
-    if (traversal_cost_processor_) {
-      traversal_cost_processor_->setParams(ele_map_->getTraversalCostParams());
-      traversal_cost_processor_->updateCostLayer();
+    if (traversal_cost_) {
+      traversal_cost_->updateCostLayer();
     }
 
     const auto end_time = std::chrono::steady_clock::now();
@@ -370,7 +369,7 @@ void PassableAreaNode::publishGridMap() {
 }
 
 void PassableAreaNode::publishTraversalCost() {
-  if (!traversal_cost_processor_ || !traversal_cost_pub_)
+  if (!traversal_cost_ || !traversal_cost_pub_)
     return;
-  traversal_cost_processor_->publish(traversal_cost_pub_, used_frame_, stamp_);
+  traversal_cost_->publish(traversal_cost_pub_, used_frame_, stamp_);
 }

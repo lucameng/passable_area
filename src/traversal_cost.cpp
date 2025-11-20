@@ -15,10 +15,6 @@ TraversalCost::TraversalCost(ElevationMap &map,
                              const rclcpp::Logger &logger)
     : map_(map), params_(params), logger_(logger) {}
 
-void TraversalCost::setParams(const TraversalCostParams &params) noexcept {
-  params_ = params;
-}
-
 bool TraversalCost::updateCostLayer() {
   if (!map_.exists("traversal_cost") || !map_.exists("elevation"))
     return false;
@@ -31,27 +27,28 @@ bool TraversalCost::updateCostLayer() {
 
   slope_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
 
-  if (!params_.enabled) {
+  const auto params = map_.getTraversalCostParams();
+  if (!params.enabled) {
     cost_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
     return false;
   }
 
-  cost_layer.setConstant(params_.easy_cost);
+  cost_layer.setConstant(params.easy_cost);
 
   const auto size = map_.getSize();
   const int rows = size.x();
   const int cols = size.y();
   const float weight_sum =
-      std::max(1e-3f, params_.slope_weight + params_.roughness_weight +
-                          params_.step_weight);
+      std::max(1e-3f, params.slope_weight + params.roughness_weight +
+                          params.step_weight);
   const int rough_kernel =
-      std::clamp(2 * params_.terrain_sample_window + 1, 3, 7);
+      std::clamp(2 * params.terrain_sample_window + 1, 3, 7);
   const float slope_free_rad = static_cast<float>(
-      dr::degreeToRadian(static_cast<double>(params_.slope_free_deg)));
+      dr::degreeToRadian(static_cast<double>(params.slope_free_deg)));
   const float slope_block_rad = static_cast<float>(
-      dr::degreeToRadian(static_cast<double>(params_.slope_block_deg)));
+      dr::degreeToRadian(static_cast<double>(params.slope_block_deg)));
   const Eigen::Matrix3f R_g2b = map_.getCurrentTransform().linear();
-  const float half_extent = 0.5f * params_.safe_zone_side_length;
+  const float half_extent = 0.5f * params.safe_zone_side_length;
 
   auto fallback_roughness = [&](int row, int col) -> float {
     Eigen::Vector3f mean = Eigen::Vector3f::Zero();
@@ -95,7 +92,7 @@ bool TraversalCost::updateCostLayer() {
     for (int c = 0; c < cols; ++c) {
       const float height = elevation_layer(r, c);
       if (!std::isfinite(height)) {
-        cost_layer(r, c) = params_.easy_cost;
+        cost_layer(r, c) = params.easy_cost;
         continue;
       }
 
@@ -121,43 +118,43 @@ bool TraversalCost::updateCostLayer() {
                                 std::fabs(pos.y()) <= half_extent;
 
       if (!std::isfinite(roughness) || !std::isfinite(step)) {
-        cost_layer(r, c) = params_.easy_cost;
+        cost_layer(r, c) = params.easy_cost;
         continue;
       }
 
       slope_layer(r, c) = slope_rad;
 
       if (in_safe_zone) {
-        cost_layer(r, c) = params_.easy_cost;
+        cost_layer(r, c) = params.easy_cost;
         continue;
       }
 
       const bool beyond_limit = slope_rad >= slope_block_rad ||
-                                roughness >= params_.rough_block ||
-                                step >= params_.step_block;
+                                roughness >= params.rough_block ||
+                                step >= params.step_block;
       if (beyond_limit) {
-        cost_layer(r, c) = params_.max_cost;
+        cost_layer(r, c) = params.max_cost;
         continue;
       }
 
       const float slope_ratio =
           map_.normalizeMetric(slope_rad, slope_free_rad, slope_block_rad);
       const float rough_ratio = map_.normalizeMetric(
-          roughness, params_.rough_free, params_.rough_block);
+          roughness, params.rough_free, params.rough_block);
       const float step_ratio =
-          map_.normalizeMetric(step, params_.step_free, params_.step_block);
+          map_.normalizeMetric(step, params.step_free, params.step_block);
 
-      float difficulty = (slope_ratio * params_.slope_weight +
-                          rough_ratio * params_.roughness_weight +
-                          step_ratio * params_.step_weight) /
+      float difficulty = (slope_ratio * params.slope_weight +
+                          rough_ratio * params.roughness_weight +
+                          step_ratio * params.step_weight) /
                          weight_sum;
       difficulty = std::clamp(difficulty, 0.0f, 1.0f);
 
-      const float curve_power = std::max(0.1f, params_.curve_power);
+      const float curve_power = std::max(0.1f, params.curve_power);
       const float shaped = std::pow(difficulty, curve_power);
       float cost =
-          params_.easy_cost + (params_.hard_cost - params_.easy_cost) * shaped;
-      cost = std::clamp(cost, params_.easy_cost, params_.hard_cost);
+          params.easy_cost + (params.hard_cost - params.easy_cost) * shaped;
+      cost = std::clamp(cost, params.easy_cost, params.hard_cost);
       cost_layer(r, c) = cost;
     }
   }
@@ -182,12 +179,13 @@ bool TraversalCost::publish(
 bool TraversalCost::fillMessage(nav_msgs::msg::OccupancyGrid &msg,
                                 const std::string &frame_id,
                                 const rclcpp::Time &stamp) const {
-  if (!params_.enabled || !map_.exists("traversal_cost"))
+  const auto params = map_.getTraversalCostParams();
+  if (!params.enabled || !map_.exists("traversal_cost"))
     return false;
 
   try {
     grid_map::GridMapRosConverter::toOccupancyGrid(
-        map_, "traversal_cost", params_.easy_cost, params_.max_cost, msg);
+        map_, "traversal_cost", params.easy_cost, params.max_cost, msg);
   } catch (const std::exception &e) {
     RCLCPP_WARN(logger_, "Failed to convert traversal cost layer: %s",
                 e.what());

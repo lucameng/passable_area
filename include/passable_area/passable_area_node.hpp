@@ -60,7 +60,7 @@ private:
 
   std::unique_ptr<ElevationMap> ele_map_;
   std::unique_ptr<LidarCoverage> lidar_cov_;
-  std::unique_ptr<TraversalCost> traversal_cost_processor_;
+  std::unique_ptr<TraversalCost> traversal_cost_;
   mutable std::mutex imu_mutex_;
   Eigen::Affine3f T_g2b_;
 

@@ -14,7 +14,6 @@ public:
       ElevationMap &map, const TraversalCostParams &params,
       const rclcpp::Logger &logger = rclcpp::get_logger("TraversalCost"));
 
-  void setParams(const TraversalCostParams &params) noexcept;
   const TraversalCostParams &getParams() const noexcept { return params_; }
 
   bool updateCostLayer();
