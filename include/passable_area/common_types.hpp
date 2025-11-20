@@ -73,8 +73,17 @@ struct TraversalCostParams {
   float safe_zone_side_length{1.0f};
 };
 
+struct ElevationSolverRegion {
+  bool enabled = false;
+  float min_x = 0.0f;
+  float max_x = 0.0f;
+  float min_y = 0.0f;
+  float max_y = 0.0f;
+};
+
 struct ElevationSolverParams {
-  bool use_legacy_elevation = false;
+  bool use_histogram_solver = true;
+  int histogram_bins = 16;
   int min_points = 1;
   int ceiling_window_bins = 2;
   int ceiling_min_points = 1;
@@ -84,6 +93,7 @@ struct ElevationSolverParams {
   float float_ratio_threshold = 0.5f;
   int neighbor_min_support = 1;
   float neighbor_height_tolerance = 0.25f;
+  ElevationSolverRegion region;
 };
 
 struct ElevationSolverContext {
@@ -95,14 +105,6 @@ struct ElevationSolverContext {
   const std::vector<uint16_t> *counts = nullptr;
   const std::vector<float> *peaks = nullptr;
   const std::vector<uint8_t> *region_mask = nullptr;
-};
-
-struct ElevationSolverRegion {
-  bool enabled = false;
-  float min_x = 0.0f;
-  float max_x = 0.0f;
-  float min_y = 0.0f;
-  float max_y = 0.0f;
 };
 
 struct ElevationSolverResult {
