@@ -56,7 +56,7 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   solver_params_.neighbor_height_tolerance = 0.25f;
 }
 
-void ElevationMap::setSolverParams(
+void ElevationMap::setElevationSolverParams(
     const ElevationSolverParams &params) noexcept {
   solver_params_.use_histogram_solver = params.use_histogram_solver;
   solver_params_.histogram_bins = std::max(1, params.histogram_bins);

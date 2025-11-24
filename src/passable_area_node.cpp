@@ -184,7 +184,7 @@ void PassableAreaNode::elevationInit() {
       used_frame_, get_logger());
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
-  ele_map_->setSolverParams(solver_params_);
+  ele_map_->setElevationSolverParams(solver_params_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
   traversal_cost_ = std::make_unique<TraversalCost>(
       *ele_map_, ele_map_->getTraversalCostParams(), get_logger());

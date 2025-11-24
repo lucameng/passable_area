@@ -6,11 +6,11 @@
 #include "lidar_coverage.hpp"
 #include "traversal_cost.hpp"
 
-#include <grid_map_core/grid_map_core.hpp>
-#include <grid_map_msgs/msg/grid_map.hpp>
-#include <grid_map_ros/GridMapRosConverter.hpp>
-#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <grid_map_core/grid_map_core.hpp>
+#include <grid_map_ros/GridMapRosConverter.hpp>
+#include <grid_map_msgs/msg/grid_map.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <visualization_msgs/msg/marker.hpp>

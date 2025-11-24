@@ -66,7 +66,7 @@ bool TraversalCost::updateCostLayer() {
     for (int c = 0; c < cols; ++c) {
       const float height = elevation_layer(r, c);
       if (!std::isfinite(height)) {
-        cost_layer(r, c) = params.easy_cost;
+        // cost_layer(r, c) = params.easy_cost;
         continue;
       }
 

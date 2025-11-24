@@ -2,8 +2,8 @@
 #define ELEVATION_MAP_HPP
 
 #include "elevation_solver.hpp"
-#include "common.hpp"
 #include "common_types.hpp"
+#include "common.hpp"
 #include "utils.hpp"
 
 #include <cmath>
@@ -68,7 +68,7 @@ public:
   float getBaselineGround(float radius) const;
   void setMaxInpaintPixels(int max_pixels) noexcept;
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
-  void setSolverParams(const ElevationSolverParams &params) noexcept;
+  void setElevationSolverParams(const ElevationSolverParams &params) noexcept;
   void setTraversalCostParams(const TraversalCostParams &params) noexcept;
   void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
     current_T_g2b_ = T_g2b;
