@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_COMMON_TYPES_HPP
-#define PASSABLE_AREA_COMMON_TYPES_HPP
+#ifndef COMMON_TYPES_HPP
+#define COMMON_TYPES_HPP
 
 #include <Eigen/Dense>
 #include <cmath>
@@ -49,37 +49,37 @@ struct PassabilityParams {
 
 struct LidarParams {
   std::string name;
-  Eigen::Vector3f pos_body = Eigen::Vector3f::Zero();
-  Eigen::Vector3f rpy_body_deg = Eigen::Vector3f::Zero();
-  Eigen::Vector3f rpy_body_rad = Eigen::Vector3f::Zero();
-  Eigen::Matrix3f R_mount = Eigen::Matrix3f::Identity();
+  Eigen::Vector3f pos_body = Eigen::Vector3f::Zero();     // body frame
+  Eigen::Vector3f rpy_body_deg = Eigen::Vector3f::Zero(); // body frame
+  Eigen::Vector3f rpy_body_rad = Eigen::Vector3f::Zero(); // body frame
+  Eigen::Matrix3f R_mount = Eigen::Matrix3f::Identity();  // rotation
 
-  double fov_up_deg = 52.0;
-  double fov_down_deg = -7.0;
-  double fov_up_rad = 0.0;
-  double fov_down_rad = 0.0;
+  double fov_up_deg = 52.0;   // deg
+  double fov_down_deg = -7.0; // deg
+  double fov_up_rad = 0.0;    // deg
+  double fov_down_rad = 0.0;  // deg
 
-  double min_range = 0.01;
-  double max_range = 30.0;
+  double min_range = 0.01;    // m
+  double max_range = 30.0;    // m
 };
 
 struct TraversalCostParams {
-  bool enabled{false};
-  float slope_free_deg{5.0f};
-  float slope_block_deg{30.0f};
-  float rough_free{0.02f};
-  float rough_block{0.08f};
-  float step_free{0.05f};
-  float step_block{0.18f};
-  float slope_weight{0.4f};
-  float roughness_weight{0.3f};
-  float step_weight{0.3f};
-  float easy_cost{1.0f};
-  float hard_cost{60.0f};
-  float max_cost{100.0f};
-  float curve_power{3.0f};
-  int terrain_sample_window{1};
-  float safe_zone_side_length{1.0f};
+  bool enabled = false;
+  float slope_free_deg = 5.0f;
+  float slope_block_deg = 30.0f;
+  float rough_free = 0.02f;
+  float rough_block = 0.08f;
+  float step_free = 0.05f;
+  float step_block = 0.18f;
+  float slope_weight = 0.4f;
+  float roughness_weight = 0.3f;
+  float step_weight = 0.3f;
+  float easy_cost = 1.0f;
+  float hard_cost = 60.0f;
+  float max_cost = 100.0f;
+  float curve_power = 3.0f;
+  int terrain_sample_window = 1;
+  float safe_zone_side_length = 1.0f;
 };
 
 struct ElevationSolverRegion {

@@ -1,7 +1,7 @@
 passable_area:
   ros__parameters:
-    map_length:    6.0
-    map_width:     6.0
+    map_length:    8.0
+    map_width:     8.0
     map_height_min: -1.0
     map_height_max:  0.5
     voxel_size:    0.05

@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_TRAVERSAL_COST_HPP
-#define PASSABLE_AREA_TRAVERSAL_COST_HPP
+#ifndef TRAVERSAL_COST_HPP
+#define TRAVERSAL_COST_HPP
 
 #include "common_types.hpp"
 
@@ -31,4 +31,4 @@ private:
   rclcpp::Logger logger_;
 };
 
-#endif // PASSABLE_AREA_TRAVERSAL_COST_HPP
+#endif // TRAVERSAL_COST_HPP
