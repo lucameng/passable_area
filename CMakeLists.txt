@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(passable_node)
+project(passable_area)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 17)
@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(grid_map_core REQUIRED)
@@ -27,17 +28,20 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   include/common
-  include/passable_node
+  include/passable_area
 )
 
-add_executable(passable_node
+add_executable(passable_area
   src/elevation_map.cpp
-  src/passable_node.cpp
+  src/elevation_solver.cpp
+  src/layer_processing.cpp
+  src/passable_area_node.cpp
   src/lidar_coverage.cpp
-  src/passable_main.cpp
+  src/traversal_cost.cpp
+  src/passable_area_main.cpp
 )
 
-ament_target_dependencies(passable_node
+ament_target_dependencies(passable_area
   rclcpp
   sensor_msgs
   pcl_conversions
@@ -45,14 +49,15 @@ ament_target_dependencies(passable_node
   grid_map_core
   grid_map_cv
   grid_map_ros
+  nav_msgs
 )
 
-target_link_libraries(passable_node
+target_link_libraries(passable_area
   ${OpenCV_LIBS}
   OpenMP::OpenMP_CXX
 )
 
-install(TARGETS passable_node
+install(TARGETS passable_area
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -67,7 +72,7 @@ install(
 )
 
 install(
-  DIRECTORY scripts
+  DIRECTORY rviz
   DESTINATION share/${PROJECT_NAME}/
 )
 
