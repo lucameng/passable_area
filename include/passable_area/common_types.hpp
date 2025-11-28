@@ -36,15 +36,16 @@ enum class DogModel : uint8_t { X30 = 0, M20 = 1, Unknown = 2 };
 // -----------------------------------------------------------------------------
 
 struct BodyGeometry {
-  float length{0.0f};
-  float width{0.0f};
-  float height{0.0f};
+  float length = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
 };
 
 struct PassabilityParams {
-  float roughness_threshold{0.1f};
-  float drop_threshold{0.3f};
-  float max_slope_deg{40.0f};
+  float roughness_threshold = 0.1f;
+  float drop_threshold = 0.3f;
+  float max_slope_deg = 40.0f;
+  bool treat_nan_as_stiff = true;
 };
 
 struct LidarParams {

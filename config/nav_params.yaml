@@ -14,6 +14,7 @@ passable_area:
     clearance_threshold: 0.0
     baseline_radius: 0.0
     enable_blind_check: true
+    treat_nan_as_stiff: true
 
     accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
     imu_topic: "/IMU_YESENSE"
