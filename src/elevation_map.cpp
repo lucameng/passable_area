@@ -130,7 +130,8 @@ void ElevationMap::processPointCloud(
   const int rough_kernel =
       std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
   judgePassability(pass_params.roughness_threshold, pass_params.drop_threshold,
-                   pass_params.max_slope_deg, rough_kernel);
+                   pass_params.max_slope_deg, rough_kernel,
+                   pass_params.treat_nan_as_stiff);
 }
 
 void ElevationMap::setInputCloud(
@@ -536,7 +537,8 @@ bool ElevationMap::isPassable(float roughness_value,
 }
 
 void ElevationMap::judgePassability(float rough_thres, float drop_thres,
-                                    float max_slope_deg, int kernel_size) {
+                                    float max_slope_deg, int kernel_size,
+                                    bool treat_nan_as_stiff) {
   kernel_size = std::clamp(kernel_size, 3, 5);
   const auto size = getSize();
   const int size_x = size.x();
@@ -643,7 +645,9 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
-        setPassability(curr_idx, Passability::Impassable);
+        if (treat_nan_as_stiff) {
+          setPassability(curr_idx, Passability::Impassable);
+        }
         // if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
         //                      nan_min_cells, drop_buffer, far_distance,
         //                      cliff_cache)) {

@@ -114,7 +114,8 @@ private:
   void cloud2Elevation();
   bool isPassable(float roughness_value, float roughness_thres) const;
   void judgePassability(float rough_thres, float drop_thres,
-                        float max_slope_deg, int kernel_size);
+                        float max_slope_deg, int kernel_size,
+                        bool treat_nan_as_stiff);
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,

@@ -130,6 +130,8 @@ void PassableAreaNode::loadPassabilityParams() {
       declare_parameter("max_roughness", 0.1f);
   passability_params_.max_slope_deg =
       declare_parameter("max_slope_deg", 45.0f);
+  passability_params_.treat_nan_as_stiff =
+      declare_parameter("treat_nan_as_stiff", true);
 }
 
 std::string
