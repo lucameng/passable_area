@@ -40,6 +40,7 @@ PassableAreaNode::PassableAreaNode()
     std::swap(min_height_, max_height_);
   }
   loadBodyGeometry();
+  loadLidarParams();
   loadPassabilityParams();
   loadElevationSolverParams();
   loadTraversalCostParams();
@@ -123,12 +124,81 @@ void PassableAreaNode::loadTraversalCostParams() {
       declare_parameter("traversal_cost.safe_zone_side_length", 1.0f);
 }
 
+void PassableAreaNode::loadLidarParams() {
+  lidar_params_.clear();
+
+  std::string model_key = normalizeModelKey(dog_model_);
+  std::vector<std::string> lidar_names;
+  if (model_key == "x30") {
+    lidar_names = {"lidar_front_up", "lidar_front_down", "lidar_rear_up",
+                   "lidar_rear_down"};
+  } else {
+    if (model_key != "m20") {
+      RCLCPP_WARN(get_logger(),
+                  "Unknown dog_model '%s', falling back to 'm20' lidar params",
+                  dog_model_.c_str());
+      model_key = "m20";
+    }
+    lidar_names = {"lidar_front", "lidar_rear"};
+  }
+
+  for (const auto &lidar_name : lidar_names) {
+    LidarParams param;
+    param.name = lidar_name;
+    const std::string prefix = "lidar_params." + model_key + "." + lidar_name;
+
+    std::vector<double> pos_vec;
+    declare_parameter(prefix + ".pos_body",
+                      std::vector<double>{param.pos_body.x(),
+                                          param.pos_body.y(),
+                                          param.pos_body.z()});
+    get_parameter(prefix + ".pos_body", pos_vec);
+    if (pos_vec.size() == 3) {
+      param.pos_body = Eigen::Vector3f(pos_vec[0], pos_vec[1], pos_vec[2]);
+    } else {
+      RCLCPP_WARN(get_logger(), "Invalid pos_body for %s, using defaults",
+                  lidar_name.c_str());
+    }
+
+    std::vector<double> rpy_vec;
+    declare_parameter(prefix + ".rpy_body",
+                      std::vector<double>{param.rpy_body_deg.x(),
+                                          param.rpy_body_deg.y(),
+                                          param.rpy_body_deg.z()});
+    get_parameter(prefix + ".rpy_body", rpy_vec);
+    if (rpy_vec.size() == 3) {
+      param.rpy_body_deg = Eigen::Vector3f(rpy_vec[0], rpy_vec[1], rpy_vec[2]);
+      param.rpy_body_rad = Eigen::Vector3f(dr::degreeToRadian(rpy_vec[0]),
+                                           dr::degreeToRadian(rpy_vec[1]),
+                                           dr::degreeToRadian(rpy_vec[2]));
+      param.R_mount = dr::rotationFromYPRrad(param.rpy_body_rad);
+    } else {
+      RCLCPP_WARN(get_logger(), "Invalid rpy_body for %s, using defaults",
+                  lidar_name.c_str());
+    }
+
+    declare_parameter(prefix + ".fov_up_deg", param.fov_up_deg);
+    declare_parameter(prefix + ".fov_down_deg", param.fov_down_deg);
+    get_parameter(prefix + ".fov_up_deg", param.fov_up_deg);
+    get_parameter(prefix + ".fov_down_deg", param.fov_down_deg);
+    param.fov_up_rad = dr::degreeToRadian(param.fov_up_deg);
+    param.fov_down_rad = dr::degreeToRadian(param.fov_down_deg);
+
+    declare_parameter(prefix + ".min_range", param.min_range);
+    declare_parameter(prefix + ".max_range", param.max_range);
+    get_parameter(prefix + ".min_range", param.min_range);
+    get_parameter(prefix + ".max_range", param.max_range);
+
+    lidar_params_.push_back(param);
+  }
+}
+
 void PassableAreaNode::loadPassabilityParams() {
-  passability_params_.drop_threshold =
+  passability_params_.drop_threshold = 
       declare_parameter("max_drop", 0.3f);
   passability_params_.roughness_threshold =
       declare_parameter("max_roughness", 0.1f);
-  passability_params_.max_slope_deg =
+  passability_params_.max_slope_deg = 
       declare_parameter("max_slope_deg", 45.0f);
   passability_params_.treat_nan_as_stiff =
       declare_parameter("treat_nan_as_stiff", true);
@@ -188,6 +258,7 @@ void PassableAreaNode::elevationInit() {
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_map_->setElevationSolverParams(solver_params_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
+  ele_map_->setRaycastLidarParams(lidar_params_);
   traversal_cost_ = std::make_unique<TraversalCost>(
       *ele_map_, ele_map_->getTraversalCostParams(), get_logger());
   ele_init_ = true;
@@ -196,7 +267,7 @@ void PassableAreaNode::elevationInit() {
 void PassableAreaNode::lidarCoverInit() {
   RCLCPP_INFO(get_logger(), "Initializing < lidar coverage >");
   lidar_cov_ = std::make_unique<LidarCoverage>(shared_from_this());
-  lidar_cov_->initialize(dog_model_);
+  lidar_cov_->initialize(dog_model_, lidar_params_);
   lidar_init_ = true;
 }
 

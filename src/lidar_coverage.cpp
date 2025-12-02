@@ -20,9 +20,9 @@
 LidarCoverage::LidarCoverage(const rclcpp::Node::SharedPtr &node)
     : node_(node), ground_height_(-0.5f), bound_max_({0.5f, 0.25f}),
       bound_min_({-0.5f, -0.25f}), lidar_names_x30_{"lidar_front_up",
-                                                  "lidar_front_down",
-                                                  "lidar_rear_up",
-                                                  "lidar_rear_down"},
+                                                    "lidar_front_down",
+                                                    "lidar_rear_up",
+                                                    "lidar_rear_down"},
       lidar_names_m20_{"lidar_front", "lidar_rear"} {
   // LidarCoverage constructor
 }
@@ -42,102 +42,34 @@ DogModel LidarCoverage::parseDogModel(const std::string &dog_model) const {
   return DogModel::Unknown;
 }
 
-void LidarCoverage::initialize(const std::string &dog_model) {
-  lidars_.clear();
+void LidarCoverage::initialize(const std::string &dog_model,
+                               const std::vector<LidarParams> &lidar_params) {
   dog_model_ = dog_model;
+  lidars_.clear();
 
-  std::vector<std::string> lidar_names;
-  active_model_ = dog_model_;
-  switch (parseDogModel(dog_model_)) {
-  case DogModel::X30:
-    active_model_ = "x30";
-    lidar_names.assign(lidar_names_x30_.begin(), lidar_names_x30_.end());
-    break;
-  case DogModel::M20:
-    active_model_ = "m20";
-    lidar_names.assign(lidar_names_m20_.begin(), lidar_names_m20_.end());
-    break;
-  case DogModel::Unknown:
-  default:
-    RCLCPP_WARN(node_->get_logger(),
-                "Unknown dog_model '%s', falling back to x30 configuration",
-                dog_model_.c_str());
-    active_model_ = "x30";
-    lidar_names.assign(lidar_names_x30_.begin(), lidar_names_x30_.end());
-    break;
+  auto normalize = [](std::string model) {
+    std::transform(
+        model.begin(), model.end(), model.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return model;
+  };
+
+  active_model_ = normalize(dog_model_);
+
+  if (lidar_params.empty()) {
+    RCLCPP_WARN(
+        node_->get_logger(),
+        "No lidar_params lidar params provided for model '%s'; coverage "
+        "will be empty",
+        dog_model_.c_str());
+    return;
   }
 
-  RCLCPP_INFO(node_->get_logger(),
-              "Loading lidar configuration for dog model '%s'",
-              active_model_.c_str());
-
-  addLidars(active_model_, lidar_names);
-}
-
-void LidarCoverage::addLidars(const std::string &model,
-                              const std::vector<std::string> &lidar_names) {
-  for (const auto &lidar_name : lidar_names) {
-    LidarParams param;
-    param.name = lidar_name;
-    const std::string prefix =
-        "lidar_params." + model + "." + lidar_name;
-
-    // ----------- pos_body -----------
-    std::vector<double> pos_vec;
-    node_->declare_parameter(prefix + ".pos_body",
-                             std::vector<double>{0.0, 0.0, 0.0});
-    node_->get_parameter(prefix + ".pos_body", pos_vec);
-
-    if (pos_vec.size() == 3) {
-      param.pos_body = Eigen::Vector3f(pos_vec[0], pos_vec[1], pos_vec[2]);
-    } else {
-      RCLCPP_ERROR(node_->get_logger(), "Failed to get position for %s",
-                   lidar_name.c_str());
-    }
-
-    // ----------- rpy_body -----------
-    std::vector<double> rpy_vec;
-    node_->declare_parameter(prefix + ".rpy_body",
-                             std::vector<double>{0.0, 0.0, 0.0});
-    node_->get_parameter(prefix + ".rpy_body", rpy_vec);
-
-    if (rpy_vec.size() == 3) {
-      param.rpy_body_deg = Eigen::Vector3f(rpy_vec[0], rpy_vec[1], rpy_vec[2]);
-      param.rpy_body_rad = Eigen::Vector3f(dr::degreeToRadian(rpy_vec[0]),
-                                           dr::degreeToRadian(rpy_vec[1]),
-                                           dr::degreeToRadian(rpy_vec[2]));
-      param.R_mount = dr::rotationFromYPRrad(param.rpy_body_rad);
-    } else {
-      RCLCPP_ERROR(node_->get_logger(), "Failed to get euler angle for %s",
-                   lidar_name.c_str());
-    }
-
-    // ----------- fov_up / fov_down -----------
-    node_->declare_parameter(prefix + ".fov_up_deg", 15.0);
-    node_->declare_parameter(prefix + ".fov_down_deg", -15.0);
-
-    node_->get_parameter(prefix + ".fov_up_deg", param.fov_up_deg);
-    node_->get_parameter(prefix + ".fov_down_deg", param.fov_down_deg);
-
-    param.fov_up_rad = dr::degreeToRadian(param.fov_up_deg);
-    param.fov_down_rad = dr::degreeToRadian(param.fov_down_deg);
-
-    lidars_.push_back(param);
-
-    std::stringstream log_stream;
-    log_stream << std::fixed << std::setprecision(5);
-    log_stream << lidar_name << " parameters:"
-               << "\n  pos_body: [" << param.pos_body.x() << ", "
-               << param.pos_body.y() << ", " << param.pos_body.z() << "]"
-               << "\n  rpy_deg: [" << param.rpy_body_deg.x() << ", "
-               << param.rpy_body_deg.y() << ", " << param.rpy_body_deg.z()
-               << "]"
-               << "\n  fov_up/down: [" << param.fov_up_deg << ", "
-               << param.fov_down_deg << "]"
-               << "\n  rotation matrix:\n"
-               << dr::toString(param.R_mount);
-    RCLCPP_INFO(node_->get_logger(), "%s", log_stream.str().c_str());
-  }
+  lidars_ = lidar_params;
+  RCLCPP_INFO(
+      node_->get_logger(),
+      "Using lidar params for dog model '%s' (%zu lidars)",
+      active_model_.c_str(), lidars_.size());
 }
 
 void LidarCoverage::processCoverage(grid_map::GridMap &ele_map,

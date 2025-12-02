@@ -645,15 +645,11 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
-        if (treat_nan_as_stiff) {
+        if (treat_nan_as_stiff &&
+            isRayDrop(nbr_idx, drop_thres, drop_buffer, elevation_layer)) {
           setPassability(curr_idx, Passability::Impassable);
+          curr_is_cliff = true;
         }
-        // if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
-        //                      nan_min_cells, drop_buffer, far_distance,
-        //                      cliff_cache)) {
-        //   setPassability(curr_idx, Passability::Impassable);
-        //   curr_is_cliff = true;
-        // }
         continue;
       }
       if (visited[idx])
@@ -760,6 +756,143 @@ bool ElevationMap::isCliffCandidate(
   const bool is_cliff = sufficient_nan && drop_sufficient;
   cliff_cache[idx] = is_cliff ? CliffState::Cliff : CliffState::NotCliff;
   return is_cliff;
+}
+
+std::optional<std::reference_wrapper<const LidarParams>>
+ElevationMap::selectRaycastLidar(const Eigen::Vector3f &target_body) const {
+  if (raycast_lidars_.empty())
+    return std::nullopt;
+
+  const LidarParams *front = nullptr;
+  const LidarParams *rear = nullptr;
+
+  for (const auto &lidar : raycast_lidars_) {
+    if (lidar.name.find("front") != std::string::npos) {
+      front = &lidar;
+    } else if (lidar.name.find("rear") != std::string::npos) {
+      rear = &lidar;
+    }
+  }
+
+  if (target_body.x() >= 0.0f && front)
+    return std::cref(*front);
+  if (target_body.x() < 0.0f && rear)
+    return std::cref(*rear);
+  return std::cref(raycast_lidars_.front());
+}
+
+bool ElevationMap::isRayDrop(const grid_map::Index &target_idx,
+                             float drop_thres, float drop_buffer,
+                             const grid_map::Matrix &elevation) const {
+  if (raycast_lidars_.empty())
+    return false;
+
+  grid_map::Position target_pos;
+  getPosition(target_idx, target_pos);
+
+  Eigen::Vector3f target_grav(target_pos.x(), target_pos.y(), 0.0f);
+  Eigen::Vector3f target_body = current_T_g2b_ * target_grav;
+
+  auto lidar_opt = selectRaycastLidar(target_body);
+  if (!lidar_opt.has_value())
+    return false;
+  const LidarParams &lidar = lidar_opt->get();
+
+  Eigen::Vector3f sensor_grav = current_T_g2b_.inverse() * lidar.pos_body;
+  Eigen::Vector2f sensor_xy(sensor_grav.x(), sensor_grav.y());
+  Eigen::Vector2f target_xy(target_pos.x(), target_pos.y());
+
+  Eigen::Vector2f dir = target_xy - sensor_xy;
+  float dist_to_target = dir.norm();
+  if (dist_to_target < 1e-3f)
+    return false;
+  dir /= dist_to_target;
+
+  const float step_len = grid_size_;
+  const float max_ray = std::min(
+      max_ray_distance_, 0.5f * std::min(map_length_, map_width_));
+  const int max_steps =
+      std::max(1, static_cast<int>(std::ceil(max_ray / step_len)));
+  const int target_step =
+      std::max(1, static_cast<int>(std::lround(dist_to_target / step_len)));
+  const int step_tolerance = 1; // allow +/-1 step around target
+
+  float near_height = std::numeric_limits<float>::quiet_NaN();
+  float far_height = std::numeric_limits<float>::quiet_NaN();
+  int gap_steps = 0;
+  bool gap_started = false;
+  int gap_start_step = -1;
+  int gap_end_step = -1;
+
+  grid_map::Index sample_idx;
+
+  for (int s = 1; s <= max_steps; ++s) {
+    Eigen::Vector2f sample_xy = sensor_xy + dir * (s * step_len);
+    grid_map::Position sample_pos(sample_xy.x(), sample_xy.y());
+    if (!getIndex(sample_pos, sample_idx))
+      break;
+
+    float h = elevation(sample_idx.x(), sample_idx.y());
+
+    if (!std::isfinite(h)) {
+      gap_steps = gap_started ? gap_steps + 1 : 1;
+      gap_started = true;
+      if (gap_start_step < 0)
+        gap_start_step = s;
+      gap_end_step = s;
+      if (gap_steps * step_len > max_nan_gap_) {
+        return false;
+      }
+      // if we have passed the target window and are not in a covering gap,
+      // early exit
+      if (s > target_step + step_tolerance &&
+          gap_end_step < target_step - step_tolerance)
+        return false;
+      continue;
+    }
+
+    // finite height
+    if (!gap_started) {
+      near_height = h;
+      // if we already stepped past the target without hitting a gap, stop
+      if (s > target_step + step_tolerance)
+        break;
+      continue;
+    }
+
+    // gap has ended at step s-1
+    const bool gap_covers_target =
+        (gap_start_step <= (target_step + step_tolerance)) &&
+        (gap_end_step >= (target_step - step_tolerance));
+    if (!gap_covers_target) {
+      // reset and keep using this finite as the latest near
+      gap_started = false;
+      gap_steps = 0;
+      gap_start_step = -1;
+      gap_end_step = -1;
+      near_height = h;
+      // if we've passed target window, stop searching
+      if (s > target_step + step_tolerance)
+        break;
+      continue;
+    }
+
+    // gap covers target, current finite is far side
+    if (!std::isfinite(near_height)) {
+      near_height = GROUD_HEIGHT; // assume ground if ray starts in NaN
+    }
+    far_height = h;
+    break;
+  }
+
+  if (!std::isfinite(near_height) || !std::isfinite(far_height) ||
+      gap_steps == 0) {
+    return false;
+  }
+
+  float drop_body =
+      projectToBodyZ(near_height - far_height, current_T_g2b_.linear());
+  return drop_body > (drop_thres + drop_buffer);
 }
 
 void ElevationMap::fillElevationHoles(const std::string &layer_height,
