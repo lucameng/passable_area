@@ -86,6 +86,7 @@ private:
   PassabilityParams passability_params_;
   TraversalCostParams traversal_cost_params_;
   ElevationSolverParams solver_params_;
+  RaycastParams raycast_params_;
   std::vector<LidarParams> lidar_params_;
 
 private:
@@ -102,6 +103,7 @@ private:
   void loadPassabilityParams();
   void loadElevationSolverParams();
   void loadTraversalCostParams();
+  void loadRaycastParams();
   void loadLidarParams();
   std::string normalizeModelKey(const std::string &dog_model) const;
   BodyGeometry defaultBodyGeometry() const { return {0.9f, 0.4f, 0.5f}; }

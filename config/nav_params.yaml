@@ -29,6 +29,11 @@ passable_area:
     used_frame:    "base_gravity"
     dog_model:     "m20"
 
+    raycast:
+      enable: true
+      max_ray_distance: 4.0
+      max_nan_gap: 1.0
+
     elevation_solver:
       use_histogram_solver: true
       histogram_bins: 20

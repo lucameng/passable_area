@@ -71,7 +71,8 @@ public:
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
   void setElevationSolverParams(const ElevationSolverParams &params) noexcept;
   void setTraversalCostParams(const TraversalCostParams &params) noexcept;
-  void setRaycastLidarParams(const std::vector<LidarParams> &lidars) noexcept {
+  void setRaycastParams(const RaycastParams &params) noexcept;
+  void setLidarParams(const std::vector<LidarParams> &lidars) noexcept {
     raycast_lidars_ = lidars;
   }
   void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
@@ -122,8 +123,9 @@ private:
                         bool treat_nan_as_stiff);
   std::optional<std::reference_wrapper<const LidarParams>>
   selectRaycastLidar(const Eigen::Vector3f &target_body) const;
-  bool isRayDrop(const grid_map::Index &target_idx, float drop_thres,
-                 float drop_buffer, const grid_map::Matrix &elevation) const;
+  bool hasCliffDropOnRay(const grid_map::Index &target_idx, float drop_thres,
+                         float drop_buffer,
+                         const grid_map::Matrix &elevation) const;
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
@@ -153,9 +155,8 @@ private:
   rclcpp::Logger logger_;
   ElevationSolverParams solver_params_;
   TraversalCostParams traversal_params_;
+  RaycastParams raycast_params_;
   std::vector<LidarParams> raycast_lidars_;
-  float max_ray_distance_ = 4.0f; // metres
-  float max_nan_gap_ = 2.0f;      // metres
 };
 
 #endif // ELEVATION_MAP_HPP

@@ -114,6 +114,13 @@ void ElevationMap::setTraversalCostParams(
   }
 }
 
+void ElevationMap::setRaycastParams(const RaycastParams &params) noexcept {
+  raycast_params_ = params;
+  raycast_params_.max_ray_distance =
+      std::max(0.1f, raycast_params_.max_ray_distance);
+  raycast_params_.max_nan_gap = std::max(0.0f, raycast_params_.max_nan_gap);
+}
+
 void ElevationMap::processPointCloud(
     const sensor_msgs::msg::PointCloud2 &ros_cloud,
     const PassabilityParams &pass_params, const Eigen::Affine3f &T_g2b,
@@ -645,9 +652,15 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
-        if (treat_nan_as_stiff &&
-            isRayDrop(nbr_idx, drop_thres, drop_buffer, elevation_layer)) {
-          setPassability(curr_idx, Passability::Impassable);
+        if (treat_nan_as_stiff) {
+          if (raycast_params_.enable) {
+            if (hasCliffDropOnRay(nbr_idx, drop_thres, drop_buffer,
+                                  elevation_layer)) {
+              setPassability(curr_idx, Passability::Impassable);
+            }
+          } else {
+            setPassability(curr_idx, Passability::Impassable);
+          }
           curr_is_cliff = true;
         }
         continue;
@@ -781,9 +794,9 @@ ElevationMap::selectRaycastLidar(const Eigen::Vector3f &target_body) const {
   return std::cref(raycast_lidars_.front());
 }
 
-bool ElevationMap::isRayDrop(const grid_map::Index &target_idx,
-                             float drop_thres, float drop_buffer,
-                             const grid_map::Matrix &elevation) const {
+bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
+                                     float drop_thres, float drop_buffer,
+                                     const grid_map::Matrix &elevation) const {
   if (raycast_lidars_.empty())
     return false;
 
@@ -809,8 +822,8 @@ bool ElevationMap::isRayDrop(const grid_map::Index &target_idx,
   dir /= dist_to_target;
 
   const float step_len = grid_size_;
-  const float max_ray = std::min(
-      max_ray_distance_, 0.5f * std::min(map_length_, map_width_));
+  const float max_ray = std::min(raycast_params_.max_ray_distance,
+                                 0.5f * std::min(map_length_, map_width_));
   const int max_steps =
       std::max(1, static_cast<int>(std::ceil(max_ray / step_len)));
   const int target_step =
@@ -840,7 +853,7 @@ bool ElevationMap::isRayDrop(const grid_map::Index &target_idx,
       if (gap_start_step < 0)
         gap_start_step = s;
       gap_end_step = s;
-      if (gap_steps * step_len > max_nan_gap_) {
+      if (gap_steps * step_len > raycast_params_.max_nan_gap) {
         return false;
       }
       // if we have passed the target window and are not in a covering gap,

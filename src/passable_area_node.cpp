@@ -124,6 +124,13 @@ void PassableAreaNode::loadTraversalCostParams() {
       declare_parameter("traversal_cost.safe_zone_side_length", 1.0f);
 }
 
+void PassableAreaNode::loadRaycastParams() {
+  raycast_params_.enable = declare_parameter("raycast.enable", true);
+  raycast_params_.max_ray_distance =
+      declare_parameter("raycast.max_ray_distance", 4.0f);
+  raycast_params_.max_nan_gap = declare_parameter("raycast.max_nan_gap", 1.0f);
+}
+
 void PassableAreaNode::loadLidarParams() {
   lidar_params_.clear();
 
@@ -258,7 +265,9 @@ void PassableAreaNode::elevationInit() {
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_map_->setElevationSolverParams(solver_params_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
-  ele_map_->setRaycastLidarParams(lidar_params_);
+  loadRaycastParams();
+  ele_map_->setRaycastParams(raycast_params_);
+  ele_map_->setLidarParams(lidar_params_);
   traversal_cost_ = std::make_unique<TraversalCost>(
       *ele_map_, ele_map_->getTraversalCostParams(), get_logger());
   ele_init_ = true;
