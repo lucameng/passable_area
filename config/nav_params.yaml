@@ -11,8 +11,6 @@ passable_area:
     max_inpaint_pixels: 200
     enable_center_padding: true
     center_dist_thresh: 0.8
-    clearance_threshold: 0.0
-    baseline_radius: 0.0
     enable_blind_check: true
     treat_nan_as_stiff: true
 
@@ -32,7 +30,7 @@ passable_area:
     raycast:
       enable: true
       max_ray_distance: 4.0
-      max_nan_gap: 1.0
+      max_nan_gap: 3.0
 
     elevation_solver:
       use_histogram_solver: true

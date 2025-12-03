@@ -66,10 +66,6 @@ void LidarCoverage::initialize(const std::string &dog_model,
   }
 
   lidars_ = lidar_params;
-  RCLCPP_INFO(
-      node_->get_logger(),
-      "Using lidar params for dog model '%s' (%zu lidars)",
-      active_model_.c_str(), lidars_.size());
 }
 
 void LidarCoverage::processCoverage(grid_map::GridMap &ele_map,

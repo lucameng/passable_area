@@ -16,8 +16,6 @@ PassableAreaNode::PassableAreaNode()
       max_inpaint_pixels_(declare_parameter<int>("max_inpaint_pixels", 200)),
       enable_center_padding_(declare_parameter("enable_center_padding", true)),
       center_dist_thresh_(declare_parameter("center_dist_thresh", 0.8f)),
-      clearance_threshold_(declare_parameter("clearance_threshold", 0.05f)),
-      baseline_radius_(declare_parameter("baseline_radius", 0.5f)),
       w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
@@ -198,6 +196,10 @@ void PassableAreaNode::loadLidarParams() {
 
     lidar_params_.push_back(param);
   }
+  RCLCPP_INFO(
+      get_logger(),
+      "Using lidar params for dog model '%s' (%zu lidars)",
+      model_key.c_str(), lidar_params_.size());
 }
 
 void PassableAreaNode::loadPassabilityParams() {
@@ -313,8 +315,7 @@ void PassableAreaNode::cloudCallback(
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
-    ele_map_->processPointCloud(*msg, passability_params_, getTransform(),
-                                enable_blind_check_);
+    ele_map_->processPointCloud(*msg, passability_params_, getTransform());
     if (traversal_cost_) {
       traversal_cost_->updateCostLayer();
     }
@@ -377,18 +378,8 @@ void PassableAreaNode::bodyVisual() {
 
 void PassableAreaNode::publishPassableInfo() {
   const auto &cloud = ele_map_->getWorkingCloud();
-
   const float half_length = map_length_ * 0.5f;
   const float half_width = map_width_ * 0.5f;
-  const float baseline_ground = ele_map_->getBaselineGround(baseline_radius_);
-  const bool have_baseline = std::isfinite(baseline_ground);
-  if (have_baseline) {
-    RCLCPP_DEBUG(get_logger(), "Baseline ground height: %.3f m",
-                 baseline_ground);
-  } else {
-    RCLCPP_DEBUG(get_logger(), "Baseline ground height unavailable");
-  }
-
   passable_cloud_.clear();
   impassable_cloud_.clear();
   expanded_cloud_.clear();
@@ -402,20 +393,15 @@ void PassableAreaNode::publishPassableInfo() {
     Eigen::Vector2d pos(p.x, p.y);
     Passability step = ele_map_->getPassability(pos);
     CoverageStatus cover = ele_map_->getCoverability(pos);
-    const bool near_baseline =
-        have_baseline &&
-        std::fabs(p.z - baseline_ground) <= clearance_threshold_;
 
     if (step == Passability::Passable) {
       passable_cloud_.push_back(p);
     } else if (step == Passability::Impassable &&
                cover == CoverageStatus::Covered) {
-      if (!near_baseline) {
         impassable_cloud_.push_back(p);
-      }
     } else if (step == Passability::Unknown) {
       int cnt = ele_map_->getPointCount(pos);
-      if (cnt >= UNKNOWN_OBS_VALID_CNT && !near_baseline) {
+      if (cnt >= UNKNOWN_OBS_VALID_CNT) {
         impassable_cloud_.push_back(p);
       }
     }

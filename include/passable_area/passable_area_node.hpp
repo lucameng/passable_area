@@ -74,9 +74,6 @@ private:
   bool enable_center_padding_;
   float center_dist_thresh_;
 
-  float clearance_threshold_;
-  float baseline_radius_;
-
   float body_length_;
   float body_width_;
   float body_height_;

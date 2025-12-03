@@ -15,9 +15,8 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
                            const rclcpp::Logger &logger)
     : grid_map::GridMap({"elevation", "ground_height", "ceiling_height",
                          "clearance", "float_mask", "passability",
-                         "coverability", "padding", "point_count",
-                         "dummy_height", "slope", "roughness", "step_height",
-                         "traversal_cost"}),
+                         "coverability", "padding", "point_count", "slope",
+                         "roughness", "step_height", "traversal_cost"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
@@ -123,17 +122,12 @@ void ElevationMap::setRaycastParams(const RaycastParams &params) noexcept {
 
 void ElevationMap::processPointCloud(
     const sensor_msgs::msg::PointCloud2 &ros_cloud,
-    const PassabilityParams &pass_params, const Eigen::Affine3f &T_g2b,
-    bool fill_blind) {
+    const PassabilityParams &pass_params, const Eigen::Affine3f &T_g2b) {
   current_T_g2b_ = T_g2b;
   setInputCloud(ros_cloud);
   cloud2Elevation();
   inpaint("elevation", "padding", Inpaint::MinLimit);
   denoise("elevation", Denoise::Median, 3);
-  if (fill_blind) {
-    fillElevationHoles("elevation", "padding", 1.2f, 10);
-    // fillPointCloudFromLayer("elevation", "padding");
-  }
   const int rough_kernel =
       std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
   judgePassability(pass_params.roughness_threshold, pass_params.drop_threshold,
@@ -550,16 +544,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   const auto size = getSize();
   const int size_x = size.x();
   const int size_y = size.y();
-  const auto linear_index = [size_x](int x, int y) { return x + y * size_x; };
-  const int center_x = size_x / 2;
-  const int center_y = size_y / 2;
-  const int nan_radius_cells =
-      std::max(1, static_cast<int>(std::ceil(0.4f / grid_size_)));
-  const int nan_min_cells =
-      std::max(4, static_cast<int>(0.6f * nan_radius_cells * nan_radius_cells));
-  const float drop_buffer = 0.02f;
-  const float far_distance = 6.0f;
-  std::vector<CliffState> cliff_cache(size_x * size_y, CliffState::Unknown);
   get("passability").setConstant(toFloat(Passability::Unknown));
   const auto &elevation_layer = get("elevation");
   auto &slope_layer = get("slope");
@@ -568,13 +552,8 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   rough_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
   step_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
   slope_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
-  std::vector<bool> visited(size_x * size_y, false);
-  std::queue<std::pair<int, int>> que;
 
-  que.emplace(center_x, center_y);
-  visited[linear_index(center_x, center_y)] = true;
-  setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
-
+  const auto linear_index = [size_x](int x, int y) { return x + y * size_x; };
   auto assign_roughness = [&](int cell_x, int cell_y) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
       return;
@@ -587,7 +566,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         computeRoughness(cell_x, cell_y, kernel_size, mean, square);
     slot = std::sqrt(std::max(0.0f, variance));
   };
-
   auto assign_slope = [&](int cell_x, int cell_y) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
       return;
@@ -596,7 +574,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       return;
     slot = computeSlopeRad(cell_x, cell_y, elevation_layer);
   };
-
   auto assign_step = [&](int cell_x, int cell_y,
                          float diff = std::numeric_limits<float>::quiet_NaN()) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
@@ -612,12 +589,33 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
     slot = computeStepHeight(cell_x, cell_y, elevation_layer);
   };
 
+  std::vector<bool> visited(size_x * size_y, false);
+  std::queue<std::pair<int, int>> que;
+
+  // the starting point of flood-filling (BFS)
+  const int center_x = size_x / 2;
+  const int center_y = size_y / 2;
+  que.emplace(center_x, center_y);
+  visited[linear_index(center_x, center_y)] = true;
+  setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
   assign_roughness(center_x, center_y);
   assign_slope(center_x, center_y);
   assign_step(center_x, center_y);
 
-  int back_x = std::min(static_cast<int>(center_x * 1.8f), size_x - 1);
-  int back_y = center_y;
+  // manually add a point located at the front
+  int front_x = std::min(static_cast<int>(center_x * 0.3f), size_x - 1);
+  int front_y = std::min(static_cast<int>(center_y * 0.8f), size_y - 1);
+  auto front_idx = grid_map::Index(front_x, front_y);
+  que.emplace(front_x, front_y);
+  visited[linear_index(front_x, front_y)] = true;
+  setPassability(Eigen::Array2i(front_x, front_y), Passability::Passable);
+  assign_roughness(front_x, front_y);
+  assign_slope(front_x, front_y);
+  assign_step(front_x, front_y);
+
+  // manually add a point located at the back
+  int back_x = std::min(static_cast<int>(center_x * 1.7f), size_x - 1);
+  int back_y = std::min(static_cast<int>(center_y * 1.2f), size_y - 1);
   auto back_idx = grid_map::Index(back_x, back_y);
   que.emplace(back_x, back_y);
   visited[linear_index(back_x, back_y)] = true;
@@ -654,8 +652,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         visited[idx] = true;
         if (treat_nan_as_stiff) {
           if (raycast_params_.enable) {
-            if (hasCliffDropOnRay(nbr_idx, drop_thres, drop_buffer,
-                                  elevation_layer)) {
+            if (hasCliffDropOnRay(nbr_idx, elevation_layer, drop_thres)) {
               setPassability(curr_idx, Passability::Impassable);
             }
           } else {
@@ -702,75 +699,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   }
 }
 
-bool ElevationMap::isCliffCandidate(
-    int cx, int cy, const Eigen::Affine3f &T_g2b, float drop_thres,
-    int nan_radius_cells, int nan_min_cells, float drop_buffer,
-    float far_distance, std::vector<CliffState> &cliff_cache) const {
-  const auto size = getSize();
-  const int size_x = size.x();
-  const int size_y = size.y();
-  const int idx = cx + cy * size_x;
-  if (cliff_cache[idx] != CliffState::Unknown) {
-    return cliff_cache[idx] == CliffState::Cliff;
-  }
-
-  const auto &height_layer = get("elevation");
-  const grid_map::Index center_idx(cx, cy);
-  float center_height = height_layer(center_idx.x(), center_idx.y());
-  if (!std::isfinite(center_height)) {
-    cliff_cache[idx] = CliffState::Cliff;
-    return true;
-  }
-
-  int nan_count = 0;
-  int sample_count = 0;
-  bool drop_detected = false;
-  float min_neighbor_height = center_height;
-
-  for (int dx = -nan_radius_cells; dx <= nan_radius_cells; ++dx) {
-    for (int dy = -nan_radius_cells; dy <= nan_radius_cells; ++dy) {
-      const int rx = cx + dx;
-      const int ry = cy + dy;
-      if (rx < 0 || rx >= size_x || ry < 0 || ry >= size_y)
-        continue;
-      ++sample_count;
-      const float h = height_layer(rx, ry);
-      if (std::isnan(h)) {
-        ++nan_count;
-        continue;
-      }
-
-      float diff = center_height - h;
-      diff = std::fabs(projectToBodyZ(diff, current_T_g2b_.linear()));
-      if (diff > drop_thres + drop_buffer) {
-        drop_detected = true;
-      }
-      if (h < min_neighbor_height) {
-        min_neighbor_height = h;
-      }
-    }
-  }
-
-  float nan_ratio =
-      sample_count > 0 ? static_cast<float>(nan_count) / sample_count : 0.0f;
-
-  grid_map::Position pos;
-  getPosition(center_idx, pos);
-  const float dist = std::hypot(pos.x(), pos.y());
-  const float ratio_threshold = dist > far_distance ? 0.85f : 0.6f;
-
-  const bool sufficient_nan =
-      nan_count >= nan_min_cells && nan_ratio >= ratio_threshold;
-
-  const bool drop_sufficient =
-      drop_detected ||
-      (center_height - min_neighbor_height) > (drop_thres + drop_buffer);
-
-  const bool is_cliff = sufficient_nan && drop_sufficient;
-  cliff_cache[idx] = is_cliff ? CliffState::Cliff : CliffState::NotCliff;
-  return is_cliff;
-}
-
 std::optional<std::reference_wrapper<const LidarParams>>
 ElevationMap::selectRaycastLidar(const Eigen::Vector3f &target_body) const {
   if (raycast_lidars_.empty())
@@ -795,8 +723,8 @@ ElevationMap::selectRaycastLidar(const Eigen::Vector3f &target_body) const {
 }
 
 bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
-                                     float drop_thres, float drop_buffer,
-                                     const grid_map::Matrix &elevation) const {
+                                     const grid_map::Matrix &elevation,
+                                     float drop_thres) const {
   if (raycast_lidars_.empty())
     return false;
 
@@ -905,103 +833,7 @@ bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
 
   float drop_body =
       projectToBodyZ(near_height - far_height, current_T_g2b_.linear());
-  return drop_body > (drop_thres + drop_buffer);
-}
-
-void ElevationMap::fillElevationHoles(const std::string &layer_height,
-                                      const std::string &layer_filled,
-                                      float search_radius, int min_neighbors,
-                                      const Eigen::Vector2f &bound_min,
-                                      const Eigen::Vector2f &bound_max) {
-  if (!exists(layer_height) || !exists(layer_filled))
-    return;
-
-  const grid_map::Matrix &H_in = get(layer_height);
-  grid_map::Matrix H_out = H_in; // copy
-
-  const int radius_cells =
-      static_cast<int>(std::ceil(search_radius / grid_size_));
-
-  const auto size = getSize();
-  const int rows = size.x();
-  const int cols = size.y();
-
-#pragma omp parallel for collapse(2)
-  for (int r = 0; r < rows; ++r) {
-    for (int c = 0; c < cols; ++c) {
-      if (!std::isnan(H_in(r, c)))
-        continue;
-
-      grid_map::Position pos;
-      getPosition({r, c}, pos);
-
-      if (pos.x() < bound_min.x() || pos.x() > bound_max.x() ||
-          pos.y() < bound_min.y() || pos.y() > bound_max.y()) {
-        continue;
-      }
-
-      float sum = 0.0;
-      float weight_sum = 0.0;
-      int count = 0;
-
-      for (int dr = -radius_cells; dr <= radius_cells; ++dr) {
-        for (int dc = -radius_cells; dc <= radius_cells; ++dc) {
-          int nr = r + dr;
-          int nc = c + dc;
-          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols)
-            continue;
-
-          float h = H_in(nr, nc);
-          if (std::isnan(h))
-            continue;
-
-          float dist = std::sqrt(dr * dr + dc * dc) * grid_size_;
-          if (dist > search_radius || dist < 1e-6)
-            continue;
-
-          float w = 1.0 / (dist * dist + 1e-6);
-          sum += h * w;
-          weight_sum += w;
-          count++;
-        }
-      }
-
-      if (count >= min_neighbors && weight_sum > 0.0) {
-        H_out(r, c) = sum / weight_sum;
-        grid_map::Index idx = {r, c};
-        // at(layer_filled, idx) = toFloat(Padding::Padded);
-      }
-    }
-  }
-  add("dummy_height", H_out);
-}
-
-void ElevationMap::fillPointCloudFromLayer(const std::string &layer_height,
-                                           const std::string &layer_filled) {
-  if (!exists(layer_height) || !exists(layer_filled))
-    return;
-
-  auto &cloud = getWorkingCloud();
-
-  for (grid_map::GridMapIterator it(*this); !it.isPastEnd(); ++it) {
-    grid_map::Index idx(*it);
-    if (at(layer_filled, idx) != toFloat(Padding::Padded))
-      continue;
-    grid_map::Position pos;
-    getPosition(idx, pos);
-
-    float z = at(layer_height, idx);
-
-    pcl::PointXYZ p;
-    p.x = pos.x();
-    p.y = pos.y();
-    p.z = z;
-    cloud.points.push_back(p);
-  }
-
-  cloud.width = cloud.points.size();
-  cloud.height = 1;
-  cloud.is_dense = true;
+  return drop_body > drop_thres;
 }
 
 float ElevationMap::computeSlopeRad(int row, int col,

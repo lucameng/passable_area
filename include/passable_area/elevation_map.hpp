@@ -32,7 +32,7 @@ public:
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
                          const PassabilityParams &pass_params,
-                         const Eigen::Affine3f &T_g2b, bool fill_blind = false);
+                         const Eigen::Affine3f &T_g2b);
 
   const PointCloudXYZ &getWorkingCloud() const noexcept {
     return working_cloud_;
@@ -123,22 +123,14 @@ private:
                         bool treat_nan_as_stiff);
   std::optional<std::reference_wrapper<const LidarParams>>
   selectRaycastLidar(const Eigen::Vector3f &target_body) const;
-  bool hasCliffDropOnRay(const grid_map::Index &target_idx, float drop_thres,
-                         float drop_buffer,
-                         const grid_map::Matrix &elevation) const;
+  bool hasCliffDropOnRay(const grid_map::Index &target_idx,
+                         const grid_map::Matrix &elevation,
+                         float drop_thres) const;
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
                         float far_distance,
                         std::vector<CliffState> &cliff_cache) const;
-  void fillElevationHoles(const std::string &layer_height = "elevation",
-                          const std::string &layer_filled = "padding",
-                          float search_radius = 1.5f, int min_neighbors = 10,
-                          const Eigen::Vector2f &bound_min = {-3.f, -0.7f},
-                          const Eigen::Vector2f &bound_max = {4.f, 0.7f});
-  void fillPointCloudFromLayer(const std::string &layer_height = "elevation",
-                               const std::string &layer_filled = "padding");
-
 private:
   PointCloudXYZ working_cloud_;
   float map_length_;
