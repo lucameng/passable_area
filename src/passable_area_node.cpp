@@ -253,6 +253,8 @@ void PassableAreaNode::initialize() {
       passable_cloud_topic_, 10);
   impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
       impassable_cloud_topic_, 10);
+  // expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+  //     "expanded_cloud", 10);
   grid_map_pub_ =
       create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
   traversal_cost_pub_ =
@@ -316,9 +318,13 @@ void PassableAreaNode::cloudCallback(
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
-    ele_map_->processPointCloud(*msg, passability_params_, getTransform());
+    ele_map_->processPointCloud(*msg, getTransform());
+    bool cost_ready = false;
     if (traversal_cost_) {
-      traversal_cost_->updateCostLayer();
+      cost_ready = traversal_cost_->updateCostLayer();
+    }
+    if (cost_ready) {
+      ele_map_->resolveUnknownWithTraversalCost();
     }
 
     const auto end_time = std::chrono::steady_clock::now();
@@ -400,11 +406,6 @@ void PassableAreaNode::publishPassableInfo() {
     } else if (step == Passability::Impassable &&
                cover == CoverageStatus::Covered) {
         impassable_cloud_.push_back(p);
-    } else if (step == Passability::Unknown) {
-      int cnt = ele_map_->getPointCount(pos);
-      if (cnt >= UNKNOWN_OBS_VALID_CNT) {
-        impassable_cloud_.push_back(p);
-      }
     }
   }
 

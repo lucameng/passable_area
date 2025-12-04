@@ -98,6 +98,7 @@ public:
                           const grid_map::Matrix &elevation) const;
   float normalizeMetric(float value, float free_threshold,
                         float block_threshold) const noexcept;
+  void resolveUnknownWithTraversalCost();
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);

@@ -953,3 +953,33 @@ float ElevationMap::computeStepHeight(int row, int col,
     return std::numeric_limits<float>::quiet_NaN();
   return max_diff;
 }
+
+void ElevationMap::resolveUnknownWithTraversalCost() {
+  const auto params = getTraversalCostParams();
+  if (!params.enabled || !exists("traversal_cost"))
+    return;
+
+  auto &pass_layer = get("passability");
+  const auto &cost_layer = get("traversal_cost");
+  const auto &elevation_layer = get("elevation");
+  const auto &count_layer = get("point_count");
+  const auto size = getSize();
+
+  for (int r = 0; r < size.x(); ++r) {
+    for (int c = 0; c < size.y(); ++c) {
+      if (!std::isfinite(elevation_layer(r, c)))
+        continue;
+      if (toPassability(pass_layer(r, c)) != Passability::Unknown)
+        continue;
+      const float cost = cost_layer(r, c);
+      const int count = count_layer(r, c);
+      if (!std::isfinite(cost))
+        continue;
+      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT) {
+        pass_layer(r, c) = toFloat(Passability::Impassable);
+      } else {
+        pass_layer(r, c) = toFloat(Passability::Passable);
+      }
+    }
+  }
+}

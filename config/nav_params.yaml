@@ -36,13 +36,13 @@ passable_area:
       use_histogram_solver: true
       histogram_bins: 20
       region_enabled: true
-      region_min_x: -0.5
+      region_min_x: -3.0
       region_max_x: 3.0
       region_min_y: -1.0
       region_max_y: 1.0
 
     traversal_cost:
-      enable: false
+      enable: true
       slope_free_deg: 10.0
       slope_block_deg: 45.0
       rough_free: 0.01
