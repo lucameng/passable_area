@@ -197,10 +197,9 @@ void PassableAreaNode::loadLidarParams() {
 
     lidar_params_.push_back(param);
   }
-  RCLCPP_INFO(
-      get_logger(),
-      "Using lidar params for dog model '%s' (%zu lidars)",
-      model_key.c_str(), lidar_params_.size());
+  RCLCPP_INFO(get_logger(),
+              "Using lidar params for dog model '%s' (%zu lidars)",
+              model_key.c_str(), lidar_params_.size());
 }
 
 void PassableAreaNode::loadPassabilityParams() {
@@ -405,7 +404,9 @@ void PassableAreaNode::publishPassableInfo() {
       passable_cloud_.push_back(p);
     } else if (step == Passability::Impassable &&
                cover == CoverageStatus::Covered) {
-        impassable_cloud_.push_back(p);
+      impassable_cloud_.push_back(p);
+    } else {
+      // expanded_cloud_.push_back(p);
     }
   }
 

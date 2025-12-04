@@ -130,9 +130,9 @@ void ElevationMap::processPointCloud(
   denoise("elevation", Denoise::Median, 3);
   const int rough_kernel =
       std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
-  judgePassability(pass_params_.roughness_threshold, pass_params_.drop_threshold,
-                   pass_params_.max_slope_deg, rough_kernel,
-                   pass_params_.treat_nan_as_stiff);
+  judgePassability(pass_params_.roughness_threshold,
+                   pass_params_.drop_threshold, pass_params_.max_slope_deg,
+                   rough_kernel, pass_params_.treat_nan_as_stiff);
 }
 
 void ElevationMap::setInputCloud(
@@ -591,7 +591,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
   std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
-  auto enqueue_seed_index= [&](int cell_x, int cell_y) {
+  auto enqueue_seed_index = [&](int cell_x, int cell_y) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
       return;
     if (visited[linear_index(cell_x, cell_y)])
@@ -960,10 +960,14 @@ void ElevationMap::resolveUnknownWithTraversalCost() {
     return;
 
   auto &pass_layer = get("passability");
+  // preserve BFS result for neighbor checks
+  const auto pass_snapshot = pass_layer;
   const auto &cost_layer = get("traversal_cost");
   const auto &elevation_layer = get("elevation");
   const auto &count_layer = get("point_count");
   const auto size = getSize();
+  const int neighbor_min_impassable = 1;
+  const int neighbor_radius = 3;
 
   for (int r = 0; r < size.x(); ++r) {
     for (int c = 0; c < size.y(); ++c) {
@@ -975,7 +979,22 @@ void ElevationMap::resolveUnknownWithTraversalCost() {
       const int count = count_layer(r, c);
       if (!std::isfinite(cost))
         continue;
-      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT) {
+      int imp_neighbors = 0;
+      for (int dr = -neighbor_radius; dr <= neighbor_radius; ++dr) {
+        for (int dc = -neighbor_radius; dc <= neighbor_radius; ++dc) {
+          if (dr == 0 && dc == 0)
+            continue;
+          const int nr = r + dr;
+          const int nc = c + dc;
+          if (nr < 0 || nr >= size.x() || nc < 0 || nc >= size.y())
+            continue;
+          if (toPassability(pass_snapshot(nr, nc)) == Passability::Impassable) {
+            ++imp_neighbors;
+          }
+        }
+      }
+      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT &&
+          imp_neighbors >= neighbor_min_impassable) {
         pass_layer(r, c) = toFloat(Passability::Impassable);
       } else {
         pass_layer(r, c) = toFloat(Passability::Passable);
