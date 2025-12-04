@@ -676,6 +676,10 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (height_diff > drop_thres) {
         setPassability(nbr_idx, Passability::Impassable);
+        // for negative obstacles, adopt stricter strategies
+        if (nbr_height < curr_height) {
+          setPassability(curr_idx, Passability::Impassable);
+        }
         continue;
       }
 
