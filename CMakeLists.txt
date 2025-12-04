@@ -16,13 +16,6 @@ find_package(grid_map_cv REQUIRED)
 find_package(grid_map_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(OpenMP REQUIRED)
-
-if(OpenMP_CXX_FOUND)
-  message(STATUS "OpenMP found")
-else()
-  message(FATAL_ERROR "OpenMP not found")
-endif()
 
 include_directories(
   ${EIGEN3_INCLUDE_DIRS}
@@ -54,7 +47,6 @@ ament_target_dependencies(passable_area
 
 target_link_libraries(passable_area
   ${OpenCV_LIBS}
-  OpenMP::OpenMP_CXX
 )
 
 install(TARGETS passable_area
