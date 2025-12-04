@@ -591,38 +591,43 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
   std::vector<bool> visited(size_x * size_y, false);
   std::queue<std::pair<int, int>> que;
+  auto enqueue_seed_index= [&](int cell_x, int cell_y) {
+    if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
+      return;
+    if (visited[linear_index(cell_x, cell_y)])
+      return;
+    que.emplace(cell_x, cell_y);
+    visited[linear_index(cell_x, cell_y)] = true;
+    setPassability(Eigen::Array2i(cell_x, cell_y), Passability::Passable);
+    assign_roughness(cell_x, cell_y);
+    assign_slope(cell_x, cell_y);
+    assign_step(cell_x, cell_y);
+  };
+  auto enqueue_seed_position = [&](float pos_x, float pos_y) {
+    grid_map::Position pos(pos_x, pos_y);
+    grid_map::Index idx;
+    if (!getIndex(pos, idx))
+      return;
+    enqueue_seed_index(idx.x(), idx.y());
+  };
 
   // the starting point of flood-filling (BFS)
   const int center_x = size_x / 2;
   const int center_y = size_y / 2;
-  que.emplace(center_x, center_y);
-  visited[linear_index(center_x, center_y)] = true;
-  setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
-  assign_roughness(center_x, center_y);
-  assign_slope(center_x, center_y);
-  assign_step(center_x, center_y);
-
+  enqueue_seed_index(center_x, center_y);
   // manually add a point located at the front
   int front_x = std::min(static_cast<int>(center_x * 0.3f), size_x - 1);
   int front_y = std::min(static_cast<int>(center_y * 0.8f), size_y - 1);
-  auto front_idx = grid_map::Index(front_x, front_y);
-  que.emplace(front_x, front_y);
-  visited[linear_index(front_x, front_y)] = true;
-  setPassability(Eigen::Array2i(front_x, front_y), Passability::Passable);
-  assign_roughness(front_x, front_y);
-  assign_slope(front_x, front_y);
-  assign_step(front_x, front_y);
-
+  enqueue_seed_index(front_x, front_y);
   // manually add a point located at the back
   int back_x = std::min(static_cast<int>(center_x * 1.7f), size_x - 1);
   int back_y = std::min(static_cast<int>(center_y * 1.2f), size_y - 1);
-  auto back_idx = grid_map::Index(back_x, back_y);
-  que.emplace(back_x, back_y);
-  visited[linear_index(back_x, back_y)] = true;
-  setPassability(Eigen::Array2i(back_x, back_y), Passability::Passable);
-  assign_roughness(back_x, back_y);
-  assign_slope(back_x, back_y);
-  assign_step(back_x, back_y);
+  enqueue_seed_index(back_x, back_y);
+  // manually add points at metric positions relative to map center
+  enqueue_seed_position(0.4f, 0.0f);
+  enqueue_seed_position(-0.4f, 0.0f);
+  enqueue_seed_position(0.0f, 1.0f);
+  enqueue_seed_position(0.0f, -1.0f);
 
   const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
