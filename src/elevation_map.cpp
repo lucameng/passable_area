@@ -122,7 +122,7 @@ void ElevationMap::setRaycastParams(const RaycastParams &params) noexcept {
 
 void ElevationMap::processPointCloud(
     const sensor_msgs::msg::PointCloud2 &ros_cloud,
-    const PassabilityParams &pass_params, const Eigen::Affine3f &T_g2b) {
+    const Eigen::Affine3f &T_g2b) {
   current_T_g2b_ = T_g2b;
   setInputCloud(ros_cloud);
   cloud2Elevation();
@@ -130,9 +130,9 @@ void ElevationMap::processPointCloud(
   denoise("elevation", Denoise::Median, 3);
   const int rough_kernel =
       std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
-  judgePassability(pass_params.roughness_threshold, pass_params.drop_threshold,
-                   pass_params.max_slope_deg, rough_kernel,
-                   pass_params.treat_nan_as_stiff);
+  judgePassability(pass_params_.roughness_threshold, pass_params_.drop_threshold,
+                   pass_params_.max_slope_deg, rough_kernel,
+                   pass_params_.treat_nan_as_stiff);
 }
 
 void ElevationMap::setInputCloud(

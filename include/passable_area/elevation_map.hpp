@@ -31,8 +31,10 @@ public:
       const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
-                         const PassabilityParams &pass_params,
                          const Eigen::Affine3f &T_g2b);
+  void setPassabilityParams(const PassabilityParams &params) noexcept {
+    pass_params_ = params;
+  }
 
   const PointCloudXYZ &getWorkingCloud() const noexcept {
     return working_cloud_;
@@ -145,6 +147,7 @@ private:
   Eigen::Affine3f current_T_g2b_;
   std::string frame_;
   rclcpp::Logger logger_;
+  PassabilityParams pass_params_;
   ElevationSolverParams solver_params_;
   TraversalCostParams traversal_params_;
   RaycastParams raycast_params_;

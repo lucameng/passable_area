@@ -39,6 +39,7 @@ PassableAreaNode::PassableAreaNode()
   }
   loadBodyGeometry();
   loadLidarParams();
+  loadRaycastParams();
   loadPassabilityParams();
   loadElevationSolverParams();
   loadTraversalCostParams();
@@ -265,9 +266,9 @@ void PassableAreaNode::elevationInit() {
       used_frame_, get_logger());
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
+  ele_map_->setPassabilityParams(passability_params_);
   ele_map_->setElevationSolverParams(solver_params_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
-  loadRaycastParams();
   ele_map_->setRaycastParams(raycast_params_);
   ele_map_->setLidarParams(lidar_params_);
   traversal_cost_ = std::make_unique<TraversalCost>(
