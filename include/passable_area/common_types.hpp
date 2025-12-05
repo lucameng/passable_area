@@ -106,6 +106,12 @@ struct ElevationSolverParams {
   ElevationSolverRegion region;
 };
 
+struct RaycastParams {
+  bool enable = true;
+  float max_ray_distance = 4.0f;
+  float max_nan_gap = 1.0f;
+};
+
 struct ElevationSolverContext {
   int rows = 0;
   int cols = 0;

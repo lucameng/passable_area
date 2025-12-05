@@ -1,16 +1,17 @@
 #ifndef PASSABLE_AREA_NODE_HPP
 #define PASSABLE_AREA_NODE_HPP
 
+#include "maths.hpp"
 #include "common.hpp"
 #include "elevation_map.hpp"
 #include "lidar_coverage.hpp"
 #include "traversal_cost.hpp"
 
-#include <rclcpp/rclcpp.hpp>
 #include <grid_map_core/grid_map_core.hpp>
-#include <grid_map_ros/GridMapRosConverter.hpp>
 #include <grid_map_msgs/msg/grid_map.hpp>
+#include <grid_map_ros/GridMapRosConverter.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -73,9 +74,6 @@ private:
   bool enable_center_padding_;
   float center_dist_thresh_;
 
-  float clearance_threshold_;
-  float baseline_radius_;
-
   float body_length_;
   float body_width_;
   float body_height_;
@@ -85,6 +83,8 @@ private:
   PassabilityParams passability_params_;
   TraversalCostParams traversal_cost_params_;
   ElevationSolverParams solver_params_;
+  RaycastParams raycast_params_;
+  std::vector<LidarParams> lidar_params_;
 
 private:
   void elevationInit();
@@ -100,6 +100,8 @@ private:
   void loadPassabilityParams();
   void loadElevationSolverParams();
   void loadTraversalCostParams();
+  void loadRaycastParams();
+  void loadLidarParams();
   std::string normalizeModelKey(const std::string &dog_model) const;
   BodyGeometry defaultBodyGeometry() const { return {0.9f, 0.4f, 0.5f}; }
 };
