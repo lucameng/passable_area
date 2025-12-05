@@ -44,17 +44,17 @@ passable_area:
     traversal_cost:
       enable: true
       slope_free_deg: 10.0
-      slope_block_deg: 45.0
+      slope_block_deg: 80.0
       rough_free: 0.01
       rough_block: 0.04
       step_free: 0.08
       step_block: 0.35
-      slope_weight: 0.2
-      roughness_weight: 0.4
+      slope_weight: 0.3
+      roughness_weight: 0.3
       step_weight: 0.4
       easy_cost: 0.0
-      hard_cost: 50.0
-      max_cost: 100.0
-      curve_power: 1.5
+      hard_cost: 0.9
+      max_cost: 1.0
+      curve_power: 1.0
       terrain_sample_window: 1
-      safe_zone_side_length: 1.0
+      safe_zone_side_length: 0.0

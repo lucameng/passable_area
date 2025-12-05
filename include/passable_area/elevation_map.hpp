@@ -128,7 +128,7 @@ private:
   selectRaycastLidar(const Eigen::Vector3f &target_body) const;
   bool hasCliffDropOnRay(const grid_map::Index &target_idx,
                          const grid_map::Matrix &elevation,
-                         float drop_thres) const;
+                         float drop_thres, float &drop_out) const;
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,

@@ -657,8 +657,11 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         visited[idx] = true;
         if (treat_nan_as_stiff) {
           if (raycast_params_.enable) {
-            if (hasCliffDropOnRay(nbr_idx, elevation_layer, drop_thres)) {
+            float drop_height = 0.0f;
+            if (hasCliffDropOnRay(nbr_idx, elevation_layer, drop_thres,
+                                  drop_height)) {
               setPassability(curr_idx, Passability::Impassable);
+              assign_step(x, y, drop_height);
             }
           } else {
             setPassability(curr_idx, Passability::Impassable);
@@ -733,7 +736,8 @@ ElevationMap::selectRaycastLidar(const Eigen::Vector3f &target_body) const {
 
 bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
                                      const grid_map::Matrix &elevation,
-                                     float drop_thres) const {
+                                     float drop_thres, float &drop_out) const {
+  drop_out = 0.0f;
   if (raycast_lidars_.empty())
     return false;
 
@@ -840,9 +844,13 @@ bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
     return false;
   }
 
-  float drop_body =
+  float drop_height =
       projectToBodyZ(near_height - far_height, current_T_g2b_.linear());
-  return drop_body > drop_thres;
+  if (drop_height > drop_thres) {
+    drop_out = drop_height;
+    return true;
+  }
+  return false;
 }
 
 float ElevationMap::computeSlopeRad(int row, int col,
