@@ -9,6 +9,7 @@
 #include <cmath>
 #include <deque>
 #include <limits>
+#include <optional>
 #include <queue>
 #include <string>
 #include <vector>
@@ -30,8 +31,10 @@ public:
       const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
-                         const PassabilityParams &pass_params,
-                         const Eigen::Affine3f &T_g2b, bool fill_blind = false);
+                         const Eigen::Affine3f &T_g2b);
+  void setPassabilityParams(const PassabilityParams &params) noexcept {
+    pass_params_ = params;
+  }
 
   const PointCloudXYZ &getWorkingCloud() const noexcept {
     return working_cloud_;
@@ -70,6 +73,10 @@ public:
   void setCenterPaddingParams(bool enabled, float radius) noexcept;
   void setElevationSolverParams(const ElevationSolverParams &params) noexcept;
   void setTraversalCostParams(const TraversalCostParams &params) noexcept;
+  void setRaycastParams(const RaycastParams &params) noexcept;
+  void setLidarParams(const std::vector<LidarParams> &lidars) noexcept {
+    raycast_lidars_ = lidars;
+  }
   void setCurrentTransform(const Eigen::Affine3f &T_g2b) noexcept {
     current_T_g2b_ = T_g2b;
   }
@@ -91,6 +98,7 @@ public:
                           const grid_map::Matrix &elevation) const;
   float normalizeMetric(float value, float free_threshold,
                         float block_threshold) const noexcept;
+  void resolveUnknownWithTraversalCost();
 
 private:
   void setInputCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud);
@@ -116,19 +124,16 @@ private:
   void judgePassability(float rough_thres, float drop_thres,
                         float max_slope_deg, int kernel_size,
                         bool treat_nan_as_stiff);
+  std::optional<std::reference_wrapper<const LidarParams>>
+  selectRaycastLidar(const Eigen::Vector3f &target_body) const;
+  bool hasCliffDropOnRay(const grid_map::Index &target_idx,
+                         const grid_map::Matrix &elevation,
+                         float drop_thres, float &drop_out) const;
   bool isCliffCandidate(int cx, int cy, const Eigen::Affine3f &T_g2b,
                         float drop_thres, int nan_radius_cells,
                         int nan_min_cells, float drop_buffer,
                         float far_distance,
                         std::vector<CliffState> &cliff_cache) const;
-  void fillElevationHoles(const std::string &layer_height = "elevation",
-                          const std::string &layer_filled = "padding",
-                          float search_radius = 1.5f, int min_neighbors = 10,
-                          const Eigen::Vector2f &bound_min = {-3.f, -0.7f},
-                          const Eigen::Vector2f &bound_max = {4.f, 0.7f});
-  void fillPointCloudFromLayer(const std::string &layer_height = "elevation",
-                               const std::string &layer_filled = "padding");
-
 private:
   PointCloudXYZ working_cloud_;
   float map_length_;
@@ -143,8 +148,11 @@ private:
   Eigen::Affine3f current_T_g2b_;
   std::string frame_;
   rclcpp::Logger logger_;
+  PassabilityParams pass_params_;
   ElevationSolverParams solver_params_;
   TraversalCostParams traversal_params_;
+  RaycastParams raycast_params_;
+  std::vector<LidarParams> raycast_lidars_;
 };
 
 #endif // ELEVATION_MAP_HPP

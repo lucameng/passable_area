@@ -16,8 +16,6 @@ PassableAreaNode::PassableAreaNode()
       max_inpaint_pixels_(declare_parameter<int>("max_inpaint_pixels", 200)),
       enable_center_padding_(declare_parameter("enable_center_padding", true)),
       center_dist_thresh_(declare_parameter("center_dist_thresh", 0.8f)),
-      clearance_threshold_(declare_parameter("clearance_threshold", 0.05f)),
-      baseline_radius_(declare_parameter("baseline_radius", 0.5f)),
       w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
@@ -40,6 +38,8 @@ PassableAreaNode::PassableAreaNode()
     std::swap(min_height_, max_height_);
   }
   loadBodyGeometry();
+  loadLidarParams();
+  loadRaycastParams();
   loadPassabilityParams();
   loadElevationSolverParams();
   loadTraversalCostParams();
@@ -123,12 +123,91 @@ void PassableAreaNode::loadTraversalCostParams() {
       declare_parameter("traversal_cost.safe_zone_side_length", 1.0f);
 }
 
+void PassableAreaNode::loadRaycastParams() {
+  raycast_params_.enable = declare_parameter("raycast.enable", true);
+  raycast_params_.max_ray_distance =
+      declare_parameter("raycast.max_ray_distance", 4.0f);
+  raycast_params_.max_nan_gap = declare_parameter("raycast.max_nan_gap", 1.0f);
+}
+
+void PassableAreaNode::loadLidarParams() {
+  lidar_params_.clear();
+
+  std::string model_key = normalizeModelKey(dog_model_);
+  std::vector<std::string> lidar_names;
+  if (model_key == "x30") {
+    lidar_names = {"lidar_front_up", "lidar_front_down", "lidar_rear_up",
+                   "lidar_rear_down"};
+  } else {
+    if (model_key != "m20") {
+      RCLCPP_WARN(get_logger(),
+                  "Unknown dog_model '%s', falling back to 'm20' lidar params",
+                  dog_model_.c_str());
+      model_key = "m20";
+    }
+    lidar_names = {"lidar_front", "lidar_rear"};
+  }
+
+  for (const auto &lidar_name : lidar_names) {
+    LidarParams param;
+    param.name = lidar_name;
+    const std::string prefix = "lidar_params." + model_key + "." + lidar_name;
+
+    std::vector<double> pos_vec;
+    declare_parameter(prefix + ".pos_body",
+                      std::vector<double>{param.pos_body.x(),
+                                          param.pos_body.y(),
+                                          param.pos_body.z()});
+    get_parameter(prefix + ".pos_body", pos_vec);
+    if (pos_vec.size() == 3) {
+      param.pos_body = Eigen::Vector3f(pos_vec[0], pos_vec[1], pos_vec[2]);
+    } else {
+      RCLCPP_WARN(get_logger(), "Invalid pos_body for %s, using defaults",
+                  lidar_name.c_str());
+    }
+
+    std::vector<double> rpy_vec;
+    declare_parameter(prefix + ".rpy_body",
+                      std::vector<double>{param.rpy_body_deg.x(),
+                                          param.rpy_body_deg.y(),
+                                          param.rpy_body_deg.z()});
+    get_parameter(prefix + ".rpy_body", rpy_vec);
+    if (rpy_vec.size() == 3) {
+      param.rpy_body_deg = Eigen::Vector3f(rpy_vec[0], rpy_vec[1], rpy_vec[2]);
+      param.rpy_body_rad = Eigen::Vector3f(dr::degreeToRadian(rpy_vec[0]),
+                                           dr::degreeToRadian(rpy_vec[1]),
+                                           dr::degreeToRadian(rpy_vec[2]));
+      param.R_mount = dr::rotationFromYPRrad(param.rpy_body_rad);
+    } else {
+      RCLCPP_WARN(get_logger(), "Invalid rpy_body for %s, using defaults",
+                  lidar_name.c_str());
+    }
+
+    declare_parameter(prefix + ".fov_up_deg", param.fov_up_deg);
+    declare_parameter(prefix + ".fov_down_deg", param.fov_down_deg);
+    get_parameter(prefix + ".fov_up_deg", param.fov_up_deg);
+    get_parameter(prefix + ".fov_down_deg", param.fov_down_deg);
+    param.fov_up_rad = dr::degreeToRadian(param.fov_up_deg);
+    param.fov_down_rad = dr::degreeToRadian(param.fov_down_deg);
+
+    declare_parameter(prefix + ".min_range", param.min_range);
+    declare_parameter(prefix + ".max_range", param.max_range);
+    get_parameter(prefix + ".min_range", param.min_range);
+    get_parameter(prefix + ".max_range", param.max_range);
+
+    lidar_params_.push_back(param);
+  }
+  RCLCPP_INFO(get_logger(),
+              "Using lidar params for dog model '%s' (%zu lidars)",
+              model_key.c_str(), lidar_params_.size());
+}
+
 void PassableAreaNode::loadPassabilityParams() {
-  passability_params_.drop_threshold =
+  passability_params_.drop_threshold = 
       declare_parameter("max_drop", 0.3f);
   passability_params_.roughness_threshold =
       declare_parameter("max_roughness", 0.1f);
-  passability_params_.max_slope_deg =
+  passability_params_.max_slope_deg = 
       declare_parameter("max_slope_deg", 45.0f);
   passability_params_.treat_nan_as_stiff =
       declare_parameter("treat_nan_as_stiff", true);
@@ -173,6 +252,8 @@ void PassableAreaNode::initialize() {
       passable_cloud_topic_, 10);
   impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
       impassable_cloud_topic_, 10);
+  // expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+  //     "expanded_cloud", 10);
   grid_map_pub_ =
       create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
   traversal_cost_pub_ =
@@ -186,8 +267,11 @@ void PassableAreaNode::elevationInit() {
       used_frame_, get_logger());
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
+  ele_map_->setPassabilityParams(passability_params_);
   ele_map_->setElevationSolverParams(solver_params_);
   ele_map_->setTraversalCostParams(traversal_cost_params_);
+  ele_map_->setRaycastParams(raycast_params_);
+  ele_map_->setLidarParams(lidar_params_);
   traversal_cost_ = std::make_unique<TraversalCost>(
       *ele_map_, ele_map_->getTraversalCostParams(), get_logger());
   ele_init_ = true;
@@ -196,7 +280,7 @@ void PassableAreaNode::elevationInit() {
 void PassableAreaNode::lidarCoverInit() {
   RCLCPP_INFO(get_logger(), "Initializing < lidar coverage >");
   lidar_cov_ = std::make_unique<LidarCoverage>(shared_from_this());
-  lidar_cov_->initialize(dog_model_);
+  lidar_cov_->initialize(dog_model_, lidar_params_);
   lidar_init_ = true;
 }
 
@@ -233,10 +317,13 @@ void PassableAreaNode::cloudCallback(
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
-    ele_map_->processPointCloud(*msg, passability_params_, getTransform(),
-                                enable_blind_check_);
+    ele_map_->processPointCloud(*msg, getTransform());
+    bool cost_ready = false;
     if (traversal_cost_) {
-      traversal_cost_->updateCostLayer();
+      cost_ready = traversal_cost_->updateCostLayer();
+    }
+    if (cost_ready) {
+      ele_map_->resolveUnknownWithTraversalCost();
     }
 
     const auto end_time = std::chrono::steady_clock::now();
@@ -297,18 +384,8 @@ void PassableAreaNode::bodyVisual() {
 
 void PassableAreaNode::publishPassableInfo() {
   const auto &cloud = ele_map_->getWorkingCloud();
-
   const float half_length = map_length_ * 0.5f;
   const float half_width = map_width_ * 0.5f;
-  const float baseline_ground = ele_map_->getBaselineGround(baseline_radius_);
-  const bool have_baseline = std::isfinite(baseline_ground);
-  if (have_baseline) {
-    RCLCPP_DEBUG(get_logger(), "Baseline ground height: %.3f m",
-                 baseline_ground);
-  } else {
-    RCLCPP_DEBUG(get_logger(), "Baseline ground height unavailable");
-  }
-
   passable_cloud_.clear();
   impassable_cloud_.clear();
   expanded_cloud_.clear();
@@ -322,22 +399,14 @@ void PassableAreaNode::publishPassableInfo() {
     Eigen::Vector2d pos(p.x, p.y);
     Passability step = ele_map_->getPassability(pos);
     CoverageStatus cover = ele_map_->getCoverability(pos);
-    const bool near_baseline =
-        have_baseline &&
-        std::fabs(p.z - baseline_ground) <= clearance_threshold_;
 
     if (step == Passability::Passable) {
       passable_cloud_.push_back(p);
     } else if (step == Passability::Impassable &&
                cover == CoverageStatus::Covered) {
-      if (!near_baseline) {
-        impassable_cloud_.push_back(p);
-      }
-    } else if (step == Passability::Unknown) {
-      int cnt = ele_map_->getPointCount(pos);
-      if (cnt >= UNKNOWN_OBS_VALID_CNT && !near_baseline) {
-        impassable_cloud_.push_back(p);
-      }
+      impassable_cloud_.push_back(p);
+    } else {
+      // expanded_cloud_.push_back(p);
     }
   }
 

@@ -15,9 +15,8 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
                            const rclcpp::Logger &logger)
     : grid_map::GridMap({"elevation", "ground_height", "ceiling_height",
                          "clearance", "float_mask", "passability",
-                         "coverability", "padding", "point_count",
-                         "dummy_height", "slope", "roughness", "step_height",
-                         "traversal_cost"}),
+                         "coverability", "padding", "point_count", "slope",
+                         "roughness", "step_height", "traversal_cost"}),
       map_length_(std::max(map_length, grid_s)),
       map_width_(std::max(map_width, grid_s)),
       min_height_(std::min(min_height, max_height)),
@@ -114,24 +113,26 @@ void ElevationMap::setTraversalCostParams(
   }
 }
 
+void ElevationMap::setRaycastParams(const RaycastParams &params) noexcept {
+  raycast_params_ = params;
+  raycast_params_.max_ray_distance =
+      std::max(0.1f, raycast_params_.max_ray_distance);
+  raycast_params_.max_nan_gap = std::max(0.0f, raycast_params_.max_nan_gap);
+}
+
 void ElevationMap::processPointCloud(
     const sensor_msgs::msg::PointCloud2 &ros_cloud,
-    const PassabilityParams &pass_params, const Eigen::Affine3f &T_g2b,
-    bool fill_blind) {
+    const Eigen::Affine3f &T_g2b) {
   current_T_g2b_ = T_g2b;
   setInputCloud(ros_cloud);
   cloud2Elevation();
   inpaint("elevation", "padding", Inpaint::MinLimit);
   denoise("elevation", Denoise::Median, 3);
-  if (fill_blind) {
-    fillElevationHoles("elevation", "padding", 1.2f, 10);
-    // fillPointCloudFromLayer("elevation", "padding");
-  }
   const int rough_kernel =
       std::clamp(2 * traversal_params_.terrain_sample_window + 1, 3, 7);
-  judgePassability(pass_params.roughness_threshold, pass_params.drop_threshold,
-                   pass_params.max_slope_deg, rough_kernel,
-                   pass_params.treat_nan_as_stiff);
+  judgePassability(pass_params_.roughness_threshold,
+                   pass_params_.drop_threshold, pass_params_.max_slope_deg,
+                   rough_kernel, pass_params_.treat_nan_as_stiff);
 }
 
 void ElevationMap::setInputCloud(
@@ -543,16 +544,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   const auto size = getSize();
   const int size_x = size.x();
   const int size_y = size.y();
-  const auto linear_index = [size_x](int x, int y) { return x + y * size_x; };
-  const int center_x = size_x / 2;
-  const int center_y = size_y / 2;
-  const int nan_radius_cells =
-      std::max(1, static_cast<int>(std::ceil(0.4f / grid_size_)));
-  const int nan_min_cells =
-      std::max(4, static_cast<int>(0.6f * nan_radius_cells * nan_radius_cells));
-  const float drop_buffer = 0.02f;
-  const float far_distance = 6.0f;
-  std::vector<CliffState> cliff_cache(size_x * size_y, CliffState::Unknown);
   get("passability").setConstant(toFloat(Passability::Unknown));
   const auto &elevation_layer = get("elevation");
   auto &slope_layer = get("slope");
@@ -561,13 +552,8 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   rough_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
   step_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
   slope_layer.setConstant(std::numeric_limits<float>::quiet_NaN());
-  std::vector<bool> visited(size_x * size_y, false);
-  std::queue<std::pair<int, int>> que;
 
-  que.emplace(center_x, center_y);
-  visited[linear_index(center_x, center_y)] = true;
-  setPassability(Eigen::Array2i(center_x, center_y), Passability::Passable);
-
+  const auto linear_index = [size_x](int x, int y) { return x + y * size_x; };
   auto assign_roughness = [&](int cell_x, int cell_y) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
       return;
@@ -580,7 +566,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         computeRoughness(cell_x, cell_y, kernel_size, mean, square);
     slot = std::sqrt(std::max(0.0f, variance));
   };
-
   auto assign_slope = [&](int cell_x, int cell_y) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
       return;
@@ -589,7 +574,6 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       return;
     slot = computeSlopeRad(cell_x, cell_y, elevation_layer);
   };
-
   auto assign_step = [&](int cell_x, int cell_y,
                          float diff = std::numeric_limits<float>::quiet_NaN()) {
     if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
@@ -605,19 +589,45 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
     slot = computeStepHeight(cell_x, cell_y, elevation_layer);
   };
 
-  assign_roughness(center_x, center_y);
-  assign_slope(center_x, center_y);
-  assign_step(center_x, center_y);
+  std::vector<bool> visited(size_x * size_y, false);
+  std::queue<std::pair<int, int>> que;
+  auto enqueue_seed_index = [&](int cell_x, int cell_y) {
+    if (cell_x < 0 || cell_x >= size_x || cell_y < 0 || cell_y >= size_y)
+      return;
+    if (visited[linear_index(cell_x, cell_y)])
+      return;
+    que.emplace(cell_x, cell_y);
+    visited[linear_index(cell_x, cell_y)] = true;
+    setPassability(Eigen::Array2i(cell_x, cell_y), Passability::Passable);
+    assign_roughness(cell_x, cell_y);
+    assign_slope(cell_x, cell_y);
+    assign_step(cell_x, cell_y);
+  };
+  auto enqueue_seed_position = [&](float pos_x, float pos_y) {
+    grid_map::Position pos(pos_x, pos_y);
+    grid_map::Index idx;
+    if (!getIndex(pos, idx))
+      return;
+    enqueue_seed_index(idx.x(), idx.y());
+  };
 
-  int back_x = std::min(static_cast<int>(center_x * 1.8f), size_x - 1);
-  int back_y = center_y;
-  auto back_idx = grid_map::Index(back_x, back_y);
-  que.emplace(back_x, back_y);
-  visited[linear_index(back_x, back_y)] = true;
-  setPassability(Eigen::Array2i(back_x, back_y), Passability::Passable);
-  assign_roughness(back_x, back_y);
-  assign_slope(back_x, back_y);
-  assign_step(back_x, back_y);
+  // the starting point of flood-filling (BFS)
+  const int center_x = size_x / 2;
+  const int center_y = size_y / 2;
+  enqueue_seed_index(center_x, center_y);
+  // manually add a point located at the front
+  int front_x = std::min(static_cast<int>(center_x * 0.3f), size_x - 1);
+  int front_y = std::min(static_cast<int>(center_y * 0.8f), size_y - 1);
+  enqueue_seed_index(front_x, front_y);
+  // manually add a point located at the back
+  int back_x = std::min(static_cast<int>(center_x * 1.7f), size_x - 1);
+  int back_y = std::min(static_cast<int>(center_y * 1.2f), size_y - 1);
+  enqueue_seed_index(back_x, back_y);
+  // manually add points at metric positions relative to map center
+  enqueue_seed_position(0.4f, 0.0f);
+  enqueue_seed_position(-0.4f, 0.0f);
+  enqueue_seed_position(0.0f, 1.0f);
+  enqueue_seed_position(0.0f, -1.0f);
 
   const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
@@ -646,14 +656,18 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
       if (std::isnan(nbr_height)) {
         visited[idx] = true;
         if (treat_nan_as_stiff) {
-          setPassability(curr_idx, Passability::Impassable);
+          if (raycast_params_.enable) {
+            float drop_height = 0.0f;
+            if (hasCliffDropOnRay(nbr_idx, elevation_layer, drop_thres,
+                                  drop_height)) {
+              setPassability(curr_idx, Passability::Impassable);
+              assign_step(x, y, drop_height);
+            }
+          } else {
+            setPassability(curr_idx, Passability::Impassable);
+          }
+          curr_is_cliff = true;
         }
-        // if (isCliffCandidate(x, y, T_g2b, drop_thres, nan_radius_cells,
-        //                      nan_min_cells, drop_buffer, far_distance,
-        //                      cliff_cache)) {
-        //   setPassability(curr_idx, Passability::Impassable);
-        //   curr_is_cliff = true;
-        // }
         continue;
       }
       if (visited[idx])
@@ -670,6 +684,10 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
 
       if (height_diff > drop_thres) {
         setPassability(nbr_idx, Passability::Impassable);
+        // for negative obstacles, adopt stricter strategies
+        if (nbr_height < curr_height) {
+          setPassability(curr_idx, Passability::Impassable);
+        }
         continue;
       }
 
@@ -693,169 +711,146 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
   }
 }
 
-bool ElevationMap::isCliffCandidate(
-    int cx, int cy, const Eigen::Affine3f &T_g2b, float drop_thres,
-    int nan_radius_cells, int nan_min_cells, float drop_buffer,
-    float far_distance, std::vector<CliffState> &cliff_cache) const {
-  const auto size = getSize();
-  const int size_x = size.x();
-  const int size_y = size.y();
-  const int idx = cx + cy * size_x;
-  if (cliff_cache[idx] != CliffState::Unknown) {
-    return cliff_cache[idx] == CliffState::Cliff;
+std::optional<std::reference_wrapper<const LidarParams>>
+ElevationMap::selectRaycastLidar(const Eigen::Vector3f &target_body) const {
+  if (raycast_lidars_.empty())
+    return std::nullopt;
+
+  const LidarParams *front = nullptr;
+  const LidarParams *rear = nullptr;
+
+  for (const auto &lidar : raycast_lidars_) {
+    if (lidar.name.find("front") != std::string::npos) {
+      front = &lidar;
+    } else if (lidar.name.find("rear") != std::string::npos) {
+      rear = &lidar;
+    }
   }
 
-  const auto &height_layer = get("elevation");
-  const grid_map::Index center_idx(cx, cy);
-  float center_height = height_layer(center_idx.x(), center_idx.y());
-  if (!std::isfinite(center_height)) {
-    cliff_cache[idx] = CliffState::Cliff;
+  if (target_body.x() >= 0.0f && front)
+    return std::cref(*front);
+  if (target_body.x() < 0.0f && rear)
+    return std::cref(*rear);
+  return std::cref(raycast_lidars_.front());
+}
+
+bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
+                                     const grid_map::Matrix &elevation,
+                                     float drop_thres, float &drop_out) const {
+  drop_out = 0.0f;
+  if (raycast_lidars_.empty())
+    return false;
+
+  grid_map::Position target_pos;
+  getPosition(target_idx, target_pos);
+
+  Eigen::Vector3f target_grav(target_pos.x(), target_pos.y(), 0.0f);
+  Eigen::Vector3f target_body = current_T_g2b_ * target_grav;
+
+  auto lidar_opt = selectRaycastLidar(target_body);
+  if (!lidar_opt.has_value())
+    return false;
+  const LidarParams &lidar = lidar_opt->get();
+
+  Eigen::Vector3f sensor_grav = current_T_g2b_.inverse() * lidar.pos_body;
+  Eigen::Vector2f sensor_xy(sensor_grav.x(), sensor_grav.y());
+  Eigen::Vector2f target_xy(target_pos.x(), target_pos.y());
+
+  Eigen::Vector2f dir = target_xy - sensor_xy;
+  float dist_to_target = dir.norm();
+  if (dist_to_target < 1e-3f)
+    return false;
+  dir /= dist_to_target;
+
+  const float step_len = grid_size_;
+  const float max_ray = std::min(raycast_params_.max_ray_distance,
+                                 0.5f * std::min(map_length_, map_width_));
+  const int max_steps =
+      std::max(1, static_cast<int>(std::ceil(max_ray / step_len)));
+  const int target_step =
+      std::max(1, static_cast<int>(std::lround(dist_to_target / step_len)));
+  const int step_tolerance = 1; // allow +/-1 step around target
+
+  float near_height = std::numeric_limits<float>::quiet_NaN();
+  float far_height = std::numeric_limits<float>::quiet_NaN();
+  int gap_steps = 0;
+  bool gap_started = false;
+  int gap_start_step = -1;
+  int gap_end_step = -1;
+
+  grid_map::Index sample_idx;
+
+  for (int s = 1; s <= max_steps; ++s) {
+    Eigen::Vector2f sample_xy = sensor_xy + dir * (s * step_len);
+    grid_map::Position sample_pos(sample_xy.x(), sample_xy.y());
+    if (!getIndex(sample_pos, sample_idx))
+      break;
+
+    float h = elevation(sample_idx.x(), sample_idx.y());
+
+    if (!std::isfinite(h)) {
+      gap_steps = gap_started ? gap_steps + 1 : 1;
+      gap_started = true;
+      if (gap_start_step < 0)
+        gap_start_step = s;
+      gap_end_step = s;
+      if (gap_steps * step_len > raycast_params_.max_nan_gap) {
+        return false;
+      }
+      // if we have passed the target window and are not in a covering gap,
+      // early exit
+      if (s > target_step + step_tolerance &&
+          gap_end_step < target_step - step_tolerance)
+        return false;
+      continue;
+    }
+
+    // finite height
+    if (!gap_started) {
+      near_height = h;
+      // if we already stepped past the target without hitting a gap, stop
+      if (s > target_step + step_tolerance)
+        break;
+      continue;
+    }
+
+    // gap has ended at step s-1
+    const bool gap_covers_target =
+        (gap_start_step <= (target_step + step_tolerance)) &&
+        (gap_end_step >= (target_step - step_tolerance));
+    if (!gap_covers_target) {
+      // reset and keep using this finite as the latest near
+      gap_started = false;
+      gap_steps = 0;
+      gap_start_step = -1;
+      gap_end_step = -1;
+      near_height = h;
+      // if we've passed target window, stop searching
+      if (s > target_step + step_tolerance)
+        break;
+      continue;
+    }
+
+    // gap covers target, current finite is far side
+    if (!std::isfinite(near_height)) {
+      near_height = GROUD_HEIGHT; // assume ground if ray starts in NaN
+    }
+    far_height = h;
+    break;
+  }
+
+  if (!std::isfinite(near_height) || !std::isfinite(far_height) ||
+      gap_steps == 0) {
+    return false;
+  }
+
+  float drop_height =
+      projectToBodyZ(near_height - far_height, current_T_g2b_.linear());
+  if (drop_height > drop_thres) {
+    drop_out = drop_height;
     return true;
   }
-
-  int nan_count = 0;
-  int sample_count = 0;
-  bool drop_detected = false;
-  float min_neighbor_height = center_height;
-
-  for (int dx = -nan_radius_cells; dx <= nan_radius_cells; ++dx) {
-    for (int dy = -nan_radius_cells; dy <= nan_radius_cells; ++dy) {
-      const int rx = cx + dx;
-      const int ry = cy + dy;
-      if (rx < 0 || rx >= size_x || ry < 0 || ry >= size_y)
-        continue;
-      ++sample_count;
-      const float h = height_layer(rx, ry);
-      if (std::isnan(h)) {
-        ++nan_count;
-        continue;
-      }
-
-      float diff = center_height - h;
-      diff = std::fabs(projectToBodyZ(diff, current_T_g2b_.linear()));
-      if (diff > drop_thres + drop_buffer) {
-        drop_detected = true;
-      }
-      if (h < min_neighbor_height) {
-        min_neighbor_height = h;
-      }
-    }
-  }
-
-  float nan_ratio =
-      sample_count > 0 ? static_cast<float>(nan_count) / sample_count : 0.0f;
-
-  grid_map::Position pos;
-  getPosition(center_idx, pos);
-  const float dist = std::hypot(pos.x(), pos.y());
-  const float ratio_threshold = dist > far_distance ? 0.85f : 0.6f;
-
-  const bool sufficient_nan =
-      nan_count >= nan_min_cells && nan_ratio >= ratio_threshold;
-
-  const bool drop_sufficient =
-      drop_detected ||
-      (center_height - min_neighbor_height) > (drop_thres + drop_buffer);
-
-  const bool is_cliff = sufficient_nan && drop_sufficient;
-  cliff_cache[idx] = is_cliff ? CliffState::Cliff : CliffState::NotCliff;
-  return is_cliff;
-}
-
-void ElevationMap::fillElevationHoles(const std::string &layer_height,
-                                      const std::string &layer_filled,
-                                      float search_radius, int min_neighbors,
-                                      const Eigen::Vector2f &bound_min,
-                                      const Eigen::Vector2f &bound_max) {
-  if (!exists(layer_height) || !exists(layer_filled))
-    return;
-
-  const grid_map::Matrix &H_in = get(layer_height);
-  grid_map::Matrix H_out = H_in; // copy
-
-  const int radius_cells =
-      static_cast<int>(std::ceil(search_radius / grid_size_));
-
-  const auto size = getSize();
-  const int rows = size.x();
-  const int cols = size.y();
-
-#pragma omp parallel for collapse(2)
-  for (int r = 0; r < rows; ++r) {
-    for (int c = 0; c < cols; ++c) {
-      if (!std::isnan(H_in(r, c)))
-        continue;
-
-      grid_map::Position pos;
-      getPosition({r, c}, pos);
-
-      if (pos.x() < bound_min.x() || pos.x() > bound_max.x() ||
-          pos.y() < bound_min.y() || pos.y() > bound_max.y()) {
-        continue;
-      }
-
-      float sum = 0.0;
-      float weight_sum = 0.0;
-      int count = 0;
-
-      for (int dr = -radius_cells; dr <= radius_cells; ++dr) {
-        for (int dc = -radius_cells; dc <= radius_cells; ++dc) {
-          int nr = r + dr;
-          int nc = c + dc;
-          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols)
-            continue;
-
-          float h = H_in(nr, nc);
-          if (std::isnan(h))
-            continue;
-
-          float dist = std::sqrt(dr * dr + dc * dc) * grid_size_;
-          if (dist > search_radius || dist < 1e-6)
-            continue;
-
-          float w = 1.0 / (dist * dist + 1e-6);
-          sum += h * w;
-          weight_sum += w;
-          count++;
-        }
-      }
-
-      if (count >= min_neighbors && weight_sum > 0.0) {
-        H_out(r, c) = sum / weight_sum;
-        grid_map::Index idx = {r, c};
-        // at(layer_filled, idx) = toFloat(Padding::Padded);
-      }
-    }
-  }
-  add("dummy_height", H_out);
-}
-
-void ElevationMap::fillPointCloudFromLayer(const std::string &layer_height,
-                                           const std::string &layer_filled) {
-  if (!exists(layer_height) || !exists(layer_filled))
-    return;
-
-  auto &cloud = getWorkingCloud();
-
-  for (grid_map::GridMapIterator it(*this); !it.isPastEnd(); ++it) {
-    grid_map::Index idx(*it);
-    if (at(layer_filled, idx) != toFloat(Padding::Padded))
-      continue;
-    grid_map::Position pos;
-    getPosition(idx, pos);
-
-    float z = at(layer_height, idx);
-
-    pcl::PointXYZ p;
-    p.x = pos.x();
-    p.y = pos.y();
-    p.z = z;
-    cloud.points.push_back(p);
-  }
-
-  cloud.width = cloud.points.size();
-  cloud.height = 1;
-  cloud.is_dense = true;
+  return false;
 }
 
 float ElevationMap::computeSlopeRad(int row, int col,
@@ -965,4 +960,53 @@ float ElevationMap::computeStepHeight(int row, int col,
   if (!has_neighbor)
     return std::numeric_limits<float>::quiet_NaN();
   return max_diff;
+}
+
+void ElevationMap::resolveUnknownWithTraversalCost() {
+  const auto params = getTraversalCostParams();
+  if (!params.enabled || !exists("traversal_cost"))
+    return;
+
+  auto &pass_layer = get("passability");
+  // preserve BFS result for neighbor checks
+  const auto pass_snapshot = pass_layer;
+  const auto &cost_layer = get("traversal_cost");
+  const auto &elevation_layer = get("elevation");
+  const auto &count_layer = get("point_count");
+  const auto size = getSize();
+  const int neighbor_min_impassable = 1;
+  const int neighbor_radius = 3;
+
+  for (int r = 0; r < size.x(); ++r) {
+    for (int c = 0; c < size.y(); ++c) {
+      if (!std::isfinite(elevation_layer(r, c)))
+        continue;
+      if (toPassability(pass_layer(r, c)) != Passability::Unknown)
+        continue;
+      const float cost = cost_layer(r, c);
+      const int count = count_layer(r, c);
+      if (!std::isfinite(cost))
+        continue;
+      int imp_neighbors = 0;
+      for (int dr = -neighbor_radius; dr <= neighbor_radius; ++dr) {
+        for (int dc = -neighbor_radius; dc <= neighbor_radius; ++dc) {
+          if (dr == 0 && dc == 0)
+            continue;
+          const int nr = r + dr;
+          const int nc = c + dc;
+          if (nr < 0 || nr >= size.x() || nc < 0 || nc >= size.y())
+            continue;
+          if (toPassability(pass_snapshot(nr, nc)) == Passability::Impassable) {
+            ++imp_neighbors;
+          }
+        }
+      }
+      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT &&
+          imp_neighbors >= neighbor_min_impassable) {
+        pass_layer(r, c) = toFloat(Passability::Impassable);
+      } else {
+        pass_layer(r, c) = toFloat(Passability::Passable);
+      }
+    }
+  }
 }

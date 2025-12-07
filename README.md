@@ -60,7 +60,7 @@ Use `map_length` / `map_width` to control the X/Y span and `map_height_min` / `m
 | `voxel_size` | `0.1` | Grid resolution; smaller values increase compute load. |
 | `max_drop` | `0.3` | Maximum allowed drop between neighbouring cells (metres). |
 | `max_roughness` | `0.1` | Roughness threshold used during terrain evaluation. |
-| `treat_nan_as_stiff` | `true` | When enabled, cells adjacent to NaN elevations are marked impassable. |
+| `treat_nan_as_stiff` | `true` | When enabled, NaN neighbours only block traversal if a forward/back lidar ray sees a finite→NaN→finite gap with a drop. |
 | `clearance_threshold` | `0.05` | Height margin around ground/baseline used to classify obstacle points. |
 | `baseline_radius` | `0.5` | Radius (m) around the robot used to estimate the baseline ground height. |
 | `body_length`, `body_width` | `0.6`, `0.4` | Robot footprint for padding and visualization. |
