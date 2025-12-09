@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>passable_node</name>
-  <version>0.0.3</version>
+  <version>0.0.4</version>
   <description>The passable area package (ROS1 port of humble branch)</description>
 
   <maintainer email="support@deeprobotics.cn">Lucas Meng</maintainer>

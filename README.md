@@ -1,6 +1,6 @@
 # Passable Area (ROS1)
 
-ROS1 Noetic port of the Humble `passable_area` node. It evaluates ground traversability from a gravity-aligned cloud and IMU, publishes passable/impassable clouds, a `grid_map` with passability and coverage layers, and an optional traversal-cost `OccupancyGrid`.
+ROS1 Noetic port of the Humble `passable_area` node. It evaluates ground traversability from a gravity-aligned cloud and IMU, publishes passable/impassable clouds, a `grid_map` with passability and coverage layers, and an optional traversal-cost `OccupancyGrid`. v0.0.4 adds raycast-based cliff detection, NaN-as-stiff handling, and reuses traversal cost to resolve unknown cells.
 
 ## Build
 Dependencies: `roscpp`, `sensor_msgs`, `nav_msgs`, `grid_map_core`, `grid_map_cv`, `grid_map_ros`, `pcl_ros`, `pcl_conversions`, `Eigen3`, `OpenCV`, `OpenMP`.

@@ -10,8 +10,8 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <grid_map_core/grid_map_core.hpp>
-#include <grid_map_ros/GridMapRosConverter.hpp>
 #include <grid_map_msgs/GridMap.h>
+#include <grid_map_ros/GridMapRosConverter.hpp>
 #include <nav_msgs/OccupancyGrid.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
@@ -73,9 +73,6 @@ private:
   bool enable_center_padding_;
   float center_dist_thresh_;
 
-  float clearance_threshold_;
-  float baseline_radius_;
-
   float body_length_;
   float body_width_;
   float body_height_;
@@ -85,6 +82,8 @@ private:
   PassabilityParams passability_params_;
   TraversalCostParams traversal_cost_params_;
   ElevationSolverParams solver_params_;
+  RaycastParams raycast_params_;
+  std::vector<LidarParams> lidar_params_;
 
 private:
   void elevationInit();
@@ -97,6 +96,8 @@ private:
   void publishTraversalCost();
   Eigen::Affine3f getTransform() const;
   void loadBodyGeometry();
+  void loadLidarParams();
+  void loadRaycastParams();
   void loadPassabilityParams();
   void loadElevationSolverParams();
   void loadTraversalCostParams();

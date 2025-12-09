@@ -9,9 +9,8 @@ max_slope_deg: 89.0
 max_inpaint_pixels: 200
 enable_center_padding: true
 center_dist_thresh: 0.8
-clearance_threshold: 0.0
-baseline_radius: 0.0
 enable_blind_check: true
+treat_nan_as_stiff: true
 
 accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
 imu_topic: "/IMU_YESENSE"
@@ -26,29 +25,34 @@ body_frame: "base_link"
 used_frame: "base_gravity"
 dog_model: "m20"
 
+raycast:
+  enable: true
+  max_ray_distance: 4.0
+  max_nan_gap: 3.0
+
 elevation_solver:
   use_histogram_solver: true
   histogram_bins: 20
   region_enabled: true
-  region_min_x: -0.5
+  region_min_x: -3.0
   region_max_x: 3.0
   region_min_y: -1.0
   region_max_y: 1.0
 
 traversal_cost:
-  enable: false
+  enable: true
   slope_free_deg: 10.0
-  slope_block_deg: 45.0
+  slope_block_deg: 80.0
   rough_free: 0.01
   rough_block: 0.04
   step_free: 0.08
   step_block: 0.35
-  slope_weight: 0.2
-  roughness_weight: 0.4
+  slope_weight: 0.3
+  roughness_weight: 0.3
   step_weight: 0.4
   easy_cost: 0.0
-  hard_cost: 50.0
+  hard_cost: 95.0
   max_cost: 100.0
-  curve_power: 1.5
+  curve_power: 1.0
   terrain_sample_window: 1
-  safe_zone_side_length: 1.0
+  safe_zone_side_length: 0.0
