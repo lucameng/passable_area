@@ -1,7 +1,7 @@
 <launch>
-    <node name="passable_node" pkg="passable_node" type="passable_node" output="screen">
+    <node name="passable_area" pkg="passable_node" type="passable_area" output="screen">
         <rosparam file="$(find passable_node)/config/mapping_params.yaml" command="load" />
-        <remap from="~cloud_topic" to="/accumulate_cloud/cloud_body" />
-        <remap from="~imu"   to="/imu/data"/>
+        <rosparam file="$(find passable_node)/config/body_params.yaml" command="load" />
+        <rosparam file="$(find passable_node)/config/lidar_params.yaml" command="load" />
     </node>
 </launch>

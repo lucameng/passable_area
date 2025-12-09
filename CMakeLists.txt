@@ -18,6 +18,7 @@ endif()
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     sensor_msgs
+    nav_msgs
     pcl_conversions
     pcl_ros
     grid_map_core
@@ -30,21 +31,35 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   include/common
-  include/passable_node
+  include/passable_area
 )
 
-catkin_package()
+catkin_package(
+  CATKIN_DEPENDS
+    roscpp
+    sensor_msgs
+    nav_msgs
+    pcl_conversions
+    pcl_ros
+    grid_map_core
+    grid_map_cv
+    grid_map_ros
+)
 
-add_executable(passable_node
+add_executable(passable_area
   src/elevation_map.cpp
-  src/passable_node.cpp
+  src/elevation_solver.cpp
+  src/layer_processing.cpp
   src/lidar_coverage.cpp
-  src/passable_main.cpp
+  src/traversal_cost.cpp
+  src/passable_area_node.cpp
+  src/passable_area_main.cpp
 )
 
-target_link_libraries(passable_node
+target_link_libraries(passable_area
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
     OpenMP::OpenMP_CXX
 )
 
+add_dependencies(passable_area ${catkin_EXPORTED_TARGETS})
