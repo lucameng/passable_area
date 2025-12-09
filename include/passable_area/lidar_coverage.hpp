@@ -16,9 +16,8 @@ class LidarCoverage {
 public:
   LidarCoverage() = default;
   explicit LidarCoverage(const ros::NodeHandle &nh);
-  void initialize(const std::string &dog_model);
-  void addLidars(const std::string &model,
-                 const std::vector<std::string> &lidar_names);
+  void initialize(const std::string &dog_model,
+                  const std::vector<LidarParams> &lidar_params);
   DogModel parseDogModel(const std::string &dog_model) const;
   void processCoverage(grid_map::GridMap &ele_map,
                        const Eigen::Affine3f &T_g2b);

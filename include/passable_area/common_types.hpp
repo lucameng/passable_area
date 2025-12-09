@@ -36,15 +36,16 @@ enum class DogModel : uint8_t { X30 = 0, M20 = 1, Unknown = 2 };
 // -----------------------------------------------------------------------------
 
 struct BodyGeometry {
-  float length{0.0f};
-  float width{0.0f};
-  float height{0.0f};
+  float length = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
 };
 
 struct PassabilityParams {
-  float roughness_threshold{0.1f};
-  float drop_threshold{0.3f};
-  float max_slope_deg{40.0f};
+  float roughness_threshold = 0.1f;
+  float drop_threshold = 0.3f;
+  float max_slope_deg = 40.0f;
+  bool treat_nan_as_stiff = true;
 };
 
 struct LidarParams {
@@ -59,8 +60,8 @@ struct LidarParams {
   double fov_up_rad = 0.0;    // deg
   double fov_down_rad = 0.0;  // deg
 
-  double min_range = 0.01;    // m
-  double max_range = 30.0;    // m
+  double min_range = 0.01; // m
+  double max_range = 30.0; // m
 };
 
 struct TraversalCostParams {
@@ -103,6 +104,12 @@ struct ElevationSolverParams {
   int neighbor_min_support = 1;
   float neighbor_height_tolerance = 0.25f;
   ElevationSolverRegion region;
+};
+
+struct RaycastParams {
+  bool enable = true;
+  float max_ray_distance = 4.0f;
+  float max_nan_gap = 1.0f;
 };
 
 struct ElevationSolverContext {

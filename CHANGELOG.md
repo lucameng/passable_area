@@ -1,4 +1,21 @@
-## [0.0.3] - 2025-12-09
+## [0.0.4] - 2025-12-09
+
+### 🚀 Features
+
+- Make NaN stiff handling configurable
+- Add lidar-based ray consistency for NaN cliffs and centralize param loading
+- Simplify passability pipeline and seed BFS with front/back anchors
+- For negative obstacles, set current cell to be Impassable as well
+- Add reusable BFS seeding helper and extra centerline seeds
+- Resolve Unknown cell with traversal cost
+- Gate Unknown-to-obstacle flip by neighbors and cost
+- Propagate raycast cliff drops into traversal cost
+
+### 🚜 Refactor
+
+- Pass passability params through a setter
+
+## [0.0.3] - 2025-11-27
 
 ### 🚀 Features
 
