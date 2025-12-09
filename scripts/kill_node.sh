@@ -1,6 +1,6 @@
 #!/bin/bash
 
-execute_names=("passable_node")
+execute_names=("passable_node" "passable_area")
 
 for execute_name in ${execute_names[*]}
 do

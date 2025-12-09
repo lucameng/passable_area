@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>passable_node</name>
-  <version>0.0.2</version>
-  <description>The passable node package</description>
+  <version>0.0.3</version>
+  <description>The passable area package (ROS1 port of humble branch)</description>
 
   <maintainer email="support@deeprobotics.cn">Lucas Meng</maintainer>
   <license>BSD</license>
@@ -11,6 +11,7 @@
 
   <build_depend>roscpp</build_depend>
   <build_depend>sensor_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
   <build_depend>pcl_conversions</build_depend>
   <build_depend>pcl_ros</build_depend>
   <build_depend>grid_map_core</build_depend>
@@ -19,6 +20,7 @@
 
   <exec_depend>roscpp</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
   <exec_depend>pcl_conversions</exec_depend>
   <exec_depend>pcl_ros</exec_depend>
   <exec_depend>grid_map_core</exec_depend>
