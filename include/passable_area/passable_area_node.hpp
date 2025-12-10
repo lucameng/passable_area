@@ -24,6 +24,7 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <memory>
+#include <mutex>
 #include <unordered_set>
 
 class PassableAreaNode : public rclcpp::Node {
@@ -58,11 +59,17 @@ private:
   std::string grid_map_topic_;
   std::string traversal_cost_topic_;
   builtin_interfaces::msg::Time stamp_;
+  rclcpp::Time last_imu_msg_time_;
+  rclcpp::Time last_cloud_msg_time_;
+  bool imu_received_;
+  bool cloud_received_;
+  rclcpp::TimerBase::SharedPtr data_watchdog_timer_;
 
   std::unique_ptr<ElevationMap> ele_map_;
   std::unique_ptr<LidarCoverage> lidar_cov_;
   std::unique_ptr<TraversalCost> traversal_cost_;
   mutable std::mutex imu_mutex_;
+  mutable std::mutex data_mutex_;
   Eigen::Affine3f T_g2b_;
 
   float map_length_;
@@ -96,6 +103,8 @@ private:
   void publishGridMap();
   void publishTraversalCost();
   Eigen::Affine3f getTransform() const;
+  void startDataWatchdog();
+  void checkDataHealth();
   void loadBodyGeometry();
   void loadPassabilityParams();
   void loadElevationSolverParams();

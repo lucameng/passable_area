@@ -15,7 +15,7 @@ passable_area:
     treat_nan_as_stiff: true
 
     accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
-    imu_topic: "/IMU_YESENSE"
+    imu_topic: "/IMU"
     passable_cloud_topic: "/passable_area"
     impassable_cloud_topic: "/impassable_area"
     grid_map_topic: "/grid_map"
@@ -53,8 +53,8 @@ passable_area:
       roughness_weight: 0.3
       step_weight: 0.4
       easy_cost: 0.0
-      hard_cost: 0.9
-      max_cost: 1.0
+      hard_cost: 90.0
+      max_cost: 100.0
       curve_power: 1.0
       terrain_sample_window: 1
       safe_zone_side_length: 0.0
