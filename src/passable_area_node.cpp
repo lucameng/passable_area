@@ -33,7 +33,10 @@ PassableAreaNode::PassableAreaNode()
       traversal_cost_topic_(declare_parameter<std::string>(
           "traversal_cost_topic", "traversal_cost")),
       body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
-      T_g2b_(Eigen::Affine3f::Identity()) {
+      T_g2b_(Eigen::Affine3f::Identity()),
+      last_imu_msg_time_(0, 0, get_clock()->get_clock_type()),
+      last_cloud_msg_time_(0, 0, get_clock()->get_clock_type()),
+      imu_received_(false), cloud_received_(false) {
   if (min_height_ > max_height_) {
     std::swap(min_height_, max_height_);
   }
@@ -258,6 +261,53 @@ void PassableAreaNode::initialize() {
       create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
   traversal_cost_pub_ =
       create_publisher<nav_msgs::msg::OccupancyGrid>(traversal_cost_topic_, 10);
+  startDataWatchdog();
+}
+
+void PassableAreaNode::startDataWatchdog() {
+  using namespace std::chrono_literals;
+
+  data_watchdog_timer_ = create_wall_timer(
+      2s, std::bind(&PassableAreaNode::checkDataHealth, this));
+}
+
+void PassableAreaNode::checkDataHealth() {
+  const auto now_time = now();
+  const rclcpp::Duration timeout = rclcpp::Duration::from_seconds(2.0);
+
+  rclcpp::Time last_imu;
+  rclcpp::Time last_cloud;
+  bool imu_received = false;
+  bool cloud_received = false;
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    last_imu = last_imu_msg_time_;
+    last_cloud = last_cloud_msg_time_;
+    imu_received = imu_received_;
+    cloud_received = cloud_received_;
+  }
+
+  if (used_frame_ != b_frame_) {
+    if (!imu_received) {
+      RCLCPP_WARN(get_logger(),
+                  "Waiting for IMU messages on topic '%s' (no data received)",
+                  imu_topic_.c_str());
+    } else if ((now_time - last_imu) > timeout) {
+      RCLCPP_WARN(get_logger(),
+                  "No IMU message received for %.1f s on topic '%s'",
+                  (now_time - last_imu).seconds(), imu_topic_.c_str());
+    }
+  }
+
+  if (!cloud_received) {
+    RCLCPP_WARN(get_logger(),
+                "Waiting for input cloud on topic '%s' (no data received)",
+                accumulate_cloud_topic_.c_str());
+  } else if ((now_time - last_cloud) > timeout) {
+    RCLCPP_WARN(
+        get_logger(), "No input cloud received for %.1f s on topic '%s'",
+        (now_time - last_cloud).seconds(), accumulate_cloud_topic_.c_str());
+  }
 }
 
 void PassableAreaNode::elevationInit() {
@@ -285,6 +335,12 @@ void PassableAreaNode::lidarCoverInit() {
 }
 
 void PassableAreaNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    last_imu_msg_time_ = now();
+    imu_received_ = true;
+  }
+
   if (used_frame_ == b_frame_)
     return; // no need if it is body frame
 
@@ -314,6 +370,12 @@ void PassableAreaNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
 
 void PassableAreaNode::cloudCallback(
     const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    last_cloud_msg_time_ = now();
+    cloud_received_ = true;
+  }
+
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
