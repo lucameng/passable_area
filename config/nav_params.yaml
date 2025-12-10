@@ -15,7 +15,7 @@ passable_area:
     treat_nan_as_stiff: true
 
     accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
-    imu_topic: "/IMU_YESENSE"
+    imu_topic: "/IMU"
     passable_cloud_topic: "/passable_area"
     impassable_cloud_topic: "/impassable_area"
     grid_map_topic: "/grid_map"
