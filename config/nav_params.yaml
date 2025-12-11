@@ -55,6 +55,7 @@ passable_area:
       easy_cost: 0.0
       hard_cost: 90.0
       max_cost: 100.0
+      missing_cost: 20.0
       curve_power: 1.0
       terrain_sample_window: 1
       safe_zone_side_length: 0.0

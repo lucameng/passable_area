@@ -87,6 +87,9 @@ void ElevationMap::setTraversalCostParams(
       std::clamp(traversal_params_.hard_cost, 0.0f, traversal_params_.max_cost);
   traversal_params_.easy_cost = std::clamp(traversal_params_.easy_cost, 0.0f,
                                            traversal_params_.hard_cost);
+  traversal_params_.missing_cost =
+      std::clamp(traversal_params_.missing_cost, traversal_params_.easy_cost,
+                 traversal_params_.max_cost);
   const float weight_sum = traversal_params_.slope_weight +
                            traversal_params_.roughness_weight +
                            traversal_params_.step_weight;

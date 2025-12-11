@@ -75,9 +75,10 @@ struct TraversalCostParams {
   float slope_weight = 0.4f;
   float roughness_weight = 0.3f;
   float step_weight = 0.3f;
-  float easy_cost = 1.0f;
-  float hard_cost = 60.0f;
+  float easy_cost = 0.0f;
+  float hard_cost = 90.0f;
   float max_cost = 100.0f;
+  float missing_cost = 20.0f;
   float curve_power = 3.0f;
   int terrain_sample_window = 1;
   float safe_zone_side_length = 1.0f;

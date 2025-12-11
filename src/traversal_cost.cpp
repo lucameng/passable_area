@@ -65,27 +65,27 @@ bool TraversalCost::updateCostLayer() {
   for (int r = 0; r < rows; ++r) {
     for (int c = 0; c < cols; ++c) {
       const float height = elevation_layer(r, c);
-      if (!std::isfinite(height)) {
-        // cost_layer(r, c) = params.easy_cost;
+      const auto cover = map_.getCoverability(Eigen::Array2i(r, c));
+      if (!std::isfinite(height) || cover == CoverageStatus::Uncovered) {
+        cost_layer(r, c) = params.missing_cost;
         continue;
       }
 
-      const float slope_rad = fetchMetric(
-          slope_layer(r, c),
-          [&]() { return map_.computeSlopeRad(r, c, elevation_layer); });
-      const float roughness = fetchMetric(
-          rough_layer(r, c), [&]() {
-            Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-            Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
-            float variance =
-                map_.computeRoughness(r, c, rough_kernel, mean, square);
-            if (variance <= 0.0f)
-              return std::numeric_limits<float>::quiet_NaN();
-            return std::sqrt(std::max(0.0f, variance));
-          });
-      const float step = fetchMetric(
-          step_layer(r, c),
-          [&]() { return map_.computeStepHeight(r, c, elevation_layer); });
+      const float slope_rad = fetchMetric(slope_layer(r, c), [&]() {
+        return map_.computeSlopeRad(r, c, elevation_layer);
+      });
+      const float roughness = fetchMetric(rough_layer(r, c), [&]() {
+        Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+        Eigen::Matrix3f square = Eigen::Matrix3f::Zero();
+        float variance =
+            map_.computeRoughness(r, c, rough_kernel, mean, square);
+        if (variance <= 0.0f)
+          return std::numeric_limits<float>::quiet_NaN();
+        return std::sqrt(std::max(0.0f, variance));
+      });
+      const float step = fetchMetric(step_layer(r, c), [&]() {
+        return map_.computeStepHeight(r, c, elevation_layer);
+      });
 
       grid_map::Position pos;
       const bool have_pos = map_.getPosition(grid_map::Index(r, c), pos);
@@ -93,7 +93,7 @@ bool TraversalCost::updateCostLayer() {
                                 std::fabs(pos.y()) <= half_extent;
 
       if (!std::isfinite(roughness) || !std::isfinite(step)) {
-        cost_layer(r, c) = params.easy_cost;
+        cost_layer(r, c) = params.missing_cost;
         continue;
       }
 
