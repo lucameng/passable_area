@@ -113,13 +113,15 @@ void PassableAreaNode::loadTraversalCostParams() {
   traversal_cost_params_.step_weight =
       declare_parameter("traversal_cost.step_weight", 0.3f);
   traversal_cost_params_.easy_cost =
-      declare_parameter("traversal_cost.easy_cost", 1.0f);
+      declare_parameter("traversal_cost.easy_cost", 0.0f);
   traversal_cost_params_.hard_cost =
-      declare_parameter("traversal_cost.hard_cost", 60.0f);
+      declare_parameter("traversal_cost.hard_cost", 90.0f);
   traversal_cost_params_.max_cost =
       declare_parameter("traversal_cost.max_cost", 100.0f);
+  traversal_cost_params_.missing_cost =
+      declare_parameter("traversal_cost.missing_cost", 20.0f);
   traversal_cost_params_.curve_power =
-      declare_parameter("traversal_cost.curve_power", 3.0f);
+      declare_parameter("traversal_cost.curve_power", 1.0f);
   traversal_cost_params_.terrain_sample_window =
       declare_parameter<int>("traversal_cost.terrain_sample_window", 1);
   traversal_cost_params_.safe_zone_side_length =
