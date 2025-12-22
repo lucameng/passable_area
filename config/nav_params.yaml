@@ -42,7 +42,7 @@ passable_area:
       region_max_y: 1.0
 
     traversal_cost:
-      enable: true
+      enable: false
       slope_free_deg: 10.0
       slope_block_deg: 80.0
       rough_free: 0.01
