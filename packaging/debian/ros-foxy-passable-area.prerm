@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+case "${1:-}" in
+  remove|upgrade|deconfigure)
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+      systemctl unmask passable_area.service || true
+      systemctl stop passable_area.service || true
+      systemctl disable passable_area.service || true
+      systemctl daemon-reload || true
+    fi
+    ;;
+esac
+
+exit 0

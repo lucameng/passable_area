@@ -391,6 +391,10 @@ void applyMedianFilter(grid_map::GridMap &map, const std::string &layer_height,
   if (kernel_size <= 5) {
     cv::medianBlur(elevation_image, filtered_image, kernel_size);
 
+    // Fix the issue where OpenCV generates NaN on ARM
+    cv::Mat nan_mask = (filtered_image != filtered_image); // NaN != NaN
+    elevation_image.copyTo(filtered_image, nan_mask);
+
     if (!mask.empty()) {
       elevation_image.copyTo(filtered_image, mask);
     }

@@ -11,7 +11,7 @@ passable_area:
     max_inpaint_pixels: 200
     enable_center_padding: true
     center_dist_thresh: 0.8
-    enable_blind_check: true
+    enable_blind_check: false
     treat_nan_as_stiff: true
 
     accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
@@ -57,5 +57,6 @@ passable_area:
       max_cost: 100.0
       missing_cost: 20.0
       curve_power: 1.0
+      low_cost_filter_ratio: 0.1
       terrain_sample_window: 1
       safe_zone_side_length: 0.0

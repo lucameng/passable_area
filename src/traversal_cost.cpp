@@ -49,6 +49,10 @@ bool TraversalCost::updateCostLayer() {
   const float slope_block_rad = static_cast<float>(
       dr::degreeToRadian(static_cast<double>(params.slope_block_deg)));
   const float half_extent = 0.5f * params.safe_zone_side_length;
+  const float low_cost_ratio =
+      std::clamp(params.low_cost_filter_ratio, 0.0f, 1.0f);
+  const float low_cost_threshold =
+      params.easy_cost + (params.max_cost - params.easy_cost) * low_cost_ratio;
 
   auto fetchMetric = [&](float &slot,
                          const std::function<float()> &compute) -> float {
@@ -130,6 +134,9 @@ bool TraversalCost::updateCostLayer() {
       float cost =
           params.easy_cost + (params.hard_cost - params.easy_cost) * shaped;
       cost = std::clamp(cost, params.easy_cost, params.hard_cost);
+      if (cost <= low_cost_threshold) {
+        cost = params.easy_cost;
+      }
       cost_layer(r, c) = cost;
     }
   }

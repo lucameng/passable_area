@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+case "${1:-}" in
+  remove|purge)
+    # 清理可能残留的 mask，避免下次安装时被 masked 阻断
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+      systemctl unmask passable_area.service || true
+      # 如果有 /etc/systemd/system/passable_area.service 的手工 mask 符号链接，清掉
+      if [ -L /etc/systemd/system/passable_area.service ]; then
+        rm -f /etc/systemd/system/passable_area.service || true
+      fi
+      systemctl daemon-reload || true
+    fi
+    ;;
+esac
+
+exit 0

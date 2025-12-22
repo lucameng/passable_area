@@ -70,7 +70,7 @@ void LidarCoverage::initialize(const std::string &dog_model,
 
 void LidarCoverage::processCoverage(grid_map::GridMap &ele_map,
                                     const Eigen::Affine3f &T_g2b) {
-  computeCoverage(ele_map, T_g2b, "dummy_height");
+  computeCoverage(ele_map, T_g2b, "elevation");
   dilateUncoveredArea(ele_map, 2, "coverability");
 }
 
