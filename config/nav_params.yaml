@@ -57,5 +57,6 @@ passable_area:
       max_cost: 100.0
       missing_cost: 20.0
       curve_power: 1.0
+      low_cost_filter_ratio: 0.1
       terrain_sample_window: 1
       safe_zone_side_length: 0.0

@@ -80,6 +80,7 @@ struct TraversalCostParams {
   float max_cost = 100.0f;
   float missing_cost = 20.0f;
   float curve_power = 3.0f;
+  float low_cost_filter_ratio = 0.1f;
   int terrain_sample_window = 1;
   float safe_zone_side_length = 1.0f;
 };
