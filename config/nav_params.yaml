@@ -3,7 +3,7 @@ passable_area:
     map_length:    8.0
     map_width:     8.0
     map_height_min: -1.0
-    map_height_max:  0.5
+    map_height_max:  1.0
     voxel_size:    0.05
     max_drop:      0.25
     max_roughness: 0.10
