@@ -1,104 +1,108 @@
-# Passable Area
+# Passable Area (ROS 2 Humble)
 
-## Overview
-`passable_area` evaluates ground traversability in real time using a fused point cloud and IMU stream. The node maintains a gravity-aligned elevation grid, classifies each cell as passable, impassable, or unknown based on roughness and drop thresholds, and publishes both grid map and point cloud outputs for navigation or mapping stacks.
+`passable_area` builds a gravity-aligned elevation grid from fused IMU + point cloud data, classifies passability with BFS, and publishes both a `grid_map` and filtered point clouds for navigation or mapping. The single executable serves multiple scenarios; launch files and YAML presets pick the mode.
 
-## Key Features
-- Body-frame safety checks that combine roughness and drop limits to stay stable on slopes.
-- Optional blind-spot padding and lidar coverage analysis configured per-sensor pose.
-- Inpainting step that fills holes in the elevation map and re-injects padded points for consistent labeling.
-- One executable serves mapping and navigation scenarios; launch files simply swap parameter presets and topic remaps.
-- Maintains both ground and peak elevation layers so obstacle point clouds omit low-lying floor returns.
-- Publishes `grid_map_msgs/GridMap`, filtered `sensor_msgs/PointCloud2` clouds, and an RViz body marker for quick inspection.
+## Pipeline Highlights
+- Frames and inputs: IMU provides `T_g2b`; the cloud is cropped to `[map_length, map_width, map_height_min, map_height_max]` before being written into a `grid_map::GridMap` centered on the body.
+- Elevation solving: a histogram-based solver (configurable bin count and ROI) estimates `ground_height`, `ceiling_height`, and `clearance`; outside the ROI it falls back to the legacy min/max strategy.
+- Map cleanup and features: hole inpainting with optional center padding, median filtering, roughness/slope/step features, and cliff detection keep BFS stable on noisy data.
+- Passability and cost: BFS grows from the robot center using `max_drop`, `max_roughness`, and slope limits; `traversal_cost` blends slope/roughness/step into a continuous cost layer and is also published as an `OccupancyGrid`.
+- Blind-spot handling (optional): when `enable_blind_check` is true, `LidarCoverage` projects per-lidar FOV cones from `lidar_params.*`, marks uncovered cells, and dilates blind spots so impassable points are not emitted from unseen areas.
+- Outputs: passable/impassable point clouds, a full `grid_map` (passability, coverability, traversal_cost, elevation, etc.), a `body_visual` marker, and a traversal-cost occupancy grid.
 
-## Build & Dependencies
-This branch targets ROS 2 Humble with `ament_cmake`. Required dependencies:
-- `rclcpp`, `sensor_msgs`, `pcl_ros`, `pcl_conversions`
-- `grid_map_core`, `grid_map_cv`, `grid_map_ros`
-- `Eigen3`, `OpenCV`, and `OpenMP`
+## Build
+- Dependencies: `rclcpp`, `sensor_msgs`, `nav_msgs`, `pcl_ros`, `pcl_conversions`, `grid_map_core`, `grid_map_cv`, `grid_map_ros`, `Eigen3`, `OpenCV`.
+- From workspace root:
+  ```bash
+  colcon build --packages-select passable_area --symlink-install
+  source install/setup.bash
+  ```
+  The navigation launch also starts `accumulate_cloud`, so ensure that package is installed if you use the nav preset.
 
-Build from the workspace root:
-```bash
-colcon build --packages-select passable_area --symlink-install
-source install/setup.bash
-```
-Make sure OpenMP support is installed (for example `sudo apt install libomp-dev`) or CMake will abort early.
-
-## Running
-Two launch files provide tuned presets:
-
-- Navigation pipeline
+## Run
+- Navigation pipeline (starts `accumulate_cloud` and `passable_area`):
   ```bash
   ros2 launch passable_area nav.launch.py
   ```
-  Loads `config/nav_params.yaml` and subscribes to the node-local `cloud_topic` and `imu` inputs.
-
-- Mapping pipeline
+  Loads `config/nav_params.yaml` plus `config/body_params.yaml` and `config/lidar_params.yaml`.
+- Mapping pipeline:
   ```bash
   ros2 launch passable_area mapping.launch.py
   ```
-  Uses the same executable, pulls parameters from `config/mapping_params.yaml`, and allows remapping the cloud topic (for example to `/accumulate_cloud/cloud_body`).
-
-The RViz layout in `config/passable.rviz` highlights passable/impassable clouds alongside the grid map.
-
-For quick experimentation without launch files, run the node directly:
-```bash
-ros2 run passable_area passable_area
-```
-
-> **Note:** `third_party/` contains mirrored copies of this package for synchronization purposes. Make changes under `src/passable_area/` only.
+  Expects `config/mapping_params.yaml`; create it (e.g., copy `nav_params.yaml`) before launching to avoid missing-file errors.
+- Direct node for quick experiments:
+  ```bash
+  ros2 run passable_area passable_area --ros-args \
+    --params-file src/passable_area/config/nav_params.yaml
+  ```
+- RViz: use `rviz/passable_area.rviz` to inspect passable/impassable clouds, grid-map layers, and the body footprint.
+- Helpers: `scripts/passable_nav.sh` / `scripts/passable_mapping.sh` wrap the launches after sourcing the workspace; edit the paths at the top of each script before use.
 
 ## Configuration
-`config/nav_params.yaml` and `config/mapping_params.yaml` expose the same parameter set. Key entries:
+Parameter files live in `config/`:
+- `nav_params.yaml`: shipped nav defaults (used by `nav.launch.py`).
+- `mapping_params.yaml`: user-provided mapping preset (referenced by `mapping.launch.py`).
+- `body_params.yaml`: footprint dimensions per `dog_model` (`m20` and `x30` provided).
+- `lidar_params.yaml`: per-model lidar poses and FOV for coverage.
 
-Use `map_length` / `map_width` to control the X/Y span and `map_height_min` / `map_height_max` to clamp vertical range.
+Key nav defaults in `config/nav_params.yaml`:
+| Group | Param | Default (nav) | Notes |
+| --- | --- | --- | --- |
+| Map geometry | `map_length` / `map_width` | `8.0 / 8.0` | Body-centered grid size (m). |
+|  | `map_height_min` / `map_height_max` | `-1.0 / 0.5` | Z crop (m). |
+|  | `voxel_size` | `0.05` | Grid resolution (m). |
+| Passability | `max_drop` | `0.25` | Max allowed step between cells (m). |
+|  | `max_roughness` | `0.10` | Roughness gate for BFS. |
+|  | `max_slope_deg` | `89.0` | Slope limit (deg). |
+|  | `treat_nan_as_stiff` | `true` | Only block on finite→NaN→finite drops. |
+|  | `max_inpaint_pixels` | `200` | Max hole size for inpaint (cells). |
+|  | `enable_center_padding` / `center_dist_thresh` | `true / 0.8` | Force-fill near-body holes. |
+| Frames/topics | `accumulate_cloud_topic` | `/accumulate_cloud/cloud_gravity` | Input cloud. |
+|  | `imu_topic` | `/IMU` | IMU orientation. |
+|  | `passable_cloud_topic` / `impassable_cloud_topic` | `/passable_area` / `/impassable_area` | Output clouds. |
+|  | `grid_map_topic` / `traversal_cost_topic` | `/grid_map` / `/traversal_cost` | Map outputs. |
+|  | `world_frame` / `gravity_frame` | `camera_init` / `base_gravity` | TF frames. |
+|  | `body_frame` / `used_frame` | `base_link` / `base_gravity` | Grid frame + marker frame. |
+|  | `dog_model` | `m20` | Selects footprint & lidar layout. |
 
-| Name | Default (nav) | Description |
+Elevation solver defaults (ROI uses histogram solver; outside falls back to legacy):
+| Param | Value |
+| --- | --- |
+| `use_histogram_solver` | `true` |
+| `histogram_bins` | `20` |
+| `region_enabled` | `true` |
+| `region_min_x` / `region_max_x` | `-3.0 / 3.0` |
+| `region_min_y` / `region_max_y` | `-1.0 / 1.0` |
+
+Raycast & blind check defaults:
+| Param | Value | Notes |
 | --- | --- | --- |
-| `map_length`, `map_width` | `10.0`, `10.0` | Map extents along X/Y in metres. |
-| `map_height_min`, `map_height_max` | `-1.5`, `1.5` | Lower and upper Z bounds of the elevation map (metres). |
-| `voxel_size` | `0.1` | Grid resolution; smaller values increase compute load. |
-| `max_drop` | `0.3` | Maximum allowed drop between neighbouring cells (metres). |
-| `max_roughness` | `0.1` | Roughness threshold used during terrain evaluation. |
-| `treat_nan_as_stiff` | `true` | When enabled, NaN neighbours only block traversal if a forward/back lidar ray sees a finite→NaN→finite gap with a drop. |
-| `clearance_threshold` | `0.05` | Height margin around ground/baseline used to classify obstacle points. |
-| `baseline_radius` | `0.5` | Radius (m) around the robot used to estimate the baseline ground height. |
-| `body_length`, `body_width` | `0.6`, `0.4` | Robot footprint for padding and visualization. |
-| `world_frame`, `gravity_frame`, `body_frame`, `used_frame` | see YAML | Frame IDs for projecting measurements and publishing outputs. |
-| `enable_blind_check` | `false` | Toggles lidar blind-spot padding and coverage checks. |
+| `raycast.enable` | `true` | Crops NaN gaps in rays before labeling cliffs. |
+| `raycast.max_ray_distance` | `4.0` | Meters. |
+| `raycast.max_nan_gap` | `3.0` | Cells. |
+| `enable_blind_check` | `false` | Set `true` to compute coverability. |
 
-The `traversal_cost.*` namespace (see the YAML files) tunes the new geometric cost layer:
-- `slope_*`, `rough_*`, and `step_*` thresholds describe when each feature transitions from easy → hard → impassable.
-- `*_weight` terms weight the contribution of slope, roughness, and steps to the aggregate difficulty score.
-- `easy_cost`, `hard_cost`, `max_cost`, and `curve_power` shape how the normalized difficulty is converted into the published cost.
-- `terrain_sample_window` controls the kernel (in cell units) used when computing local roughness/slope.
-
-Per-lidar blocks (for example `lidar_front_up`) define:
-- `pos_body`: `[x, y, z]` mount position in the body frame (metres)
-- `rpy_body`: Euler angles in degrees
-- `fov_up_deg` / `fov_down_deg`: vertical field-of-view limits
-- Optional `min_range` / `max_range` overrides for coverage trimming
-
-Disable `enable_blind_check` if you do not require coverage analysis and want to save CPU cycles.
+Traversal cost defaults (published in `grid_map` and as `nav_msgs/OccupancyGrid`):
+| Param | Value |
+| --- | --- |
+| `enable` | `true` |
+| `slope_free_deg` / `slope_block_deg` | `10.0 / 80.0` |
+| `rough_free` / `rough_block` | `0.01 / 0.04` |
+| `step_free` / `step_block` | `0.08 / 0.35` |
+| `slope_weight` / `roughness_weight` / `step_weight` | `0.3 / 0.3 / 0.4` |
+| `easy_cost` / `hard_cost` / `max_cost` | `0.0 / 90.0 / 100.0` |
+| `missing_cost` | `20.0` |
+| `curve_power` | `1.0` |
+| `low_cost_filter_ratio` | `0.1` |
+| `terrain_sample_window` | `1` |
+| `safe_zone_side_length` | `0.0` |
 
 ## ROS Interfaces
-### Subscribed Topics
-- `cloud_topic` (`sensor_msgs/msg/PointCloud2`): gravity-aligned cloud used to construct the elevation map.
-- `imu` (`sensor_msgs/msg/Imu`): orientation source for the gravity-to-body transform.
+- Subscribed: `accumulate_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `imu_topic` (`sensor_msgs/msg/Imu`); names are configurable via parameters and remapping.
+- Published: `passable_cloud_topic` and `impassable_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `grid_map_topic` (`grid_map_msgs/msg/GridMap`), `traversal_cost_topic` (`nav_msgs/msg/OccupancyGrid`), `body_visual` (`visualization_msgs/msg/Marker`).
+- All topic names are relative to the node namespace.
 
-### Published Topics
-- `passable_area` (`sensor_msgs/msg/PointCloud2`): filtered points classified as traversable.
-- `impassable_area` (`sensor_msgs/msg/PointCloud2`): points marked as obstructed or risky.
-- `grid_map` (`grid_map_msgs/msg/GridMap`): grid containing passability, coverage, padding, and point-count layers.
-- `body_visual` (`visualization_msgs/msg/Marker`): body footprint marker for RViz.
-- `expanded_area` (`sensor_msgs/msg/PointCloud2`): optional debug cloud with padded samples (disabled by default).
-
-All names are relative, so they inherit the node namespace and can be remapped in launch files.
-
-## Branches
-Maintained branches:
-- ROS 1
-  - [master](https://codeup.aliyun.com/deeprobotics/perception/passable_area/tree/master)
-- ROS 2
-  - [foxy](https://codeup.aliyun.com/deeprobotics/perception/passable_area/tree/foxy)
-  - [humble](https://codeup.aliyun.com/deeprobotics/perception/passable_area/tree/humble)
+## Development Notes
+- Detailed algorithm notes: `docs/passable_area.md` (full pipeline) and `docs/traversal_cost.md` (cost layer math). Treat these as the source of truth when tuning.
+- Tests are not yet wired; add gtests under `src/passable_area/test/` and register them in `CMakeLists.txt` when introducing new features.
+- `third_party/passable_area/` mirrors this package—edit files only in `src/passable_area/` and use `scripts/sync_passable_node.sh` if you intentionally need to refresh the mirror.

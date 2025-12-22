@@ -1,3 +1,17 @@
+## [0.0.5] - 2025-12-22
+
+### 🚀 Features
+
+- Add watchdog warnings for missing IMU/cloud data
+- Add configurable missing traversal cost for holes and blind spots
+- Add low-cost filtering for traversal cost layer
+
+### 🐛 Bug Fixes
+
+- Change the cost range to 0-100
+- Fix coverability computation by using elevation layer
+- Guard median filter against NaN propagation on ARM
+
 ## [0.0.4] - 2025-12-07
 
 ### 🚀 Features
