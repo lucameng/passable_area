@@ -102,9 +102,11 @@ struct ElevationSolverParams {
   int gap_empty_bins = 2;
   int gap_empty_count_threshold = 0;
   int ground_min_count = 1;
-  float float_ratio_threshold = 0.5f;
-  int neighbor_min_support = 1;
-  float neighbor_height_tolerance = 0.25f;
+  float float_ratio_threshold = 1.01f;
+  int ceiling_neighbor_min_support = 0;
+  float ceiling_neighbor_height_tolerance = 0.25f;
+  int ground_neighbor_min_support = 4;
+  float ground_neighbor_height_tolerance = 0.25f;
   ElevationSolverRegion region;
 };
 

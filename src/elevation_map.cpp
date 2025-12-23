@@ -43,16 +43,6 @@ ElevationMap::ElevationMap(float map_length, float map_width, float min_height,
   get("roughness").setConstant(std::numeric_limits<float>::quiet_NaN());
   get("step_height").setConstant(std::numeric_limits<float>::quiet_NaN());
   get("traversal_cost").setConstant(std::numeric_limits<float>::quiet_NaN());
-
-  solver_params_.min_points = 1;
-  solver_params_.ceiling_window_bins = 2;
-  solver_params_.ceiling_min_points = 1;
-  solver_params_.gap_empty_bins = 1;
-  solver_params_.gap_empty_count_threshold = 0;
-  solver_params_.ground_min_count = 1;
-  solver_params_.float_ratio_threshold = 0.6f;
-  solver_params_.neighbor_min_support = 0;
-  solver_params_.neighbor_height_tolerance = 0.25f;
 }
 
 void ElevationMap::setElevationSolverParams(
@@ -60,6 +50,14 @@ void ElevationMap::setElevationSolverParams(
   solver_params_.use_histogram_solver = params.use_histogram_solver;
   solver_params_.histogram_bins = std::max(1, params.histogram_bins);
   solver_params_.region = params.region;
+  solver_params_.ceiling_neighbor_min_support =
+      std::max(0, params.ceiling_neighbor_min_support);
+  solver_params_.ceiling_neighbor_height_tolerance =
+      std::max(0.0f, params.ceiling_neighbor_height_tolerance);
+  solver_params_.ground_neighbor_min_support =
+      std::max(0, params.ground_neighbor_min_support);
+  solver_params_.ground_neighbor_height_tolerance =
+      std::max(0.0f, params.ground_neighbor_height_tolerance);
   auto &region = solver_params_.region;
   if (region.min_x > region.max_x)
     std::swap(region.min_x, region.max_x);
