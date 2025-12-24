@@ -614,23 +614,23 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
     enqueue_seed_index(idx.x(), idx.y());
   };
 
-  // the starting point of flood-filling (BFS)
-  const int center_x = size_x / 2;
-  const int center_y = size_y / 2;
-  enqueue_seed_index(center_x, center_y);
-  // manually add a point located at the front
-  int front_x = std::min(static_cast<int>(center_x * 0.3f), size_x - 1);
-  int front_y = std::min(static_cast<int>(center_y * 0.8f), size_y - 1);
-  enqueue_seed_index(front_x, front_y);
-  // manually add a point located at the back
-  int back_x = std::min(static_cast<int>(center_x * 1.7f), size_x - 1);
-  int back_y = std::min(static_cast<int>(center_y * 1.2f), size_y - 1);
-  enqueue_seed_index(back_x, back_y);
-  // manually add points at metric positions relative to map center
-  enqueue_seed_position(0.4f, 0.0f);
-  enqueue_seed_position(-0.4f, 0.0f);
-  enqueue_seed_position(0.0f, 1.0f);
-  enqueue_seed_position(0.0f, -1.0f);
+  // // the starting point of flood-filling (BFS)
+  // const int center_x = size_x / 2;
+  // const int center_y = size_y / 2;
+  // enqueue_seed_index(center_x, center_y);
+  // // manually add a point located at the front
+  // int front_x = std::min(static_cast<int>(center_x * 0.3f), size_x - 1);
+  // int front_y = std::min(static_cast<int>(center_y * 0.8f), size_y - 1);
+  // enqueue_seed_index(front_x, front_y);
+  // // manually add a point located at the back
+  // int back_x = std::min(static_cast<int>(center_x * 1.7f), size_x - 1);
+  // int back_y = std::min(static_cast<int>(center_y * 1.2f), size_y - 1);
+  // enqueue_seed_index(back_x, back_y);
+  // // manually add points at metric positions relative to map center
+  enqueue_seed_position(0.45f, 0.0f);
+  enqueue_seed_position(-0.45f, 0.0f);
+  // enqueue_seed_position(0.0f, 1.0f);
+  // enqueue_seed_position(0.0f, -1.0f);
 
   const int dx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   const int dy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
@@ -977,8 +977,6 @@ void ElevationMap::resolveUnknownWithTraversalCost() {
   const auto &elevation_layer = get("elevation");
   const auto &count_layer = get("point_count");
   const auto size = getSize();
-  const int neighbor_min_impassable = 1;
-  const int neighbor_radius = 3;
 
   for (int r = 0; r < size.x(); ++r) {
     for (int c = 0; c < size.y(); ++c) {
@@ -990,22 +988,7 @@ void ElevationMap::resolveUnknownWithTraversalCost() {
       const int count = count_layer(r, c);
       if (!std::isfinite(cost))
         continue;
-      int imp_neighbors = 0;
-      for (int dr = -neighbor_radius; dr <= neighbor_radius; ++dr) {
-        for (int dc = -neighbor_radius; dc <= neighbor_radius; ++dc) {
-          if (dr == 0 && dc == 0)
-            continue;
-          const int nr = r + dr;
-          const int nc = c + dc;
-          if (nr < 0 || nr >= size.x() || nc < 0 || nc >= size.y())
-            continue;
-          if (toPassability(pass_snapshot(nr, nc)) == Passability::Impassable) {
-            ++imp_neighbors;
-          }
-        }
-      }
-      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT &&
-          imp_neighbors >= neighbor_min_impassable) {
+      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT) {
         pass_layer(r, c) = toFloat(Passability::Impassable);
       } else {
         pass_layer(r, c) = toFloat(Passability::Passable);
