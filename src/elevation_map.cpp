@@ -977,8 +977,6 @@ void ElevationMap::resolveUnknownWithTraversalCost() {
   const auto &elevation_layer = get("elevation");
   const auto &count_layer = get("point_count");
   const auto size = getSize();
-  const int neighbor_min_impassable = 1;
-  const int neighbor_radius = 3;
 
   for (int r = 0; r < size.x(); ++r) {
     for (int c = 0; c < size.y(); ++c) {
@@ -990,22 +988,7 @@ void ElevationMap::resolveUnknownWithTraversalCost() {
       const int count = count_layer(r, c);
       if (!std::isfinite(cost))
         continue;
-      int imp_neighbors = 0;
-      for (int dr = -neighbor_radius; dr <= neighbor_radius; ++dr) {
-        for (int dc = -neighbor_radius; dc <= neighbor_radius; ++dc) {
-          if (dr == 0 && dc == 0)
-            continue;
-          const int nr = r + dr;
-          const int nc = c + dc;
-          if (nr < 0 || nr >= size.x() || nc < 0 || nc >= size.y())
-            continue;
-          if (toPassability(pass_snapshot(nr, nc)) == Passability::Impassable) {
-            ++imp_neighbors;
-          }
-        }
-      }
-      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT &&
-          imp_neighbors >= neighbor_min_impassable) {
+      if (cost > params.hard_cost && count >= UNKNOWN_OBS_VALID_CNT) {
         pass_layer(r, c) = toFloat(Passability::Impassable);
       } else {
         pass_layer(r, c) = toFloat(Passability::Passable);
