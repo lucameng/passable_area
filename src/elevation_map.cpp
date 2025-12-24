@@ -58,6 +58,8 @@ void ElevationMap::setElevationSolverParams(
       std::max(0, params.ground_neighbor_min_support);
   solver_params_.ground_neighbor_height_tolerance =
       std::max(0.0f, params.ground_neighbor_height_tolerance);
+  solver_params_.ground_fill_min_support =
+      std::max(0, params.ground_fill_min_support);
   auto &region = solver_params_.region;
   if (region.min_x > region.max_x)
     std::swap(region.min_x, region.max_x);

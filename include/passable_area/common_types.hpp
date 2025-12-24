@@ -107,6 +107,7 @@ struct ElevationSolverParams {
   float ceiling_neighbor_height_tolerance = 0.25f;
   int ground_neighbor_min_support = 4;
   float ground_neighbor_height_tolerance = 0.25f;
+  int ground_fill_min_support = 1;
   ElevationSolverRegion region;
 };
 
