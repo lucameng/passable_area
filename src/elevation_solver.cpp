@@ -319,8 +319,16 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
 
   const int required_gap = std::max(0, params.gap_empty_bins);
   const float ratio_threshold = params.float_ratio_threshold;
-  const int neighbor_requirement = std::max(0, params.neighbor_min_support);
-  const float neighbor_tol = std::max(0.0f, params.neighbor_height_tolerance);
+  const int neighbor_requirement =
+      std::max(0, params.ceiling_neighbor_min_support);
+  const float neighbor_tol =
+      std::max(0.0f, params.ceiling_neighbor_height_tolerance);
+  const int ground_neighbor_requirement =
+      std::max(0, params.ground_neighbor_min_support);
+  const float ground_neighbor_tol =
+      std::max(0.0f, params.ground_neighbor_height_tolerance);
+  const int ground_fill_requirement =
+      std::max(0, params.ground_fill_min_support);
 
   for (int r = 0; r < ctx.rows; ++r) {
     for (int c = 0; c < ctx.cols; ++c) {
@@ -328,6 +336,42 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
       const float ground_z = result.ground[linear];
       if (!std::isfinite(ground_z))
         continue;
+
+      if (ground_neighbor_requirement > 0) {
+        int ground_support = 0;
+        float neighbor_min = std::numeric_limits<float>::infinity();
+        int neighbor_count = 0;
+        for (int dr = -1; dr <= 1; ++dr) {
+          for (int dc = -1; dc <= 1; ++dc) {
+            if (dr == 0 && dc == 0)
+              continue;
+            const int nr = r + dr;
+            const int nc = c + dc;
+            if (nr < 0 || nr >= ctx.rows || nc < 0 || nc >= ctx.cols)
+              continue;
+            const int nidx = linearIndex(nr, nc, ctx.cols);
+            const float neighbor = result.ground[nidx];
+            if (!std::isfinite(neighbor))
+              continue;
+            neighbor_min = std::min(neighbor_min, neighbor);
+            neighbor_count++;
+            if (std::fabs(neighbor - ground_z) <= ground_neighbor_tol) {
+              ground_support++;
+            }
+          }
+        }
+        if (ground_support < ground_neighbor_requirement) {
+          result.float_mask[linear] = 1;
+          float filled_ground = std::numeric_limits<float>::quiet_NaN();
+          if (neighbor_count >= ground_fill_requirement &&
+              std::isfinite(neighbor_min)) {
+            filled_ground = neighbor_min;
+          }
+          result.ground[linear] = filled_ground;
+          result.clearance[linear] = std::numeric_limits<float>::infinity();
+          continue;
+        }
+      }
 
       if (!ceiling_found[linear]) {
         result.clearance[linear] = std::numeric_limits<float>::infinity();
@@ -356,7 +400,6 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
 
       if (treat_as_float) {
         result.float_mask[linear] = 1;
-        result.ceiling[linear] = std::numeric_limits<float>::quiet_NaN();
         result.clearance[linear] = std::numeric_limits<float>::infinity();
       } else {
         result.float_mask[linear] = 0;

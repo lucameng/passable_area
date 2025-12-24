@@ -99,12 +99,15 @@ struct ElevationSolverParams {
   int min_points = 1;
   int ceiling_window_bins = 2;
   int ceiling_min_points = 1;
-  int gap_empty_bins = 2;
+  int gap_empty_bins = 4;
   int gap_empty_count_threshold = 0;
   int ground_min_count = 1;
-  float float_ratio_threshold = 0.5f;
-  int neighbor_min_support = 1;
-  float neighbor_height_tolerance = 0.25f;
+  float float_ratio_threshold = 1.0f;
+  int ceiling_neighbor_min_support = 0; // Do not modify
+  float ceiling_neighbor_height_tolerance = 0.25f;
+  int ground_neighbor_min_support = 4;
+  float ground_neighbor_height_tolerance = 0.25f;
+  int ground_fill_min_support = 1;
   ElevationSolverRegion region;
 };
 
@@ -175,4 +178,4 @@ inline CoverageStatus toCoverageStatus(float value) {
   }
 }
 
-#endif // PASSABLE_AREA_COMMON_TYPES_HPP
+#endif // COMMON_TYPES_HPP
