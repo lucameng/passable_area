@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>passable_area</name>
-  <version>0.0.5</version>
+  <version>0.0.6</version>
   <description>The passable_area package</description>
 
   <maintainer email="support@deeprobotics.cn">Lucas Meng</maintainer>
