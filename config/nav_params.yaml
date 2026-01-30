@@ -33,7 +33,7 @@ passable_area:
       max_nan_gap: 3.0
 
     elevation_solver:
-      use_histogram_solver: true
+      use_histogram_solver: false
       histogram_bins: 20
       region_enabled: true
       region_min_x: -3.0
@@ -42,7 +42,7 @@ passable_area:
       region_max_y: 1.0
 
     traversal_cost:
-      enable: false
+      enable: true
       slope_free_deg: 10.0
       slope_block_deg: 80.0
       rough_free: 0.01

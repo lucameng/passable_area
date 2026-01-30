@@ -1,3 +1,16 @@
+## [0.0.6] - 2026-01-30
+
+### 🚀 Features
+
+- Add ground/ceiling neighbor gating and clarify solver params defaults
+- Tighten solver parameters to prevent the inability to identify normal obstacbles
+
+### 🐛 Bug Fixes
+
+- Fill ground holes after neighbor gating using neighbor minima
+- Relax the conditions for Impassable decided by traversal cost to resolve wrong Passable issue
+- Reduce pre-enqueue seeds in flood-filling
+
 ## [0.0.5] - 2025-12-22
 
 ### 🚀 Features

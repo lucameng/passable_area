@@ -15,4 +15,4 @@ public:
         const rclcpp::Logger &logger = rclcpp::get_logger("ElevationSolver"));
 };
 
-#endif // PASSABLE_AREA_ELEVATION_SOLVER_HPP_
+#endif // ELEVATION_SOLVER_HPP_
