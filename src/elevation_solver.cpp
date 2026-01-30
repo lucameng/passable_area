@@ -360,7 +360,8 @@ ElevationSolver::solve(const ElevationSolverContext &ctx,
             }
           }
         }
-        if (ground_support < ground_neighbor_requirement) {
+        if (neighbor_count >= ground_neighbor_requirement && 
+            ground_support < ground_neighbor_requirement) {
           result.float_mask[linear] = 1;
           float filled_ground = std::numeric_limits<float>::quiet_NaN();
           if (neighbor_count >= ground_fill_requirement &&
