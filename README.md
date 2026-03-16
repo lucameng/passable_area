@@ -60,6 +60,7 @@ Key nav defaults in `config/nav_params.yaml`:
 | Frames/topics | `accumulate_cloud_topic` | `/accumulate_cloud/cloud_gravity` | Input cloud. |
 |  | `imu_topic` | `/IMU` | IMU orientation. |
 |  | `passable_cloud_topic` / `impassable_cloud_topic` | `/passable_area` / `/impassable_area` | Output clouds. |
+|  | `passable_status_code_topic` | `/passable_status_code` | `std_msgs/msg/Int32` status topic, currently publishes `100` each frame before passable/impassable clouds. |
 |  | `grid_map_topic` / `traversal_cost_topic` | `/grid_map` / `/traversal_cost` | Map outputs. |
 |  | `world_frame` / `gravity_frame` | `camera_init` / `base_gravity` | TF frames. |
 |  | `body_frame` / `used_frame` | `base_link` / `base_gravity` | Grid frame + marker frame. |
@@ -100,7 +101,7 @@ Traversal cost defaults (published in `grid_map` and as `nav_msgs/OccupancyGrid`
 ## ROS Interfaces
 - Subscribed: `accumulate_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `imu_topic` (`sensor_msgs/msg/Imu`); names are configurable via parameters and remapping.
 - Published: `passable_cloud_topic` and `impassable_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `grid_map_topic` (`grid_map_msgs/msg/GridMap`), `traversal_cost_topic` (`nav_msgs/msg/OccupancyGrid`), `body_visual` (`visualization_msgs/msg/Marker`).
-- Status code: `/passable_status_code` (`std_msgs/msg/Int32`), currently publishes `100` every frame before passable/impassable clouds as a reserved interface for future status refinement.
+- Status code: `passable_status_code_topic` (`std_msgs/msg/Int32`), default `/passable_status_code`; currently publishes `100` every frame before passable/impassable clouds as a reserved interface for future status refinement.
 - All topic names are relative to the node namespace.
 
 ## Development Notes

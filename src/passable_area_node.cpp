@@ -28,6 +28,8 @@ PassableAreaNode::PassableAreaNode()
           "passable_cloud_topic", "passable_area")),
       impassable_cloud_topic_(declare_parameter<std::string>(
           "impassable_cloud_topic", "impassable_area")),
+      passable_status_code_topic_(declare_parameter<std::string>(
+          "passable_status_code_topic", "/passable_status_code")),
       grid_map_topic_(
           declare_parameter<std::string>("grid_map_topic", "grid_map")),
       traversal_cost_topic_(declare_parameter<std::string>(
@@ -238,10 +240,11 @@ void PassableAreaNode::initialize() {
               "  imu: %s\n"
               "  passable: %s\n"
               "  impassable: %s\n"
+              "  status_code: %s\n"
               "  grid_map: %s",
               accumulate_cloud_topic_.c_str(), imu_topic_.c_str(),
               passable_cloud_topic_.c_str(), impassable_cloud_topic_.c_str(),
-              grid_map_topic_.c_str());
+              passable_status_code_topic_.c_str(), grid_map_topic_.c_str());
   elevationInit();
 
   if (enable_blind_check_) {
@@ -259,8 +262,8 @@ void PassableAreaNode::initialize() {
       passable_cloud_topic_, 10);
   impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
       impassable_cloud_topic_, 10);
-  passable_status_code_pub_ =
-      create_publisher<std_msgs::msg::Int32>("/passable_status_code", 10);
+  passable_status_code_pub_ = create_publisher<std_msgs::msg::Int32>(
+      passable_status_code_topic_, 10);
   // expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
   //     "expanded_cloud", 10);
   grid_map_pub_ =

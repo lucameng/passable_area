@@ -18,6 +18,7 @@ passable_area:
     imu_topic: "/IMU"
     passable_cloud_topic: "/passable_area"
     impassable_cloud_topic: "/impassable_area"
+    passable_status_code_topic: "/passable_status_code"
     grid_map_topic: "/grid_map"
     traversal_cost_topic: "/traversal_cost"
 
