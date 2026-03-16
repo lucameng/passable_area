@@ -59,6 +59,7 @@ private:
   std::string imu_topic_;
   std::string passable_cloud_topic_;
   std::string impassable_cloud_topic_;
+  std::string passable_status_code_topic_;
   std::string grid_map_topic_;
   std::string traversal_cost_topic_;
   builtin_interfaces::msg::Time stamp_;
