@@ -1,10 +1,10 @@
 #ifndef PASSABLE_AREA_NODE_HPP
 #define PASSABLE_AREA_NODE_HPP
 
-#include "maths.hpp"
 #include "common.hpp"
 #include "elevation_map.hpp"
 #include "lidar_coverage.hpp"
+#include "maths.hpp"
 #include "traversal_cost.hpp"
 
 #include <grid_map_core/grid_map_core.hpp>
@@ -14,6 +14,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/int32.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
 #include <pcl/common/transforms.h>
@@ -38,10 +39,12 @@ private:
 
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr passable_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr impassable_pub_;
+  rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr passable_status_code_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr expanded_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr body_vis_pub_;
   rclcpp::Publisher<grid_map_msgs::msg::GridMap>::SharedPtr grid_map_pub_;
-  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr traversal_cost_pub_;
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr
+      traversal_cost_pub_;
 
   PointCloudXYZ passable_cloud_;
   PointCloudXYZ impassable_cloud_;

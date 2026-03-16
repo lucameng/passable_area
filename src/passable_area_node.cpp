@@ -259,6 +259,8 @@ void PassableAreaNode::initialize() {
       passable_cloud_topic_, 10);
   impassable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
       impassable_cloud_topic_, 10);
+  passable_status_code_pub_ =
+      create_publisher<std_msgs::msg::Int32>("/passable_status_code", 10);
   // expanded_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
   //     "expanded_cloud", 10);
   grid_map_pub_ =
@@ -490,6 +492,9 @@ void PassableAreaNode::publishPassableInfo() {
   ros_passable.header.frame_id = ros_impassable.header.frame_id = used_frame_;
   ros_passable.header.stamp = ros_impassable.header.stamp = stamp_;
 
+  std_msgs::msg::Int32 status_code_msg;
+  status_code_msg.data = 100;
+  passable_status_code_pub_->publish(status_code_msg);
   passable_pub_->publish(ros_passable);
   impassable_pub_->publish(ros_impassable);
 
