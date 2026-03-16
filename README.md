@@ -100,6 +100,7 @@ Traversal cost defaults (published in `grid_map` and as `nav_msgs/OccupancyGrid`
 ## ROS Interfaces
 - Subscribed: `accumulate_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `imu_topic` (`sensor_msgs/msg/Imu`); names are configurable via parameters and remapping.
 - Published: `passable_cloud_topic` and `impassable_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `grid_map_topic` (`grid_map_msgs/msg/GridMap`), `traversal_cost_topic` (`nav_msgs/msg/OccupancyGrid`), `body_visual` (`visualization_msgs/msg/Marker`).
+- Status code: `/passable_status_code` (`std_msgs/msg/Int32`), currently publishes `100` every frame before passable/impassable clouds as a reserved interface for future status refinement.
 - All topic names are relative to the node namespace.
 
 ## Development Notes
