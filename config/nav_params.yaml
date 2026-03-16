@@ -3,7 +3,7 @@ passable_area:
     map_length:    8.0
     map_width:     8.0
     map_height_min: -1.0
-    map_height_max:  1.0
+    map_height_max:  0.8
     voxel_size:    0.05
     max_drop:      0.25
     max_roughness: 0.10
@@ -59,4 +59,4 @@ passable_area:
       curve_power: 1.0
       low_cost_filter_ratio: 0.1
       terrain_sample_window: 1
-      safe_zone_side_length: 0.0
+      safe_zone_side_length: 0.6
