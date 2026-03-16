@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
@@ -37,6 +38,7 @@ add_executable(passable_area
 ament_target_dependencies(passable_area
   rclcpp
   sensor_msgs
+  std_msgs
   pcl_conversions
   pcl_ros
   grid_map_core

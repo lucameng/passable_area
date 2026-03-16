@@ -1,3 +1,14 @@
+## [0.0.7] - 2026-03-16
+
+### 🚀 Features
+
+- Publish placeholder /passable_status_code before passable clouds
+
+### ⚙️ Miscellaneous Tasks
+
+- Modify cpu affinity settings to 4,5
+- Modify max height so as to align to input accumulate_cloud
+
 ## [0.0.6] - 2026-01-30
 
 ### 🚀 Features
