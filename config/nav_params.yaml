@@ -14,7 +14,8 @@ passable_area:
     enable_blind_check: false
     treat_nan_as_stiff: true
 
-    accumulate_cloud_topic: "/accumulate_cloud/cloud_gravity"
+    input_cloud_topic: "/LOC_BODY_POINTS"
+    odom_topic: "/ODOM"
     imu_topic: "/IMU"
     passable_cloud_topic: "/passable_area"
     impassable_cloud_topic: "/impassable_area"
@@ -25,8 +26,11 @@ passable_area:
     world_frame:   "camera_init"
     gravity_frame: "base_gravity"
     body_frame:    "base_link"
-    used_frame:    "base_gravity"
     dog_model:     "m20"
+
+    downsample:
+      enable: true
+      voxel_size: 0.05
 
     raycast:
       enable: true

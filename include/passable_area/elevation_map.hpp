@@ -83,10 +83,6 @@ public:
   const Eigen::Affine3f &getCurrentTransform() const noexcept {
     return current_T_g2b_;
   }
-  float projectToBodyZ(float scalar_g, const Eigen::Matrix3f &R_g2b) const {
-    return dr::projectScalar(scalar_g, R_g2b, Eigen::Vector3f::UnitZ(),
-                             Eigen::Vector3f::UnitZ());
-  }
   const TraversalCostParams &getTraversalCostParams() const noexcept {
     return traversal_params_;
   }

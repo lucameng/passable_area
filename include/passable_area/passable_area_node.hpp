@@ -10,6 +10,7 @@
 #include <grid_map_core/grid_map_core.hpp>
 #include <grid_map_msgs/msg/grid_map.hpp>
 #include <grid_map_ros/GridMapRosConverter.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
@@ -18,6 +19,7 @@
 #include <visualization_msgs/msg/marker.hpp>
 
 #include <pcl/common/transforms.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -35,7 +37,7 @@ public:
 
 private:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
 
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr passable_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr impassable_pub_;
@@ -53,9 +55,9 @@ private:
   std::string w_frame_;    // world frame
   std::string g_frame_;    // gravity frame
   std::string b_frame_;    // body frame
-  std::string used_frame_; // frame to be used
   std::string dog_model_;
-  std::string accumulate_cloud_topic_;
+  std::string input_cloud_topic_;
+  std::string odom_topic_;
   std::string imu_topic_;
   std::string passable_cloud_topic_;
   std::string impassable_cloud_topic_;
@@ -63,9 +65,9 @@ private:
   std::string grid_map_topic_;
   std::string traversal_cost_topic_;
   builtin_interfaces::msg::Time stamp_;
-  rclcpp::Time last_imu_msg_time_;
+  rclcpp::Time last_odom_msg_time_;
   rclcpp::Time last_cloud_msg_time_;
-  bool imu_received_;
+  bool odom_received_;
   bool cloud_received_;
   rclcpp::TimerBase::SharedPtr data_watchdog_timer_;
 
@@ -95,18 +97,22 @@ private:
   TraversalCostParams traversal_cost_params_;
   ElevationSolverParams solver_params_;
   RaycastParams raycast_params_;
+  DownsampleParams downsample_params_;
   std::vector<LidarParams> lidar_params_;
 
 private:
   void elevationInit();
   void lidarCoverInit();
   void cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
-  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg);
+  void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
   void bodyVisual();
   void publishPassableInfo();
   void publishGridMap();
   void publishTraversalCost();
   Eigen::Affine3f getTransform() const;
+  bool hasOdometry() const;
+  sensor_msgs::msg::PointCloud2
+  preprocessCloud(const sensor_msgs::msg::PointCloud2 &msg) const;
   void startDataWatchdog();
   void checkDataHealth();
   void loadBodyGeometry();
@@ -114,6 +120,7 @@ private:
   void loadElevationSolverParams();
   void loadTraversalCostParams();
   void loadRaycastParams();
+  void loadDownsampleParams();
   void loadLidarParams();
   std::string normalizeModelKey(const std::string &dog_model) const;
   BodyGeometry defaultBodyGeometry() const { return {0.9f, 0.4f, 0.5f}; }

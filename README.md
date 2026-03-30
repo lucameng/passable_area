@@ -1,9 +1,9 @@
 # Passable Area (ROS 2 Humble)
 
-`passable_area` builds a gravity-aligned elevation grid from fused IMU + point cloud data, classifies passability with BFS, and publishes both a `grid_map` and filtered point clouds for navigation or mapping. The single executable serves multiple scenarios; launch files and YAML presets pick the mode.
+`passable_area` builds a gravity-aligned elevation grid from odometry-leveled point cloud data, classifies passability with BFS, and publishes both a `grid_map` and filtered point clouds for navigation or mapping. The single executable serves multiple scenarios; launch files and YAML presets pick the mode.
 
 ## Pipeline Highlights
-- Frames and inputs: IMU provides `T_g2b`; the cloud is cropped to `[map_length, map_width, map_height_min, map_height_max]` before being written into a `grid_map::GridMap` centered on the body.
+- Frames and inputs: raw input cloud is expected in `body_frame`; odometry provides the `roll/pitch` used to rotate the cloud into `gravity_frame`, then the cloud is voxel-downsampled and cropped to `[map_length, map_width, map_height_min, map_height_max]` before being written into a `grid_map::GridMap`.
 - Elevation solving: a histogram-based solver (configurable bin count and ROI) estimates `ground_height`, `ceiling_height`, and `clearance`; outside the ROI it falls back to the legacy min/max strategy.
 - Map cleanup and features: hole inpainting with optional center padding, median filtering, roughness/slope/step features, and cliff detection keep BFS stable on noisy data.
 - Passability and cost: BFS grows from the robot center using `max_drop`, `max_roughness`, and slope limits; `traversal_cost` blends slope/roughness/step into a continuous cost layer and is also published as an `OccupancyGrid`.
@@ -57,14 +57,16 @@ Key nav defaults in `config/nav_params.yaml`:
 |  | `treat_nan_as_stiff` | `true` | Only block on finite→NaN→finite drops. |
 |  | `max_inpaint_pixels` | `200` | Max hole size for inpaint (cells). |
 |  | `enable_center_padding` / `center_dist_thresh` | `true / 0.8` | Force-fill near-body holes. |
-| Frames/topics | `accumulate_cloud_topic` | `/accumulate_cloud/cloud_gravity` | Input cloud. |
-|  | `imu_topic` | `/IMU` | IMU orientation. |
+| Frames/topics | `input_cloud_topic` | `/LOC_BODY_POINTS` | Input cloud in `body_frame`. |
+|  | `odom_topic` | `/ODOM` | Odometry used to remove `roll/pitch` and align the cloud to `gravity_frame`. |
+|  | `imu_topic` | `/IMU` | Reserved parameter; not used for point-cloud leveling. |
 |  | `passable_cloud_topic` / `impassable_cloud_topic` | `/passable_area` / `/impassable_area` | Output clouds. |
 |  | `passable_status_code_topic` | `/passable_status_code` | `std_msgs/msg/Int32` status topic, currently publishes `100` each frame before passable/impassable clouds. |
 |  | `grid_map_topic` / `traversal_cost_topic` | `/grid_map` / `/traversal_cost` | Map outputs. |
 |  | `world_frame` / `gravity_frame` | `camera_init` / `base_gravity` | TF frames. |
-|  | `body_frame` / `used_frame` | `base_link` / `base_gravity` | Grid frame + marker frame. |
+|  | `body_frame` | `base_link` | Input body frame and body marker frame. |
 |  | `dog_model` | `m20` | Selects footprint & lidar layout. |
+| Downsample | `downsample.enable` / `downsample.voxel_size` | `true / 0.05` | Applied after the cloud is rotated into `gravity_frame`. |
 
 Elevation solver defaults (ROI uses histogram solver; outside falls back to legacy):
 | Param | Value |
@@ -99,10 +101,10 @@ Traversal cost defaults (published in `grid_map` and as `nav_msgs/OccupancyGrid`
 | `safe_zone_side_length` | `0.0` |
 
 ## ROS Interfaces
-- Subscribed: `accumulate_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `imu_topic` (`sensor_msgs/msg/Imu`); names are configurable via parameters and remapping.
+- Subscribed: `input_cloud_topic` (`sensor_msgs/msg/PointCloud2`) and `odom_topic` (`nav_msgs/msg/Odometry`); `imu_topic` is retained as a parameter for compatibility but is not consumed in the current pipeline.
 - Published: `passable_cloud_topic` and `impassable_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `grid_map_topic` (`grid_map_msgs/msg/GridMap`), `traversal_cost_topic` (`nav_msgs/msg/OccupancyGrid`), `body_visual` (`visualization_msgs/msg/Marker`).
 - Status code: `passable_status_code_topic` (`std_msgs/msg/Int32`), default `/passable_status_code`; currently publishes `100` every frame before passable/impassable clouds as a reserved interface for future status refinement.
-- All topic names are relative to the node namespace.
+- Passability, traversal cost, and output point clouds are published in `gravity_frame`.
 
 ## Development Notes
 - Detailed algorithm notes: `docs/passable_area.md` (full pipeline) and `docs/traversal_cost.md` (cost layer math). Treat these as the source of truth when tuning.

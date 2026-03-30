@@ -117,6 +117,11 @@ struct RaycastParams {
   float max_nan_gap = 1.0f;
 };
 
+struct DownsampleParams {
+  bool enable = true;
+  float voxel_size = 0.05f;
+};
+
 struct ElevationSolverContext {
   int rows = 0;
   int cols = 0;

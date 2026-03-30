@@ -1,8 +1,11 @@
 #include "passable_area_node.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <limits>
+
 #include <rclcpp/rclcpp.hpp>
 
 PassableAreaNode::PassableAreaNode()
@@ -19,10 +22,10 @@ PassableAreaNode::PassableAreaNode()
       w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
       b_frame_(declare_parameter<std::string>("body_frame", "body")),
-      used_frame_(declare_parameter<std::string>("used_frame", "base_gravity")),
       dog_model_(declare_parameter<std::string>("dog_model", "m20")),
-      accumulate_cloud_topic_(declare_parameter<std::string>(
-          "accumulate_cloud_topic", "cloud_topic")),
+      input_cloud_topic_(declare_parameter<std::string>("input_cloud_topic",
+                                                        "/LOC_BODY_POINTS")),
+      odom_topic_(declare_parameter<std::string>("odom_topic", "/ODOM")),
       imu_topic_(declare_parameter<std::string>("imu_topic", "imu")),
       passable_cloud_topic_(declare_parameter<std::string>(
           "passable_cloud_topic", "passable_area")),
@@ -36,15 +39,16 @@ PassableAreaNode::PassableAreaNode()
           "traversal_cost_topic", "traversal_cost")),
       body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
       T_g2b_(Eigen::Affine3f::Identity()),
-      last_imu_msg_time_(0, 0, get_clock()->get_clock_type()),
+      last_odom_msg_time_(0, 0, get_clock()->get_clock_type()),
       last_cloud_msg_time_(0, 0, get_clock()->get_clock_type()),
-      imu_received_(false), cloud_received_(false) {
+      odom_received_(false), cloud_received_(false) {
   if (min_height_ > max_height_) {
     std::swap(min_height_, max_height_);
   }
   loadBodyGeometry();
   loadLidarParams();
   loadRaycastParams();
+  loadDownsampleParams();
   loadPassabilityParams();
   loadElevationSolverParams();
   loadTraversalCostParams();
@@ -137,6 +141,14 @@ void PassableAreaNode::loadRaycastParams() {
   raycast_params_.max_ray_distance =
       declare_parameter("raycast.max_ray_distance", 4.0f);
   raycast_params_.max_nan_gap = declare_parameter("raycast.max_nan_gap", 1.0f);
+}
+
+void PassableAreaNode::loadDownsampleParams() {
+  downsample_params_.enable = declare_parameter("downsample.enable", true);
+  downsample_params_.voxel_size =
+      declare_parameter("downsample.voxel_size", voxel_width_);
+  downsample_params_.voxel_size =
+      std::max(1e-3f, downsample_params_.voxel_size);
 }
 
 void PassableAreaNode::loadLidarParams() {
@@ -233,16 +245,18 @@ PassableAreaNode::normalizeModelKey(const std::string &dog_model) const {
 
 void PassableAreaNode::initialize() {
   RCLCPP_INFO(get_logger(), "Initializing << passable area >>");
-  RCLCPP_INFO(get_logger(), "used frame: %s", used_frame_.c_str());
+  RCLCPP_INFO(get_logger(), "gravity frame: %s", g_frame_.c_str());
   RCLCPP_INFO(get_logger(),
               "Topic configuration:\n"
-              "  cloud: %s\n"
+              "  input_cloud: %s\n"
+              "  odom: %s\n"
               "  imu: %s\n"
               "  passable: %s\n"
               "  impassable: %s\n"
               "  status_code: %s\n"
               "  grid_map: %s",
-              accumulate_cloud_topic_.c_str(), imu_topic_.c_str(),
+              input_cloud_topic_.c_str(), odom_topic_.c_str(),
+              imu_topic_.c_str(),
               passable_cloud_topic_.c_str(), impassable_cloud_topic_.c_str(),
               passable_status_code_topic_.c_str(), grid_map_topic_.c_str());
   elevationInit();
@@ -250,11 +264,11 @@ void PassableAreaNode::initialize() {
   if (enable_blind_check_) {
     lidarCoverInit();
   }
-  imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
-      imu_topic_, 10,
-      std::bind(&PassableAreaNode::imuCallback, this, std::placeholders::_1));
+  odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
+      odom_topic_, 10,
+      std::bind(&PassableAreaNode::odomCallback, this, std::placeholders::_1));
   cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-      accumulate_cloud_topic_, 10,
+      input_cloud_topic_, 10,
       std::bind(&PassableAreaNode::cloudCallback, this, std::placeholders::_1));
   body_vis_pub_ =
       create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
@@ -284,38 +298,36 @@ void PassableAreaNode::checkDataHealth() {
   const auto now_time = now();
   const rclcpp::Duration timeout = rclcpp::Duration::from_seconds(2.0);
 
-  rclcpp::Time last_imu;
+  rclcpp::Time last_odom;
   rclcpp::Time last_cloud;
-  bool imu_received = false;
+  bool odom_received = false;
   bool cloud_received = false;
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    last_imu = last_imu_msg_time_;
+    last_odom = last_odom_msg_time_;
     last_cloud = last_cloud_msg_time_;
-    imu_received = imu_received_;
+    odom_received = odom_received_;
     cloud_received = cloud_received_;
   }
 
-  if (used_frame_ != b_frame_) {
-    if (!imu_received) {
-      RCLCPP_WARN(get_logger(),
-                  "Waiting for IMU messages on topic '%s' (no data received)",
-                  imu_topic_.c_str());
-    } else if ((now_time - last_imu) > timeout) {
-      RCLCPP_WARN(get_logger(),
-                  "No IMU message received for %.1f s on topic '%s'",
-                  (now_time - last_imu).seconds(), imu_topic_.c_str());
-    }
+  if (!odom_received) {
+    RCLCPP_WARN(get_logger(),
+                "Waiting for odometry on topic '%s' (no data received)",
+                odom_topic_.c_str());
+  } else if ((now_time - last_odom) > timeout) {
+    RCLCPP_WARN(get_logger(),
+                "No odometry received for %.1f s on topic '%s'",
+                (now_time - last_odom).seconds(), odom_topic_.c_str());
   }
 
   if (!cloud_received) {
     RCLCPP_WARN(get_logger(),
                 "Waiting for input cloud on topic '%s' (no data received)",
-                accumulate_cloud_topic_.c_str());
+                input_cloud_topic_.c_str());
   } else if ((now_time - last_cloud) > timeout) {
     RCLCPP_WARN(
         get_logger(), "No input cloud received for %.1f s on topic '%s'",
-        (now_time - last_cloud).seconds(), accumulate_cloud_topic_.c_str());
+        (now_time - last_cloud).seconds(), input_cloud_topic_.c_str());
   }
 }
 
@@ -323,7 +335,7 @@ void PassableAreaNode::elevationInit() {
   RCLCPP_INFO(get_logger(), "Initializing < elevation map >");
   ele_map_ = std::make_unique<ElevationMap>(
       map_length_, map_width_, min_height_, max_height_, voxel_width_,
-      used_frame_, get_logger());
+      g_frame_, get_logger());
   ele_map_->setMaxInpaintPixels(max_inpaint_pixels_);
   ele_map_->setCenterPaddingParams(enable_center_padding_, center_dist_thresh_);
   ele_map_->setPassabilityParams(passability_params_);
@@ -343,38 +355,68 @@ void PassableAreaNode::lidarCoverInit() {
   lidar_init_ = true;
 }
 
-void PassableAreaNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+void PassableAreaNode::odomCallback(
+    const nav_msgs::msg::Odometry::SharedPtr msg) {
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    last_imu_msg_time_ = now();
-    imu_received_ = true;
+    last_odom_msg_time_ = now();
+    odom_received_ = true;
   }
 
-  if (used_frame_ == b_frame_)
-    return; // no need if it is body frame
-
-  Eigen::Quaternionf q(msg->orientation.w, msg->orientation.x,
-                       msg->orientation.y, msg->orientation.z);
+  Eigen::Quaternionf q(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
+                       msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+  if (!std::isfinite(q.norm()) || q.norm() < 1e-6f) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                         "Received invalid odometry orientation on topic '%s'",
+                         odom_topic_.c_str());
+    return;
+  }
   q.normalize();
 
   Eigen::Matrix3f R_world2body = q.toRotationMatrix();
-  // RCLCPP_INFO_STREAM_INFO_STREAM("R_world2body:\n" << R_world2body << "\n");
-
-  float yaw = std::atan2(R_world2body(1, 0), R_world2body(0, 0));
-  float pitch = std::asin(-R_world2body(2, 0)); // N O T
+  float pitch = std::asin(-std::clamp(R_world2body(2, 0), -1.0f, 1.0f));
   float roll = std::atan2(R_world2body(2, 1), R_world2body(2, 2));
-
-  pitch = -pitch;
   Eigen::AngleAxisf Rx(roll, Eigen::Vector3f::UnitX());
-  Eigen::AngleAxisf Ry(pitch, Eigen::Vector3f::UnitY());
+  Eigen::AngleAxisf Ry(-pitch, Eigen::Vector3f::UnitY());
   Eigen::Matrix3f R_gravity2body = (Ry * Rx).toRotationMatrix();
-
-  // RCLCPP_INFO_STREAM("R_baseGravity2body:\n" << R_baseGravity2body << "\n");
 
   std::lock_guard<std::mutex> lock(imu_mutex_);
   T_g2b_.setIdentity();
   T_g2b_.linear() = R_gravity2body;
   T_g2b_.translation() = Eigen::Vector3f::Zero();
+}
+
+bool PassableAreaNode::hasOdometry() const {
+  std::lock_guard<std::mutex> lock(data_mutex_);
+  return odom_received_;
+}
+
+sensor_msgs::msg::PointCloud2
+PassableAreaNode::preprocessCloud(const sensor_msgs::msg::PointCloud2 &msg) const {
+  pcl::PointCloud<pcl::PointXYZ> input_cloud;
+  pcl::fromROSMsg(msg, input_cloud);
+
+  pcl::PointCloud<pcl::PointXYZ> gravity_cloud;
+  const Eigen::Affine3f T_b2g = getTransform().inverse();
+  pcl::transformPointCloud(input_cloud, gravity_cloud, T_b2g);
+
+  pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
+  if (downsample_params_.enable) {
+    pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
+    voxel_filter.setInputCloud(gravity_cloud.makeShared());
+    voxel_filter.setLeafSize(downsample_params_.voxel_size,
+                             downsample_params_.voxel_size,
+                             downsample_params_.voxel_size);
+    voxel_filter.filter(filtered_cloud);
+  } else {
+    filtered_cloud.swap(gravity_cloud);
+  }
+
+  sensor_msgs::msg::PointCloud2 processed_msg;
+  pcl::toROSMsg(filtered_cloud, processed_msg);
+  processed_msg.header = msg.header;
+  processed_msg.header.frame_id = g_frame_;
+  return processed_msg;
 }
 
 void PassableAreaNode::cloudCallback(
@@ -385,10 +427,26 @@ void PassableAreaNode::cloudCallback(
     cloud_received_ = true;
   }
 
+  if (!hasOdometry()) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                         "Dropping cloud on topic '%s' until odometry arrives on '%s'",
+                         input_cloud_topic_.c_str(), odom_topic_.c_str());
+    return;
+  }
+
+  sensor_msgs::msg::PointCloud2 processed_cloud;
+  try {
+    processed_cloud = preprocessCloud(*msg);
+  } catch (const std::exception &e) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                         "Failed to preprocess input cloud: %s", e.what());
+    return;
+  }
+
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
-    ele_map_->processPointCloud(*msg, getTransform());
+    ele_map_->processPointCloud(processed_cloud, getTransform());
     bool cost_ready = false;
     if (traversal_cost_) {
       cost_ready = traversal_cost_->updateCostLayer();
@@ -412,7 +470,7 @@ void PassableAreaNode::cloudCallback(
     lidar_cov_->processCoverage(*ele_map_, getTransform());
   }
 
-  stamp_ = msg->header.stamp;
+  stamp_ = processed_cloud.header.stamp;
   bodyVisual();
   publishPassableInfo();
   publishGridMap();
@@ -492,7 +550,7 @@ void PassableAreaNode::publishPassableInfo() {
   finalize(impassable_cloud_);
   pcl::toROSMsg(passable_cloud_, ros_passable);
   pcl::toROSMsg(impassable_cloud_, ros_impassable);
-  ros_passable.header.frame_id = ros_impassable.header.frame_id = used_frame_;
+  ros_passable.header.frame_id = ros_impassable.header.frame_id = g_frame_;
   ros_passable.header.stamp = ros_impassable.header.stamp = stamp_;
 
   std_msgs::msg::Int32 status_code_msg;
@@ -505,7 +563,7 @@ void PassableAreaNode::publishPassableInfo() {
   // sensor_msgs::msg::PointCloud2 ros_expanded;
   // finalize(expanded_cloud_);
   // pcl::toROSMsg(expanded_cloud_, ros_expanded);
-  // ros_expanded.header.frame_id = used_frame_;
+  // ros_expanded.header.frame_id = g_frame_;
   // ros_expanded.header.stamp = stamp_;
   // expanded_pub_->publish(ros_expanded);
 }
@@ -513,7 +571,7 @@ void PassableAreaNode::publishPassableInfo() {
 void PassableAreaNode::publishGridMap() {
   auto ros_map_ptr = grid_map::GridMapRosConverter::toMessage(*ele_map_);
 
-  ros_map_ptr->header.frame_id = used_frame_;
+  ros_map_ptr->header.frame_id = g_frame_;
   ros_map_ptr->header.stamp = stamp_;
 
   grid_map_pub_->publish(*ros_map_ptr);
@@ -522,5 +580,5 @@ void PassableAreaNode::publishGridMap() {
 void PassableAreaNode::publishTraversalCost() {
   if (!traversal_cost_ || !traversal_cost_pub_)
     return;
-  traversal_cost_->publish(traversal_cost_pub_, used_frame_, stamp_);
+  traversal_cost_->publish(traversal_cost_pub_, g_frame_, stamp_);
 }

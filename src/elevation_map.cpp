@@ -677,9 +677,7 @@ void ElevationMap::judgePassability(float rough_thres, float drop_thres,
         continue;
       visited[idx] = true;
 
-      float height_diff = nbr_height - curr_height;
-      height_diff =
-          std::fabs(projectToBodyZ(height_diff, current_T_g2b_.linear()));
+      const float height_diff = std::fabs(nbr_height - curr_height);
       assign_step(x, y, height_diff);
       assign_step(nx, ny, height_diff);
       assign_roughness(nx, ny);
@@ -847,8 +845,7 @@ bool ElevationMap::hasCliffDropOnRay(const grid_map::Index &target_idx,
     return false;
   }
 
-  float drop_height =
-      projectToBodyZ(near_height - far_height, current_T_g2b_.linear());
+  const float drop_height = near_height - far_height;
   if (drop_height > drop_thres) {
     drop_out = drop_height;
     return true;
@@ -953,8 +950,7 @@ float ElevationMap::computeStepHeight(int row, int col,
       if (!std::isfinite(nh))
         continue;
       has_neighbor = true;
-      const float diff =
-          std::fabs(projectToBodyZ(center - nh, current_T_g2b_.linear()));
+      const float diff = std::fabs(center - nh);
       if (diff > max_diff)
         max_diff = diff;
     }
