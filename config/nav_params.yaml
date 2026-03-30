@@ -32,6 +32,9 @@ passable_area:
       enable: true
       voxel_size: 0.05
 
+    sync:
+      queue_size: 10
+
     raycast:
       enable: true
       max_ray_distance: 4.0

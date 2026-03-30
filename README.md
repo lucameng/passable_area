@@ -3,7 +3,7 @@
 `passable_area` builds a gravity-aligned elevation grid from odometry-leveled point cloud data, classifies passability with BFS, and publishes both a `grid_map` and filtered point clouds for navigation or mapping. The single executable serves multiple scenarios; launch files and YAML presets pick the mode.
 
 ## Pipeline Highlights
-- Frames and inputs: raw input cloud is expected in `body_frame`; odometry provides the `roll/pitch` used to rotate the cloud into `gravity_frame`, then the cloud is voxel-downsampled and cropped to `[map_length, map_width, map_height_min, map_height_max]` before being written into a `grid_map::GridMap`.
+- Frames and inputs: raw input cloud is expected in `body_frame`; cloud and odometry are paired by `ExactTime` on identical `header.stamp`, then `roll/pitch` are used to rotate the cloud into `gravity_frame`, voxel-downsample it, and crop it to `[map_length, map_width, map_height_min, map_height_max]` before writing into a `grid_map::GridMap`.
 - Elevation solving: a histogram-based solver (configurable bin count and ROI) estimates `ground_height`, `ceiling_height`, and `clearance`; outside the ROI it falls back to the legacy min/max strategy.
 - Map cleanup and features: hole inpainting with optional center padding, median filtering, roughness/slope/step features, and cliff detection keep BFS stable on noisy data.
 - Passability and cost: BFS grows from the robot center using `max_drop`, `max_roughness`, and slope limits; `traversal_cost` blends slope/roughness/step into a continuous cost layer and is also published as an `OccupancyGrid`.
@@ -67,6 +67,7 @@ Key nav defaults in `config/nav_params.yaml`:
 |  | `body_frame` | `base_link` | Input body frame and body marker frame. |
 |  | `dog_model` | `m20` | Selects footprint & lidar layout. |
 | Downsample | `downsample.enable` / `downsample.voxel_size` | `true / 0.05` | Applied after the cloud is rotated into `gravity_frame`. |
+| Sync | `sync.queue_size` | `10` | `ExactTime` synchronizer queue depth for cloud + odometry. |
 
 Elevation solver defaults (ROI uses histogram solver; outside falls back to legacy):
 | Param | Value |
@@ -101,7 +102,7 @@ Traversal cost defaults (published in `grid_map` and as `nav_msgs/OccupancyGrid`
 | `safe_zone_side_length` | `0.0` |
 
 ## ROS Interfaces
-- Subscribed: `input_cloud_topic` (`sensor_msgs/msg/PointCloud2`) and `odom_topic` (`nav_msgs/msg/Odometry`); `imu_topic` is retained as a parameter for compatibility but is not consumed in the current pipeline.
+- Subscribed: `input_cloud_topic` (`sensor_msgs/msg/PointCloud2`) and `odom_topic` (`nav_msgs/msg/Odometry`) through `message_filters::Synchronizer` with `ExactTime`; only strictly equal stamps enter the main pipeline, so a single-sided dropped frame is not processed. `imu_topic` is retained as a parameter for compatibility but is not consumed in the current pipeline.
 - Published: `passable_cloud_topic` and `impassable_cloud_topic` (`sensor_msgs/msg/PointCloud2`), `grid_map_topic` (`grid_map_msgs/msg/GridMap`), `traversal_cost_topic` (`nav_msgs/msg/OccupancyGrid`), `body_visual` (`visualization_msgs/msg/Marker`).
 - Status code: `passable_status_code_topic` (`std_msgs/msg/Int32`), default `/passable_status_code`; currently publishes `100` every frame before passable/impassable clouds as a reserved interface for future status refinement.
 - Passability, traversal cost, and output point clouds are published in `gravity_frame`.

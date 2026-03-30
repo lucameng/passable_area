@@ -30,6 +30,7 @@ public:
       float grid_s, const std::string &frame_id,
       const rclcpp::Logger &logger = rclcpp::get_logger("ElevationMap"));
 
+  // ros_cloud is expected to already be expressed in gravity_frame.
   void processPointCloud(const sensor_msgs::msg::PointCloud2 &ros_cloud,
                          const Eigen::Affine3f &T_g2b);
   void setPassabilityParams(const PassabilityParams &params) noexcept {

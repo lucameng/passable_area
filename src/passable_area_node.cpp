@@ -21,7 +21,7 @@ PassableAreaNode::PassableAreaNode()
       center_dist_thresh_(declare_parameter("center_dist_thresh", 0.8f)),
       w_frame_(declare_parameter<std::string>("world_frame", "camera_init")),
       g_frame_(declare_parameter<std::string>("gravity_frame", "base_gravity")),
-      b_frame_(declare_parameter<std::string>("body_frame", "body")),
+      b_frame_(declare_parameter<std::string>("body_frame", "base_link")),
       dog_model_(declare_parameter<std::string>("dog_model", "m20")),
       input_cloud_topic_(declare_parameter<std::string>("input_cloud_topic",
                                                         "/LOC_BODY_POINTS")),
@@ -38,10 +38,11 @@ PassableAreaNode::PassableAreaNode()
       traversal_cost_topic_(declare_parameter<std::string>(
           "traversal_cost_topic", "traversal_cost")),
       body_length_(0.0f), body_width_(0.0f), body_height_(0.0f),
-      T_g2b_(Eigen::Affine3f::Identity()),
       last_odom_msg_time_(0, 0, get_clock()->get_clock_type()),
       last_cloud_msg_time_(0, 0, get_clock()->get_clock_type()),
-      odom_received_(false), cloud_received_(false) {
+      last_synced_msg_time_(0, 0, get_clock()->get_clock_type()),
+      odom_received_(false), cloud_received_(false), synced_received_(false),
+      sync_queue_size_(10) {
   if (min_height_ > max_height_) {
     std::swap(min_height_, max_height_);
   }
@@ -49,6 +50,7 @@ PassableAreaNode::PassableAreaNode()
   loadLidarParams();
   loadRaycastParams();
   loadDownsampleParams();
+  loadSyncParams();
   loadPassabilityParams();
   loadElevationSolverParams();
   loadTraversalCostParams();
@@ -151,6 +153,11 @@ void PassableAreaNode::loadDownsampleParams() {
       std::max(1e-3f, downsample_params_.voxel_size);
 }
 
+void PassableAreaNode::loadSyncParams() {
+  sync_queue_size_ = declare_parameter<int>("sync.queue_size", 10);
+  sync_queue_size_ = std::max(2, sync_queue_size_);
+}
+
 void PassableAreaNode::loadLidarParams() {
   lidar_params_.clear();
 
@@ -250,26 +257,22 @@ void PassableAreaNode::initialize() {
               "Topic configuration:\n"
               "  input_cloud: %s\n"
               "  odom: %s\n"
-              "  imu: %s\n"
+              "  imu: %s (reserved, ignored in current pipeline)\n"
               "  passable: %s\n"
               "  impassable: %s\n"
               "  status_code: %s\n"
-              "  grid_map: %s",
+              "  grid_map: %s\n"
+              "  sync.queue_size: %d",
               input_cloud_topic_.c_str(), odom_topic_.c_str(),
               imu_topic_.c_str(),
               passable_cloud_topic_.c_str(), impassable_cloud_topic_.c_str(),
-              passable_status_code_topic_.c_str(), grid_map_topic_.c_str());
+              passable_status_code_topic_.c_str(), grid_map_topic_.c_str(),
+              sync_queue_size_);
   elevationInit();
 
   if (enable_blind_check_) {
     lidarCoverInit();
   }
-  odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-      odom_topic_, 10,
-      std::bind(&PassableAreaNode::odomCallback, this, std::placeholders::_1));
-  cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-      input_cloud_topic_, 10,
-      std::bind(&PassableAreaNode::cloudCallback, this, std::placeholders::_1));
   body_vis_pub_ =
       create_publisher<visualization_msgs::msg::Marker>("body_visual", 10);
   passable_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
@@ -284,6 +287,24 @@ void PassableAreaNode::initialize() {
       create_publisher<grid_map_msgs::msg::GridMap>(grid_map_topic_, 10);
   traversal_cost_pub_ =
       create_publisher<nav_msgs::msg::OccupancyGrid>(traversal_cost_topic_, 10);
+
+  // Keep QoS explicit: PointCloud2 commonly uses sensor-data / best-effort and
+  // mismatched QoS can stall message_filters in ROS 2.
+  const auto sensor_qos = rclcpp::SensorDataQoS();
+  cloud_sub_.subscribe(this, input_cloud_topic_, sensor_qos.get_rmw_qos_profile());
+  odom_sub_.subscribe(this, odom_topic_, sensor_qos.get_rmw_qos_profile());
+  // In ROS 2 Humble, message_filters::Subscriber is also a SimpleFilter, so
+  // registerCallback() can coexist with Synchronizer and still share the same
+  // underlying subscription. This preserves single-topic single-subscription.
+  cloud_sub_.registerCallback(
+      std::bind(&PassableAreaNode::observeCloud, this, std::placeholders::_1));
+  odom_sub_.registerCallback(std::bind(&PassableAreaNode::observeOdometry, this,
+                                       std::placeholders::_1));
+  sync_ = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(
+      SyncPolicy(sync_queue_size_), cloud_sub_, odom_sub_);
+  sync_->registerCallback(
+      std::bind(&PassableAreaNode::syncedCallback, this, std::placeholders::_1,
+                std::placeholders::_2));
   startDataWatchdog();
 }
 
@@ -300,34 +321,52 @@ void PassableAreaNode::checkDataHealth() {
 
   rclcpp::Time last_odom;
   rclcpp::Time last_cloud;
+  rclcpp::Time last_synced;
   bool odom_received = false;
   bool cloud_received = false;
+  bool synced_received = false;
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
     last_odom = last_odom_msg_time_;
     last_cloud = last_cloud_msg_time_;
+    last_synced = last_synced_msg_time_;
     odom_received = odom_received_;
     cloud_received = cloud_received_;
+    synced_received = synced_received_;
   }
 
   if (!odom_received) {
-    RCLCPP_WARN(get_logger(),
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                 "Waiting for odometry on topic '%s' (no data received)",
                 odom_topic_.c_str());
   } else if ((now_time - last_odom) > timeout) {
-    RCLCPP_WARN(get_logger(),
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                 "No odometry received for %.1f s on topic '%s'",
                 (now_time - last_odom).seconds(), odom_topic_.c_str());
   }
 
   if (!cloud_received) {
-    RCLCPP_WARN(get_logger(),
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                 "Waiting for input cloud on topic '%s' (no data received)",
                 input_cloud_topic_.c_str());
   } else if ((now_time - last_cloud) > timeout) {
-    RCLCPP_WARN(
-        get_logger(), "No input cloud received for %.1f s on topic '%s'",
+    RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "No input cloud received for %.1f s on topic '%s'",
         (now_time - last_cloud).seconds(), input_cloud_topic_.c_str());
+  }
+
+  const bool cloud_fresh =
+      cloud_received && (now_time - last_cloud) <= timeout;
+  const bool odom_fresh =
+      odom_received && (now_time - last_odom) <= timeout;
+  const bool pairing_stalled =
+      cloud_fresh && odom_fresh &&
+      (!synced_received || (now_time - last_synced) > timeout);
+  if (pairing_stalled) {
+    RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Input cloud and odometry are arriving, but synchronized pairs are stalled");
   }
 }
 
@@ -355,21 +394,32 @@ void PassableAreaNode::lidarCoverInit() {
   lidar_init_ = true;
 }
 
-void PassableAreaNode::odomCallback(
-    const nav_msgs::msg::Odometry::SharedPtr msg) {
+void PassableAreaNode::observeCloud(
+    const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    last_odom_msg_time_ = now();
+    last_cloud_msg_time_ =
+        rclcpp::Time(msg->header.stamp, get_clock()->get_clock_type());
+    cloud_received_ = true;
+  }
+}
+
+void PassableAreaNode::observeOdometry(
+    const nav_msgs::msg::Odometry::ConstSharedPtr &msg) {
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    last_odom_msg_time_ =
+        rclcpp::Time(msg->header.stamp, get_clock()->get_clock_type());
     odom_received_ = true;
   }
+}
 
-  Eigen::Quaternionf q(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
-                       msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+bool PassableAreaNode::buildGravityTransformFromOdom(
+    const nav_msgs::msg::Odometry &msg, Eigen::Affine3f &T_g2b) const {
+  Eigen::Quaternionf q(msg.pose.pose.orientation.w, msg.pose.pose.orientation.x,
+                       msg.pose.pose.orientation.y, msg.pose.pose.orientation.z);
   if (!std::isfinite(q.norm()) || q.norm() < 1e-6f) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                         "Received invalid odometry orientation on topic '%s'",
-                         odom_topic_.c_str());
-    return;
+    return false;
   }
   q.normalize();
 
@@ -380,24 +430,28 @@ void PassableAreaNode::odomCallback(
   Eigen::AngleAxisf Ry(-pitch, Eigen::Vector3f::UnitY());
   Eigen::Matrix3f R_gravity2body = (Ry * Rx).toRotationMatrix();
 
-  std::lock_guard<std::mutex> lock(imu_mutex_);
-  T_g2b_.setIdentity();
-  T_g2b_.linear() = R_gravity2body;
-  T_g2b_.translation() = Eigen::Vector3f::Zero();
+  T_g2b.setIdentity();
+  T_g2b.linear() = R_gravity2body;
+  T_g2b.translation() = Eigen::Vector3f::Zero();
+  return true;
 }
 
-bool PassableAreaNode::hasOdometry() const {
-  std::lock_guard<std::mutex> lock(data_mutex_);
-  return odom_received_;
-}
+bool PassableAreaNode::preprocessCloud(
+    const sensor_msgs::msg::PointCloud2 &msg, const Eigen::Affine3f &T_g2b,
+    sensor_msgs::msg::PointCloud2 &processed_msg) {
+  if (msg.header.frame_id != b_frame_) {
+    RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Dropping input cloud with frame '%s'; expected body_frame '%s'",
+        msg.header.frame_id.c_str(), b_frame_.c_str());
+    return false;
+  }
 
-sensor_msgs::msg::PointCloud2
-PassableAreaNode::preprocessCloud(const sensor_msgs::msg::PointCloud2 &msg) const {
   pcl::PointCloud<pcl::PointXYZ> input_cloud;
   pcl::fromROSMsg(msg, input_cloud);
 
   pcl::PointCloud<pcl::PointXYZ> gravity_cloud;
-  const Eigen::Affine3f T_b2g = getTransform().inverse();
+  const Eigen::Affine3f T_b2g = T_g2b.inverse();
   pcl::transformPointCloud(input_cloud, gravity_cloud, T_b2g);
 
   pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
@@ -412,41 +466,41 @@ PassableAreaNode::preprocessCloud(const sensor_msgs::msg::PointCloud2 &msg) cons
     filtered_cloud.swap(gravity_cloud);
   }
 
-  sensor_msgs::msg::PointCloud2 processed_msg;
   pcl::toROSMsg(filtered_cloud, processed_msg);
   processed_msg.header = msg.header;
   processed_msg.header.frame_id = g_frame_;
-  return processed_msg;
+  return true;
 }
 
-void PassableAreaNode::cloudCallback(
-    const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-  {
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    last_cloud_msg_time_ = now();
-    cloud_received_ = true;
-  }
+void PassableAreaNode::syncedCallback(
+    const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud,
+    const nav_msgs::msg::Odometry::ConstSharedPtr &odom) {
+  const rclcpp::Time cloud_time(cloud->header.stamp,
+                                get_clock()->get_clock_type());
 
-  if (!hasOdometry()) {
+  Eigen::Affine3f T_g2b = Eigen::Affine3f::Identity();
+  if (!buildGravityTransformFromOdom(*odom, T_g2b)) {
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                         "Dropping cloud on topic '%s' until odometry arrives on '%s'",
-                         input_cloud_topic_.c_str(), odom_topic_.c_str());
+                         "Received invalid odometry orientation on topic '%s'",
+                         odom_topic_.c_str());
     return;
   }
 
   sensor_msgs::msg::PointCloud2 processed_cloud;
-  try {
-    processed_cloud = preprocessCloud(*msg);
-  } catch (const std::exception &e) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                         "Failed to preprocess input cloud: %s", e.what());
+  if (!preprocessCloud(*cloud, T_g2b, processed_cloud)) {
     return;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    last_synced_msg_time_ = cloud_time;
+    synced_received_ = true;
   }
 
   if (ele_init_) {
     const auto start_time = std::chrono::steady_clock::now();
 
-    ele_map_->processPointCloud(processed_cloud, getTransform());
+    ele_map_->processPointCloud(processed_cloud, T_g2b);
     bool cost_ready = false;
     if (traversal_cost_) {
       cost_ready = traversal_cost_->updateCostLayer();
@@ -467,7 +521,7 @@ void PassableAreaNode::cloudCallback(
   }
 
   if (lidar_init_) {
-    lidar_cov_->processCoverage(*ele_map_, getTransform());
+    lidar_cov_->processCoverage(*ele_map_, T_g2b);
   }
 
   stamp_ = processed_cloud.header.stamp;
@@ -475,11 +529,6 @@ void PassableAreaNode::cloudCallback(
   publishPassableInfo();
   publishGridMap();
   publishTraversalCost();
-}
-
-Eigen::Affine3f PassableAreaNode::getTransform() const {
-  std::lock_guard<std::mutex> lock(imu_mutex_);
-  return T_g2b_;
 }
 
 void PassableAreaNode::bodyVisual() {
