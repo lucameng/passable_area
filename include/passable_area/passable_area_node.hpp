@@ -76,6 +76,7 @@ private:
   rclcpp::Time last_odom_msg_time_;
   rclcpp::Time last_cloud_msg_time_;
   rclcpp::Time last_synced_msg_time_;
+  rclcpp::Time perf_window_start_time_;
   bool odom_received_;
   bool cloud_received_;
   bool synced_received_;
@@ -108,6 +109,11 @@ private:
   DownsampleParams downsample_params_;
   std::vector<LidarParams> lidar_params_;
   int sync_queue_size_;
+  int perf_cloud_count_;
+  int perf_odom_count_;
+  int perf_synced_count_;
+  double perf_total_ms_sum_;
+  double perf_total_ms_max_;
 
 private:
   void elevationInit();
@@ -127,6 +133,7 @@ private:
                        sensor_msgs::msg::PointCloud2 &processed_msg);
   void startDataWatchdog();
   void checkDataHealth();
+  void updateAndMaybeLogPerf();
   void loadBodyGeometry();
   void loadPassabilityParams();
   void loadElevationSolverParams();
