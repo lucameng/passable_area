@@ -31,11 +31,13 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
 void PassableAreaNode::onCloudObserved(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
   (void)msg;
   watchdog_.markCloud(now());
+  perf_stats_.observeCloud();
 }
 
 void PassableAreaNode::onOdomObserved(const nav_msgs::msg::Odometry::ConstSharedPtr &msg) {
   (void)msg;
   watchdog_.markOdom(now());
+  perf_stats_.observeOdom();
 }
 
 void PassableAreaNode::onSynced(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg,

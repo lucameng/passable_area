@@ -127,6 +127,19 @@ FrameInput MakeSparseFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeForwardStripFrame(const Eigen::Quaternionf &orientation, int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_local.orientation = orientation.normalized();
+  for (float x = 0.4f; x <= 1.2f; x += 0.08f) {
+    for (float y = -0.12f; y <= 0.12f; y += 0.06f) {
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
+    }
+  }
+  return input;
+}
+
 int CellIndex(const passable_area::core::FrameOutput &output, float x, float y) {
   const int col = static_cast<int>(std::floor((x - output.origin.x()) / output.resolution));
   const int row = static_cast<int>(std::floor((y - output.origin.y()) / output.resolution));
@@ -385,4 +398,33 @@ TEST(ProcessorTest, ObservedSupportStateIsNotOverwrittenAsPersistentInSameUpdate
 
   ASSERT_FALSE(dirty.empty());
   EXPECT_EQ(map.layers().support_state[3], static_cast<uint8_t>(SupportState::kObserved));
+}
+
+TEST(ProcessorTest, DebugSupportPointsRespectRobotCentricGravityFrame) {
+  auto config = MakeConfig();
+  config.map.length = 4.0f;
+  config.map.width = 4.0f;
+  config.map.resolution = 0.1f;
+  config.preprocess.enable_downsample = false;
+  Processor processor(config);
+
+  const Eigen::Quaternionf orientation =
+      Eigen::AngleAxisf(0.18f, Eigen::Vector3f::UnitX()) *
+      Eigen::AngleAxisf(-0.12f, Eigen::Vector3f::UnitY()) *
+      Eigen::AngleAxisf(static_cast<float>(M_PI_2), Eigen::Vector3f::UnitZ());
+  const auto output = processor.update(MakeForwardStripFrame(orientation));
+  ASSERT_TRUE(output.valid);
+  ASSERT_FALSE(output.support_points.empty());
+
+  float mean_x = 0.0f;
+  float mean_y = 0.0f;
+  for (const auto &point : output.support_points) {
+    mean_x += point.point.x;
+    mean_y += point.point.y;
+  }
+  mean_x /= static_cast<float>(output.support_points.size());
+  mean_y /= static_cast<float>(output.support_points.size());
+
+  EXPECT_GT(mean_x, 0.2f);
+  EXPECT_LT(std::abs(mean_y), 0.2f);
 }

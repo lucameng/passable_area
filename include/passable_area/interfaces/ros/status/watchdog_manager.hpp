@@ -23,6 +23,8 @@ private:
   bool seen_cloud_ = false;
   bool seen_odom_ = false;
   bool seen_synced_ = false;
+  bool logged_waiting_cloud_ = false;
+  bool logged_waiting_odom_ = false;
   std::string cloud_topic_;
   std::string odom_topic_;
 };

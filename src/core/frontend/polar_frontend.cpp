@@ -1,4 +1,5 @@
 #include "passable_area/core/frontend/polar_frontend.hpp"
+#include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -29,10 +30,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
 
   const float sector_size =
       2.0f * static_cast<float>(M_PI) / static_cast<float>(observability.sectors.size());
-  const float yaw = std::atan2(
-      2.0f * frame.base_pose_in_local.orientation.z() * frame.base_pose_in_local.orientation.w(),
-      1.0f - 2.0f * frame.base_pose_in_local.orientation.z() *
-                 frame.base_pose_in_local.orientation.z());
+  const float yaw = YawFromQuaternion(frame.base_pose_in_local.orientation);
 
   for (const auto &sample : frame.gravity_samples) {
     int cell = -1;

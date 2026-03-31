@@ -1,4 +1,5 @@
 #include "passable_area/core/pipeline/processor.hpp"
+#include "passable_area/core/utils/math_utils.hpp"
 
 #include <cmath>
 
@@ -60,17 +61,29 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.support_points.reserve(map_.size() / 4);
   output.obstacle_points.reserve(map_.size() / 8);
   output.unknown_points.reserve(map_.size() / 4);
+  const float base_x = frame.base_pose_in_local.position.x();
+  const float base_y = frame.base_pose_in_local.position.y();
+  const float base_z = frame.base_pose_in_local.position.z();
+  const float yaw = YawFromQuaternion(frame.base_pose_in_local.orientation);
+  const float cos_yaw = std::cos(yaw);
+  const float sin_yaw = std::sin(yaw);
   for (int cell = 0; cell < map_.size(); ++cell) {
     const auto xy = map_.indexToWorld(cell);
+    const float dx_world = xy.x() - base_x;
+    const float dy_world = xy.y() - base_y;
+    const float debug_x = cos_yaw * dx_world + sin_yaw * dy_world;
+    const float debug_y = -sin_yaw * dx_world + cos_yaw * dy_world;
     if (std::isfinite(layers.support_height[cell]) && layers.support_confidence[cell] > 0.15f) {
-      output.support_points.push_back(CellDebugPoint{{xy.x(), xy.y(), layers.support_height[cell]}});
+      output.support_points.push_back(
+          CellDebugPoint{{debug_x, debug_y, layers.support_height[cell] - base_z}});
     }
     if (std::isfinite(layers.overhead_height[cell]) && layers.obstacle_evidence[cell] > 0.2f) {
-      output.obstacle_points.push_back(CellDebugPoint{{xy.x(), xy.y(), layers.overhead_height[cell]}});
+      output.obstacle_points.push_back(
+          CellDebugPoint{{debug_x, debug_y, layers.overhead_height[cell] - base_z}});
     }
     if (layers.passability_state[cell] == static_cast<int8_t>(PassabilityState::kUnknown)) {
       const float z = std::isfinite(layers.support_height[cell]) ? layers.support_height[cell] : 0.0f;
-      output.unknown_points.push_back(CellDebugPoint{{xy.x(), xy.y(), z}});
+      output.unknown_points.push_back(CellDebugPoint{{debug_x, debug_y, z - base_z}});
     }
   }
 
