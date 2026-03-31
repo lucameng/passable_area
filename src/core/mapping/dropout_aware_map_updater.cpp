@@ -101,13 +101,18 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
           std::max(0.0f, layers.obstacle_evidence[cell] - obstacle_decay);
     }
 
+    if (touched_support[cell]) {
+      continue;
+    }
+
     const bool persistent_allowed =
         layers.last_reliable_age[cell] <=
         static_cast<uint16_t>(std::max(1, config_.persistence.support_persistence_frames));
     if (layers.support_confidence[cell] >= config_.observability.min_support_confidence &&
         persistent_allowed) {
       layers.support_state[cell] = static_cast<uint8_t>(SupportState::kPersistent);
-    } else if (layers.support_confidence[cell] <= config_.observability.min_support_confidence * 0.5f ||
+    } else if (layers.support_confidence[cell] <=
+                   config_.observability.min_support_confidence * 0.5f ||
                !persistent_allowed) {
       layers.support_state[cell] = static_cast<uint8_t>(SupportState::kNone);
       layers.support_height[cell] = std::numeric_limits<float>::quiet_NaN();

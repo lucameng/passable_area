@@ -33,6 +33,8 @@ public:
 
 private:
   void initializeLayers();
+  void clearLayers();
+  void shiftLayers(int row_shift, int col_shift);
 
   Config config_;
   int rows_ = 0;

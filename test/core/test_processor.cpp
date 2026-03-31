@@ -1,4 +1,5 @@
 #include "passable_area/core/frontend/polar_frontend.hpp"
+#include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/pipeline/processor.hpp"
 
@@ -11,12 +12,16 @@ namespace {
 
 using passable_area::core::FrameInput;
 using passable_area::core::FrameObservability;
+using passable_area::core::FrontendOutput;
 using passable_area::core::LocalTerrainMap;
 using passable_area::core::ObservabilityState;
 using passable_area::core::PassabilityState;
 using passable_area::core::PolarFrontend;
 using passable_area::core::ProcessedFrame;
 using passable_area::core::Processor;
+using passable_area::core::DropoutAwareMapUpdater;
+using passable_area::core::SupportCandidate;
+using passable_area::core::SupportState;
 
 FrameInput MakeFlatFrame(int stamp = 1) {
   FrameInput input;
@@ -334,4 +339,50 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
   EXPECT_EQ(forward_output.obstacle_candidates[0].cell, reversed_output.obstacle_candidates[0].cell);
   EXPECT_FLOAT_EQ(forward_output.obstacle_candidates[0].evidence,
                   reversed_output.obstacle_candidates[0].evidence);
+}
+
+TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
+  auto config = MakeConfig();
+  config.map.length = 4.0f;
+  config.map.width = 4.0f;
+  config.map.resolution = 1.0f;
+  LocalTerrainMap map(config);
+
+  int original_index = -1;
+  ASSERT_TRUE(map.worldToIndex(0.5f, 0.5f, original_index));
+  map.layers().support_confidence[original_index] = 0.75f;
+  map.layers().support_state[original_index] = static_cast<uint8_t>(SupportState::kPersistent);
+
+  map.recenter(Eigen::Vector2f(1.0f, 0.0f));
+
+  int shifted_index = -1;
+  ASSERT_TRUE(map.worldToIndex(0.5f, 0.5f, shifted_index));
+  EXPECT_NE(original_index, shifted_index);
+  EXPECT_FLOAT_EQ(map.layers().support_confidence[shifted_index], 0.75f);
+  EXPECT_EQ(map.layers().support_state[shifted_index],
+            static_cast<uint8_t>(SupportState::kPersistent));
+}
+
+TEST(ProcessorTest, ObservedSupportStateIsNotOverwrittenAsPersistentInSameUpdate) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  DropoutAwareMapUpdater updater(config);
+  FrameObservability observability;
+  observability.sectors.resize(4);
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  FrontendOutput frontend_output;
+  frontend_output.support_candidates.push_back(SupportCandidate{3, 0.0f, 1.0f});
+  const auto dirty = updater.update(frontend_output, observability, map);
+
+  ASSERT_FALSE(dirty.empty());
+  EXPECT_EQ(map.layers().support_state[3], static_cast<uint8_t>(SupportState::kObserved));
 }
