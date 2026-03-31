@@ -29,16 +29,18 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
 }
 
 void PassableAreaNode::onCloudObserved(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
-  watchdog_.markCloud(msg->header.stamp);
+  (void)msg;
+  watchdog_.markCloud(now());
 }
 
 void PassableAreaNode::onOdomObserved(const nav_msgs::msg::Odometry::ConstSharedPtr &msg) {
-  watchdog_.markOdom(msg->header.stamp);
+  (void)msg;
+  watchdog_.markOdom(now());
 }
 
 void PassableAreaNode::onSynced(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg,
                                 const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg) {
-  watchdog_.markSynced(cloud_msg->header.stamp);
+  watchdog_.markSynced(now());
   auto start = std::chrono::steady_clock::now();
 
   passable_area::core::PointCloud cloud;
