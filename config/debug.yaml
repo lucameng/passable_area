@@ -1,0 +1,6 @@
+passable_area:
+  ros__parameters:
+    debug:
+      publish_grid_map: true
+      publish_points: true
+      publish_observability: true

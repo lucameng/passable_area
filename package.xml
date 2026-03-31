@@ -1,35 +1,40 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>passable_area</name>
-  <version>0.0.7</version>
-  <description>The passable_area package</description>
+  <version>1.0.0</version>
+  <description>Dropout-aware local terrain traversability for quadruped navigation.</description>
 
   <maintainer email="mengliang@deeprobotics.cn">Lucas Meng</maintainer>
   <license>TODO</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <build_depend>rclcpp</build_depend>
+  <build_depend>ament_cmake_gtest</build_depend>
   <build_depend>message_filters</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>std_msgs</build_depend>
   <build_depend>nav_msgs</build_depend>
   <build_depend>pcl_conversions</build_depend>
-  <build_depend>pcl_ros</build_depend>
+  <build_depend>rclcpp</build_depend>
+  <build_depend>rosidl_default_generators</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>visualization_msgs</build_depend>
   <build_depend>grid_map_core</build_depend>
-  <build_depend>grid_map_cv</build_depend>
+  <build_depend>grid_map_msgs</build_depend>
   <build_depend>grid_map_ros</build_depend>
 
-  <exec_depend>rclcpp</exec_depend>
   <exec_depend>message_filters</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>pcl_conversions</exec_depend>
+  <exec_depend>rclcpp</exec_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
-  <exec_depend>pcl_conversions</exec_depend>
-  <exec_depend>pcl_ros</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
   <exec_depend>grid_map_core</exec_depend>
-  <exec_depend>grid_map_cv</exec_depend>
+  <exec_depend>grid_map_msgs</exec_depend>
   <exec_depend>grid_map_ros</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
 
   <export>
     <build_type>ament_cmake</build_type>

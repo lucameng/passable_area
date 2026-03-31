@@ -1,0 +1,4 @@
+passable_area:
+  ros__parameters:
+    input_cloud_topic: "/LOC_BODY_POINTS"
+    odom_topic: "/ODOM"

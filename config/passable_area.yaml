@@ -1,0 +1,31 @@
+passable_area:
+  ros__parameters:
+    map_length: 8.0
+    map_width: 8.0
+    map_resolution: 0.1
+    map_height_min: -1.0
+    map_height_max: 0.8
+
+    max_support_slope: 28.0
+    max_step_up: 0.28
+    max_step_down: 0.28
+    max_support_roughness: 0.08
+    min_clearance: 0.35
+
+    dropout_sector_gap_threshold: 8
+    min_support_confidence: 0.2
+    stale_to_unknown_time: 0.8
+    sector_count: 72
+    min_points_per_sector: 12
+    support_persistence_frames: 5
+
+    world_frame: "camera_init"
+    gravity_frame: "base_gravity"
+    body_frame: "base_link"
+
+    downsample:
+      enable: true
+      voxel_size: 0.05
+
+    sync:
+      queue_size: 10

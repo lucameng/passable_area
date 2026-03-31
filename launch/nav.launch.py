@@ -4,38 +4,28 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
+
 def generate_launch_description():
-    passable_share_dir = get_package_share_directory('passable_area')
-    passable_params = PathJoinSubstitution([passable_share_dir, 'config', 'nav_params.yaml'])
-    body_params_file = PathJoinSubstitution([passable_share_dir, 'config', 'body_params.yaml'])
-    lidar_params_file = PathJoinSubstitution([passable_share_dir, 'config', 'lidar_params.yaml'])
-    log_level = LaunchConfiguration('log_level')
+    share_dir = get_package_share_directory("passable_area")
+    params_file = PathJoinSubstitution([share_dir, "config", "passable_area.yaml"])
+    sensors_file = PathJoinSubstitution([share_dir, "config", "sensors.yaml"])
+    debug_file = PathJoinSubstitution([share_dir, "config", "debug.yaml"])
+    log_level = LaunchConfiguration("log_level")
 
-    accu_share_dir = get_package_share_directory('accumulate_cloud')
-    accu_params = PathJoinSubstitution([accu_share_dir, 'config', 'accumulate_cloud.yaml'])
-
-    accumulate_cloud_node = Node(
-        package='accumulate_cloud',
-        executable='accumulate_cloud',
-        name='accumulate_cloud',
-        output='screen',
-        parameters=[accu_params]
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "log_level",
+                default_value="info",
+                description="Logging level for passable_area",
+            ),
+            Node(
+                package="passable_area",
+                executable="passable_area_node",
+                name="passable_area",
+                output="screen",
+                parameters=[params_file, sensors_file, debug_file],
+                arguments=["--ros-args", "--log-level", log_level],
+            ),
+        ]
     )
-
-    passable_area_node = Node(
-        package='passable_area',
-        executable='passable_area',
-        name='passable_area',
-        output='screen',
-        parameters=[passable_params, body_params_file, lidar_params_file],
-        arguments=['--ros-args', '--log-level', log_level]
-    )
-    return LaunchDescription([
-        DeclareLaunchArgument(
-            'log_level',
-            default_value='info',
-            description='Logging level for the passable_area node'
-        ),
-        accumulate_cloud_node,
-        passable_area_node
-    ])
