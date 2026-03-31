@@ -12,7 +12,7 @@ class PolarFrontend {
 public:
   explicit PolarFrontend(const Config &config) : config_(config) {}
 
-  FrontendOutput run(const FrameInput &frame, const FrameObservability &observability,
+  FrontendOutput run(const ProcessedFrame &frame, const FrameObservability &observability,
                      const LocalTerrainMap &map) const;
 
 private:

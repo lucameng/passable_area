@@ -1,3 +1,5 @@
+#include "passable_area/core/frontend/polar_frontend.hpp"
+#include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/pipeline/processor.hpp"
 
 #include <gtest/gtest.h>
@@ -8,8 +10,12 @@
 namespace {
 
 using passable_area::core::FrameInput;
+using passable_area::core::FrameObservability;
+using passable_area::core::LocalTerrainMap;
 using passable_area::core::ObservabilityState;
 using passable_area::core::PassabilityState;
+using passable_area::core::PolarFrontend;
+using passable_area::core::ProcessedFrame;
 using passable_area::core::Processor;
 
 FrameInput MakeFlatFrame(int stamp = 1) {
@@ -19,7 +25,7 @@ FrameInput MakeFlatFrame(int stamp = 1) {
   input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.2f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.2f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   return input;
@@ -32,7 +38,7 @@ FrameInput MakeRampFrame(float slope, int stamp = 1) {
   input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.2f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.2f) {
-      input.merged_cloud.push_back({x, y, slope * x});
+      input.input_cloud_in_base.push_back({x, y, slope * x});
     }
   }
   return input;
@@ -46,7 +52,7 @@ FrameInput MakeStairFrame(int stamp = 1) {
   for (float x = -1.0f; x <= 1.0f; x += 0.08f) {
     const float z = 0.08f * std::floor((x + 1.0f) / 0.4f);
     for (float y = -1.0f; y <= 1.0f; y += 0.08f) {
-      input.merged_cloud.push_back({x, y, z});
+      input.input_cloud_in_base.push_back({x, y, z});
     }
   }
   return input;
@@ -56,7 +62,7 @@ FrameInput MakeLowCeilingFrame(float ceiling_height, int stamp = 1) {
   auto input = MakeFlatFrame(stamp);
   for (float x = -0.6f; x <= 0.6f; x += 0.12f) {
     for (float y = -0.6f; y <= 0.6f; y += 0.12f) {
-      input.merged_cloud.push_back({x, y, ceiling_height});
+      input.input_cloud_in_base.push_back({x, y, ceiling_height});
     }
   }
   return input;
@@ -69,7 +75,7 @@ FrameInput MakeFrontOnlyFrame(int stamp = 1) {
   input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
   for (float x = 0.0f; x <= 1.2f; x += 0.1f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.1f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   return input;
@@ -77,13 +83,13 @@ FrameInput MakeFrontOnlyFrame(int stamp = 1) {
 
 FrameInput MakeRearGapFrame(int stamp = 1) {
   auto input = MakeFlatFrame(stamp);
-  input.merged_cloud.erase(
-      std::remove_if(input.merged_cloud.begin(), input.merged_cloud.end(),
+  input.input_cloud_in_base.erase(
+      std::remove_if(input.input_cloud_in_base.begin(), input.input_cloud_in_base.end(),
                      [](const auto &point) { return point.x < -0.1f && std::abs(point.y) < 1.0f; }),
-      input.merged_cloud.end());
+      input.input_cloud_in_base.end());
   for (float x = 0.2f; x <= 1.2f; x += 0.05f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.05f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   return input;
@@ -91,11 +97,12 @@ FrameInput MakeRearGapFrame(int stamp = 1) {
 
 FrameInput MakeLocalHoleFrame(int stamp = 1) {
   auto input = MakeFlatFrame(stamp);
-  input.merged_cloud.erase(
-      std::remove_if(input.merged_cloud.begin(), input.merged_cloud.end(), [](const auto &point) {
+  input.input_cloud_in_base.erase(
+      std::remove_if(input.input_cloud_in_base.begin(), input.input_cloud_in_base.end(),
+                     [](const auto &point) {
         return std::abs(point.x) < 0.35f && std::abs(point.y) < 0.35f;
       }),
-      input.merged_cloud.end());
+      input.input_cloud_in_base.end());
   return input;
 }
 
@@ -108,7 +115,7 @@ FrameInput MakeSparseFrame(int stamp = 1) {
   for (float x = -1.0f; x <= 1.0f; x += 0.08f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.08f) {
       if ((counter++ % 9) == 0) {
-        input.merged_cloud.push_back({x, y, 0.0f});
+        input.input_cloud_in_base.push_back({x, y, 0.0f});
       }
     }
   }
@@ -280,4 +287,51 @@ TEST(ProcessorTest, SparseCoverageCreatesUnknownButNotDropout) {
     }
   }
   EXPECT_GT(partial_count, 0);
+}
+
+TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(4);
+  observability.sectors[0].state = ObservabilityState::kObserved;
+  observability.sectors[1].state = ObservabilityState::kObserved;
+  observability.sectors[2].state = ObservabilityState::kObserved;
+  observability.sectors[3].state = ObservabilityState::kMissingByDropout;
+  for (auto &sector : observability.sectors) {
+    sector.coverage_confidence = 1.0f;
+  }
+
+  ProcessedFrame forward;
+  forward.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  forward.base_pose_in_local.position = Eigen::Vector3f::Zero();
+  forward.cloud_in_base = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
+  forward.cloud_in_gravity = {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.2f}};
+  forward.gravity_samples.push_back(
+      passable_area::core::GravityPointSample{{1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.0f}});
+  forward.gravity_samples.push_back(
+      passable_area::core::GravityPointSample{{-1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.2f}});
+  ProcessedFrame reversed = forward;
+  std::reverse(reversed.gravity_samples.begin(), reversed.gravity_samples.end());
+
+  const auto forward_output = frontend.run(forward, observability, map);
+  const auto reversed_output = frontend.run(reversed, observability, map);
+
+  ASSERT_EQ(forward_output.support_candidates.size(), 1U);
+  ASSERT_EQ(reversed_output.support_candidates.size(), 1U);
+  EXPECT_EQ(forward_output.support_candidates[0].cell, reversed_output.support_candidates[0].cell);
+  EXPECT_FLOAT_EQ(forward_output.support_candidates[0].confidence,
+                  reversed_output.support_candidates[0].confidence);
+  ASSERT_EQ(forward_output.obstacle_candidates.size(), 1U);
+  ASSERT_EQ(reversed_output.obstacle_candidates.size(), 1U);
+  EXPECT_EQ(forward_output.obstacle_candidates[0].cell, reversed_output.obstacle_candidates[0].cell);
+  EXPECT_FLOAT_EQ(forward_output.obstacle_candidates[0].evidence,
+                  reversed_output.obstacle_candidates[0].evidence);
 }

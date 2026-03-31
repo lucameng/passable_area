@@ -24,6 +24,8 @@ void DebugPublishers::publish(const passable_area::core::FrameOutput &output,
   msg.frame_partial = output.observability.frame_partial;
   msg.rear_dropout = output.observability.rear_dropout;
   msg.sector_count = static_cast<uint16_t>(output.observability.sectors.size());
+  msg.base_point_count = output.base_point_count;
+  msg.gravity_point_count = output.gravity_point_count;
   msg.sector_states.reserve(output.observability.sectors.size());
   msg.sector_coverage_confidence.reserve(output.observability.sectors.size());
   for (const auto &sector : output.observability.sectors) {

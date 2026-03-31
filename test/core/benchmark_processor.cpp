@@ -31,7 +31,7 @@ passable_area::core::FrameInput MakeBenchmarkFrame(int point_count, int64_t stam
   input.stamp = stamp;
   input.base_pose_in_local.position = Eigen::Vector3f::Zero();
   input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
-  input.merged_cloud.reserve(point_count);
+  input.input_cloud_in_base.reserve(point_count);
 
   std::mt19937 rng(42 + point_count);
   std::uniform_real_distribution<float> xy(-3.8f, 3.8f);
@@ -44,9 +44,9 @@ passable_area::core::FrameInput MakeBenchmarkFrame(int point_count, int64_t stam
     if (std::abs(x) > 1.2f && std::abs(y) < 0.8f) {
       z += 0.06f;
     }
-    input.merged_cloud.push_back({x, y, z});
+    input.input_cloud_in_base.push_back({x, y, z});
     if (ceiling_coin(rng) > 0.985f) {
-      input.merged_cloud.push_back({x, y, 0.28f + noise(rng)});
+      input.input_cloud_in_base.push_back({x, y, 0.28f + noise(rng)});
     }
   }
   return input;

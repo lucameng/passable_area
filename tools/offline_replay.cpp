@@ -61,7 +61,7 @@ FrameInput MakeFlatScene(int64_t stamp) {
   auto input = MakeBaseFrame(stamp);
   for (float x = -3.0f; x <= 3.0f; x += 0.1f) {
     for (float y = -2.0f; y <= 2.0f; y += 0.1f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   return input;
@@ -71,7 +71,7 @@ FrameInput MakeSlopeScene(int64_t stamp) {
   auto input = MakeBaseFrame(stamp);
   for (float x = -3.0f; x <= 3.0f; x += 0.1f) {
     for (float y = -2.0f; y <= 2.0f; y += 0.1f) {
-      input.merged_cloud.push_back({x, y, 0.08f * x});
+      input.input_cloud_in_base.push_back({x, y, 0.08f * x});
     }
   }
   return input;
@@ -82,7 +82,7 @@ FrameInput MakeStairScene(int64_t stamp) {
   for (float x = -2.5f; x <= 2.5f; x += 0.06f) {
     const float z = 0.09f * std::floor((x + 2.5f) / 0.45f);
     for (float y = -1.5f; y <= 1.5f; y += 0.08f) {
-      input.merged_cloud.push_back({x, y, z});
+      input.input_cloud_in_base.push_back({x, y, z});
     }
   }
   return input;
@@ -92,7 +92,7 @@ FrameInput MakeLowCeilingScene(int64_t stamp) {
   auto input = MakeFlatScene(stamp);
   for (float x = -1.0f; x <= 1.0f; x += 0.1f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.1f) {
-      input.merged_cloud.push_back({x, y, 0.22f});
+      input.input_cloud_in_base.push_back({x, y, 0.22f});
     }
   }
   return input;
@@ -102,12 +102,12 @@ FrameInput MakeRearNormalOpenScene(int64_t stamp) {
   auto input = MakeBaseFrame(stamp);
   for (float x = 0.0f; x <= 3.0f; x += 0.08f) {
     for (float y = -2.0f; y <= 2.0f; y += 0.08f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   for (float x = -3.0f; x <= -0.8f; x += 0.3f) {
     for (float y = -2.0f; y <= 2.0f; y += 0.3f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   return input;
@@ -117,7 +117,7 @@ FrameInput MakeRearDropoutScene(int64_t stamp) {
   auto input = MakeBaseFrame(stamp);
   for (float x = 0.0f; x <= 3.0f; x += 0.06f) {
     for (float y = -2.0f; y <= 2.0f; y += 0.06f) {
-      input.merged_cloud.push_back({x, y, 0.0f});
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
   return input;
@@ -125,11 +125,12 @@ FrameInput MakeRearDropoutScene(int64_t stamp) {
 
 FrameInput MakeLocalHoleScene(int64_t stamp) {
   auto input = MakeFlatScene(stamp);
-  input.merged_cloud.erase(
-      std::remove_if(input.merged_cloud.begin(), input.merged_cloud.end(), [](const auto &point) {
+  input.input_cloud_in_base.erase(
+      std::remove_if(input.input_cloud_in_base.begin(), input.input_cloud_in_base.end(),
+                     [](const auto &point) {
         return std::abs(point.x) < 0.6f && std::abs(point.y) < 0.6f;
       }),
-      input.merged_cloud.end());
+      input.input_cloud_in_base.end());
   return input;
 }
 
@@ -328,7 +329,7 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
     FrameInput input;
     input.stamp = stamp;
     input.base_pose_in_local = pose;
-    input.merged_cloud = std::move(cloud);
+    input.input_cloud_in_base = std::move(cloud);
     const auto output = processor.update(input);
     if (!output.valid) {
       continue;

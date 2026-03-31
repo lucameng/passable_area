@@ -1,7 +1,5 @@
 #include "passable_area/core/frontend/polar_frontend.hpp"
 
-#include <Eigen/Geometry>
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -16,38 +14,41 @@ struct CellStats {
   int count = 0;
 };
 
+float NormalizeAngle(float angle) {
+  return std::atan2(std::sin(angle), std::cos(angle));
+}
+
 } // namespace
 
-FrontendOutput PolarFrontend::run(const FrameInput &frame,
+FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                                   const FrameObservability &observability,
                                   const LocalTerrainMap &map) const {
   FrontendOutput output;
   std::unordered_map<int, CellStats> stats_by_cell;
-  stats_by_cell.reserve(frame.merged_cloud.size() / 4U + 1U);
+  stats_by_cell.reserve(frame.gravity_samples.size() / 4U + 1U);
 
   const float sector_size =
       2.0f * static_cast<float>(M_PI) / static_cast<float>(observability.sectors.size());
-  const Eigen::Quaternionf inv_orientation = frame.base_pose_in_local.orientation.conjugate().normalized();
+  const float yaw = std::atan2(
+      2.0f * frame.base_pose_in_local.orientation.z() * frame.base_pose_in_local.orientation.w(),
+      1.0f - 2.0f * frame.base_pose_in_local.orientation.z() *
+                 frame.base_pose_in_local.orientation.z());
 
-  for (const auto &point : frame.merged_cloud) {
+  for (const auto &sample : frame.gravity_samples) {
     int cell = -1;
-    if (!map.worldToIndex(point.x, point.y, cell)) {
+    if (!map.worldToIndex(sample.point_in_gravity.x, sample.point_in_gravity.y, cell)) {
       continue;
     }
-    const Eigen::Vector3f local_point(point.x, point.y, point.z);
-    const Eigen::Vector3f base_point =
-        inv_orientation * (local_point - frame.base_pose_in_local.position);
-    const float angle = std::atan2(base_point.y(), base_point.x());
+    const float sample_body_angle = std::atan2(sample.point_in_base.y, sample.point_in_base.x);
     const int sector = std::clamp(
-        static_cast<int>(std::floor((angle + static_cast<float>(M_PI)) / sector_size)), 0,
+        static_cast<int>(std::floor((sample_body_angle + static_cast<float>(M_PI)) / sector_size)), 0,
         static_cast<int>(observability.sectors.size()) - 1);
-    const auto sector_state = observability.sectors[sector].state;
-    if (sector_state == ObservabilityState::kBlindByStructure) {
+    if (observability.sectors[sector].state == ObservabilityState::kBlindByStructure) {
       continue;
     }
     auto &stats = stats_by_cell[cell];
-    stats.min_z = std::min(stats.min_z, point.z);
-    stats.max_z = std::max(stats.max_z, point.z);
+    stats.min_z = std::min(stats.min_z, sample.point_in_gravity.z);
+    stats.max_z = std::max(stats.max_z, sample.point_in_gravity.z);
     ++stats.count;
   }
 
@@ -60,11 +61,15 @@ FrontendOutput PolarFrontend::run(const FrameInput &frame,
       continue;
     }
     const Eigen::Vector2f center = map.indexToWorld(cell);
-    const Eigen::Vector3f base_point(center.x(), center.y(), 0.0f);
-    const Eigen::Vector3f relative = inv_orientation * (base_point - frame.base_pose_in_local.position);
-    const float angle = std::atan2(relative.y(), relative.x());
+    // Use the cell-center body angle as the stable sector representative for this cell.
+    const float representative_base_angle =
+        NormalizeAngle(std::atan2(center.y() - frame.base_pose_in_local.position.y(),
+                                  center.x() - frame.base_pose_in_local.position.x()) -
+                       yaw);
     const int sector = std::clamp(
-        static_cast<int>(std::floor((angle + static_cast<float>(M_PI)) / sector_size)), 0,
+        static_cast<int>(
+            std::floor((representative_base_angle + static_cast<float>(M_PI)) / sector_size)),
+        0,
         static_cast<int>(observability.sectors.size()) - 1);
     const auto sector_state = observability.sectors[sector].state;
     const float vertical_span = stats.max_z - stats.min_z;
@@ -74,7 +79,6 @@ FrontendOutput PolarFrontend::run(const FrameInput &frame,
       output.support_candidates.push_back(
           SupportCandidate{cell, stats.min_z, std::clamp(coverage, 0.0f, 1.0f)});
     }
-
     if (vertical_span > config_.geometry.max_step_up * 0.75f) {
       output.obstacle_candidates.push_back(
           ObstacleCandidate{cell, stats.max_z, std::clamp(vertical_span, 0.0f, 1.0f)});

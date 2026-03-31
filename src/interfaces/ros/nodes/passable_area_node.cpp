@@ -55,7 +55,7 @@ void PassableAreaNode::onSynced(const sensor_msgs::msg::PointCloud2::ConstShared
   passable_area::core::FrameInput input;
   input.stamp = rclcpp::Time(cloud_msg->header.stamp).nanoseconds();
   input.base_pose_in_local = pose;
-  input.merged_cloud = std::move(cloud);
+  input.input_cloud_in_base = std::move(cloud);
 
   const auto output = processor_.update(input);
   if (!output.valid) {

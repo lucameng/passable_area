@@ -10,7 +10,7 @@ class FramePreprocessor {
 public:
   explicit FramePreprocessor(const Config &config) : config_(config) {}
 
-  bool process(const FrameInput &input, FrameInput &output) const;
+  bool process(const FrameInput &input, ProcessedFrame &output) const;
 
 private:
   Config config_;

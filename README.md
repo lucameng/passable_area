@@ -6,7 +6,9 @@
 - Inputs are strictly synchronized with `ExactTime`:
   - `/LOC_BODY_POINTS` (`sensor_msgs/msg/PointCloud2`)
   - `/ODOM` (`nav_msgs/msg/Odometry`)
-- All terrain reasoning runs in the configured `gravity_frame`.
+- The preprocessor now produces two explicit views from the synchronized input cloud:
+  - `cloud_in_base`: body-centric view for observability and sector semantics
+  - `cloud_in_gravity`: gravity-aligned view for mapping, features, and traversability
 - Outputs are:
   - `/terrain_state` (`nav_msgs/msg/OccupancyGrid`)
   - `/terrain_cost` (`nav_msgs/msg/OccupancyGrid`)
@@ -36,6 +38,10 @@ The current implementation already supports:
 - dropout-aware map aging
 - incremental feature recomputation on dirty cells
 - three-state traversability output
+
+`FrameObservabilityEstimator` only consumes `cloud_in_base`. It no longer relies on transforming points back from `gravity_frame` to recover front/rear/blind/dropout semantics.
+
+`PolarFrontend` keeps body-centric observability semantics separate from gravity-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use gravity-view samples.
 
 ## Layout
 - `include/passable_area/core`: ROS-free data types and processing modules

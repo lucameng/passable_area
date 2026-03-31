@@ -10,7 +10,7 @@ class FrameObservabilityEstimator {
 public:
   explicit FrameObservabilityEstimator(const Config &config) : config_(config) {}
 
-  FrameObservability estimate(const FrameInput &frame) const;
+  FrameObservability estimate(const ProcessedFrame &frame) const;
 
 private:
   bool isBlindSector(float angle_rad) const;

@@ -1,7 +1,6 @@
 #include "passable_area/core/pipeline/processor.hpp"
 
 #include <cmath>
-#include <limits>
 
 namespace passable_area::core {
 
@@ -10,7 +9,7 @@ Processor::Processor(const Config &config)
       map_(config), map_updater_(config), feature_updater_(config), traversability_solver_(config) {}
 
 FrameOutput Processor::update(const FrameInput &input) {
-  FrameInput preprocessed;
+  ProcessedFrame preprocessed;
   if (!preprocessor_.process(input, preprocessed)) {
     return FrameOutput{};
   }
@@ -21,6 +20,7 @@ FrameOutput Processor::update(const FrameInput &input) {
     map_.setFramePeriodSec(static_cast<float>(std::clamp(dt_sec, 0.02, 0.5)));
   }
   last_stamp_ = preprocessed.stamp;
+
   const FrameObservability observability = observability_estimator_.estimate(preprocessed);
   const FrontendOutput frontend_output = frontend_.run(preprocessed, observability, map_);
   const std::vector<int> dirty_cells = map_updater_.update(frontend_output, observability, map_);
@@ -29,7 +29,7 @@ FrameOutput Processor::update(const FrameInput &input) {
   return buildOutput(preprocessed, observability);
 }
 
-FrameOutput Processor::buildOutput(const FrameInput &frame,
+FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
                                    const FrameObservability &observability) const {
   FrameOutput output;
   output.stamp = frame.stamp;
@@ -37,6 +37,8 @@ FrameOutput Processor::buildOutput(const FrameInput &frame,
   output.cols = map_.cols();
   output.resolution = map_.resolution();
   output.origin = map_.origin();
+  output.base_point_count = static_cast<uint32_t>(frame.cloud_in_base.size());
+  output.gravity_point_count = static_cast<uint32_t>(frame.cloud_in_gravity.size());
   output.observability = observability;
 
   const auto &layers = map_.layers();

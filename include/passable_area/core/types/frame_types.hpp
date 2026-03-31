@@ -11,7 +11,21 @@ namespace passable_area::core {
 struct FrameInput {
   Timestamp stamp = 0;
   Pose3D base_pose_in_local;
-  PointCloud merged_cloud;
+  PointCloud input_cloud_in_base;
+  bool processing_enabled = true;
+};
+
+struct GravityPointSample {
+  Point3f point_in_base;
+  Point3f point_in_gravity;
+};
+
+struct ProcessedFrame {
+  Timestamp stamp = 0;
+  Pose3D base_pose_in_local;
+  PointCloud cloud_in_base;
+  PointCloud cloud_in_gravity;
+  std::vector<GravityPointSample> gravity_samples;
   bool processing_enabled = true;
 };
 
@@ -23,6 +37,8 @@ struct SectorObservability {
 struct FrameObservability {
   bool frame_partial = false;
   bool rear_dropout = false;
+  uint32_t base_point_count = 0;
+  uint32_t gravity_point_count = 0;
   std::vector<SectorObservability> sectors;
 };
 
@@ -36,6 +52,8 @@ struct FrameOutput {
   int cols = 0;
   float resolution = 0.1f;
   Eigen::Vector2f origin = Eigen::Vector2f::Zero();
+  uint32_t base_point_count = 0;
+  uint32_t gravity_point_count = 0;
   std::vector<int8_t> passability;
   std::vector<int8_t> traversal_cost;
   std::vector<float> support_height;

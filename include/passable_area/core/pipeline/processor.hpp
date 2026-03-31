@@ -21,7 +21,7 @@ public:
   const Config &config() const { return config_; }
 
 private:
-  FrameOutput buildOutput(const FrameInput &frame,
+  FrameOutput buildOutput(const ProcessedFrame &frame,
                           const FrameObservability &observability) const;
 
   Config config_;
