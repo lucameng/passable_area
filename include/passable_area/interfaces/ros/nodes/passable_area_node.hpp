@@ -21,7 +21,7 @@ namespace passable_area::interfaces::ros {
 
 class PassableAreaNode : public rclcpp::Node {
 public:
-  PassableAreaNode();
+  explicit PassableAreaNode(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 private:
   using SyncPolicy = message_filters::sync_policies::ExactTime<sensor_msgs::msg::PointCloud2,

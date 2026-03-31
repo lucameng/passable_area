@@ -4,8 +4,8 @@
 
 namespace passable_area::interfaces::ros {
 
-PassableAreaNode::PassableAreaNode()
-    : Node("passable_area"), config_(param_loader_.load(*this)), processor_(config_) {
+PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
+    : Node("passable_area", options), config_(param_loader_.load(*this)), processor_(config_) {
   input_cloud_topic_ = declare_parameter("input_cloud_topic", std::string("/LOC_BODY_POINTS"));
   odom_topic_ = declare_parameter("odom_topic", std::string("/ODOM"));
   sync_queue_size_ = declare_parameter("sync.queue_size", 10);

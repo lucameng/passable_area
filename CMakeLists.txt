@@ -15,6 +15,7 @@ find_package(grid_map_ros REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
+find_package(rosbag2_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -90,11 +91,45 @@ target_include_directories(passable_area_benchmark PUBLIC include)
 target_link_libraries(passable_area_benchmark passable_area_core ${OpenCV_LIBS})
 ament_target_dependencies(passable_area_benchmark Eigen3 OpenCV grid_map_core)
 
+add_executable(passable_area_offline_replay tools/offline_replay.cpp)
+target_include_directories(passable_area_offline_replay PUBLIC include)
+target_link_libraries(passable_area_offline_replay passable_area_ros passable_area_core ${OpenCV_LIBS})
+ament_target_dependencies(passable_area_offline_replay
+  Eigen3
+  OpenCV
+  grid_map_core
+  nav_msgs
+  pcl_conversions
+  rclcpp
+  rosbag2_cpp
+  sensor_msgs
+)
+
+add_executable(passable_area_e2e_benchmark test/interfaces/ros/e2e_benchmark.cpp)
+target_include_directories(passable_area_e2e_benchmark PUBLIC include)
+target_link_libraries(passable_area_e2e_benchmark passable_area_ros passable_area_core ${OpenCV_LIBS})
+ament_target_dependencies(passable_area_e2e_benchmark
+  Eigen3
+  OpenCV
+  grid_map_core
+  grid_map_msgs
+  message_filters
+  nav_msgs
+  pcl_conversions
+  rclcpp
+  sensor_msgs
+  std_msgs
+  visualization_msgs
+)
+rosidl_target_interfaces(passable_area_e2e_benchmark ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
 install(TARGETS
   passable_area_core
   passable_area_ros
   passable_area_node
   passable_area_benchmark
+  passable_area_offline_replay
+  passable_area_e2e_benchmark
   DESTINATION lib/${PROJECT_NAME}
 )
 
