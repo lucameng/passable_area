@@ -10,12 +10,15 @@
 #include "passable_area/interfaces/ros/status/watchdog_manager.hpp"
 #include "passable_area/passable_area.hpp"
 
+#include <builtin_interfaces/msg/time.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/exact_time.h>
 #include <message_filters/synchronizer.h>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <tf2_ros/transform_broadcaster.h>
 
 namespace passable_area::interfaces::ros {
 
@@ -31,6 +34,8 @@ private:
   void onOdomObserved(const nav_msgs::msg::Odometry::ConstSharedPtr &msg);
   void onSynced(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg,
                 const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg);
+  void publishBaseGravityTransform(const passable_area::core::Pose3D &base_pose_in_odom,
+                                   const builtin_interfaces::msg::Time &stamp);
 
   RosNodeParams node_params_;
   passable_area::core::Config config_;
@@ -42,6 +47,7 @@ private:
   DebugPublishers debug_publishers_;
   WatchdogManager watchdog_;
   PerfStats perf_stats_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_;
   message_filters::Subscriber<nav_msgs::msg::Odometry> odom_sub_;

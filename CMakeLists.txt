@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(grid_map_core REQUIRED)
 find_package(grid_map_msgs REQUIRED)
@@ -20,6 +21,7 @@ find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
 set(msg_files
@@ -68,6 +70,7 @@ set(interface_sources
 add_library(passable_area_ros STATIC ${interface_sources})
 target_include_directories(passable_area_ros PUBLIC include)
 ament_target_dependencies(passable_area_ros
+  geometry_msgs
   grid_map_core
   grid_map_msgs
   grid_map_ros
@@ -77,6 +80,7 @@ ament_target_dependencies(passable_area_ros
   rclcpp
   sensor_msgs
   std_msgs
+  tf2_ros
   visualization_msgs
 )
 target_link_libraries(passable_area_ros passable_area_core)
@@ -103,6 +107,7 @@ ament_target_dependencies(passable_area_offline_replay
   rclcpp
   rosbag2_cpp
   sensor_msgs
+  tf2_ros
 )
 
 add_executable(passable_area_e2e_benchmark test/interfaces/ros/e2e_benchmark.cpp)
@@ -119,6 +124,7 @@ ament_target_dependencies(passable_area_e2e_benchmark
   rclcpp
   sensor_msgs
   std_msgs
+  tf2_ros
   visualization_msgs
 )
 rosidl_target_interfaces(passable_area_e2e_benchmark ${PROJECT_NAME} "rosidl_typesupport_cpp")
@@ -155,6 +161,7 @@ endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(
+  geometry_msgs
   grid_map_core
   grid_map_msgs
   grid_map_ros
@@ -164,6 +171,7 @@ ament_export_dependencies(
   rclcpp
   sensor_msgs
   std_msgs
+  tf2_ros
   visualization_msgs
 )
 
