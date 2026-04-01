@@ -86,8 +86,6 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.unknown_points.reserve(map_.size() / 4);
   const float support_tolerance =
       std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
-  const float obstacle_tolerance =
-      std::max(config_.preprocess.voxel_size * 2.0f, config_.geometry.max_step_up);
 
   for (const auto &sample : frame.odom_samples) {
     if (config_.debug.publish_base_gravity_cloud) {
@@ -106,8 +104,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
           CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
     }
 
-    if (layers.obstacle_evidence[cell] > 0.2f &&
-        IsNear(sample.point_in_odom.z, layers.overhead_height[cell], obstacle_tolerance)) {
+    if (layers.obstacle_evidence[cell] > 0.2f) {
       output.obstacle_points.push_back(
           CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
     }

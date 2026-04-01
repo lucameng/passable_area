@@ -443,8 +443,8 @@ TF：
 
 语义：
 
-- 落在 obstacle cell 且与 `overhead_height` 接近的真实样本点
-- 当前更偏向“上表面/顶棚类障碍样本”
+- 落在 `obstacle_evidence` 已足够高的 obstacle cell 内的真实样本点
+- 当前表示 obstacle cell 内全部原始障碍样本，而不是仅顶面样本
 - 发布在 `base_gravity`
 
 ### 11.4 `/terrain_debug/unknown_mask`
@@ -755,9 +755,9 @@ source install/setup.bash
 
 当前它更接近：
 
-- obstacle cell 中贴近 `overhead_height` 的样本点
+- `obstacle_evidence` 足够高的 obstacle cell 内全部原始样本点
 
-因此它更偏“上表面/上缘障碍样本”，不是 cell 内所有障碍真实点。
+因此它仍不是“所有 impassable cell 的点”，而是 obstacle 分支对应的 cell 内原始点。
 
 ### 18.3 局部地图不是全局地图
 

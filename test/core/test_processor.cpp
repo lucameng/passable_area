@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
 
@@ -139,6 +140,19 @@ FrameInput MakeForwardStripFrame(const Eigen::Quaternionf &orientation, int stam
       input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
   }
+  return input;
+}
+
+FrameInput MakeObstacleColumnFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {
+      {0.25f, 0.25f, 0.0f},
+      {0.25f, 0.25f, 0.12f},
+      {0.25f, 0.25f, 0.30f},
+  };
   return input;
 }
 
@@ -493,4 +507,31 @@ TEST(ProcessorTest, DebugSupportPointsRespectRobotCentricGravityFrame) {
 
   EXPECT_GT(mean_x, 0.2f);
   EXPECT_LT(std::abs(mean_y), 0.2f);
+}
+
+TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(200000001)).valid);
+  const auto output = processor.update(MakeObstacleColumnFrame(300000001));
+  ASSERT_TRUE(output.valid);
+
+  ASSERT_EQ(output.obstacle_points.size(), 3U);
+  float min_z = std::numeric_limits<float>::infinity();
+  float max_z = -std::numeric_limits<float>::infinity();
+  for (const auto &point : output.obstacle_points) {
+    min_z = std::min(min_z, point.point.z);
+    max_z = std::max(max_z, point.point.z);
+  }
+  EXPECT_NEAR(min_z, 0.0f, 1e-5f);
+  EXPECT_NEAR(max_z, 0.30f, 1e-5f);
 }

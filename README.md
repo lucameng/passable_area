@@ -56,7 +56,7 @@ Preprocessing semantics are intentionally split as well:
 Current debug point semantics:
 - `/terrain_debug/base_gravity_cloud`: full preprocessed algorithm cloud expressed in `base_gravity_frame`
 - `/terrain_debug/support_points`: real input samples that land in support cells and remain close to the cell support height, expressed in `base_gravity_frame`
-- `/terrain_debug/obstacle_points`: real input samples that land in obstacle cells and remain close to the cell `overhead_height`, so they currently represent overhead or upper-surface obstacle samples rather than every obstacle-labeled sample in the cell
+- `/terrain_debug/obstacle_points`: real input samples that land in cells whose `obstacle_evidence` is already high enough, expressed in `base_gravity_frame`
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
 - `TerrainObservability.odom_point_count`: number of samples in the internal `cloud_in_odom` mapping view
 
