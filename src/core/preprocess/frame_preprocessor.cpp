@@ -37,21 +37,21 @@ bool IsFinite(const Point3f &point) {
 bool FramePreprocessor::process(const FrameInput &input, ProcessedFrame &output) const {
   output = ProcessedFrame{};
   output.stamp = input.stamp;
-  output.base_pose_in_local = input.base_pose_in_local;
+  output.base_pose_in_odom = input.base_pose_in_odom;
   output.processing_enabled = input.processing_enabled;
   if (!input.processing_enabled || input.input_cloud_in_base.empty()) {
     return false;
   }
 
   const Eigen::Affine3f transform =
-      Eigen::Translation3f(input.base_pose_in_local.position) *
-      input.base_pose_in_local.orientation.normalized();
+      Eigen::Translation3f(input.base_pose_in_odom.position) *
+      input.base_pose_in_odom.orientation.normalized();
   const float voxel_size = std::max(config_.preprocess.voxel_size, 1e-3f);
-  std::unordered_map<VoxelKey, GravityPointSample, VoxelKeyHash> voxels;
+  std::unordered_map<VoxelKey, OdomPointSample, VoxelKeyHash> voxels;
 
   output.cloud_in_base.reserve(input.input_cloud_in_base.size());
-  output.cloud_in_gravity.reserve(input.input_cloud_in_base.size());
-  output.gravity_samples.reserve(input.input_cloud_in_base.size());
+  output.cloud_in_odom.reserve(input.input_cloud_in_base.size());
+  output.odom_samples.reserve(input.input_cloud_in_base.size());
 
   for (const auto &raw_point : input.input_cloud_in_base) {
     if (!IsFinite(raw_point)) {
@@ -60,36 +60,36 @@ bool FramePreprocessor::process(const FrameInput &input, ProcessedFrame &output)
     output.cloud_in_base.push_back(raw_point);
 
     const Eigen::Vector3f body_point(raw_point.x, raw_point.y, raw_point.z);
-    const Eigen::Vector3f gravity_point = transform * body_point;
-    if (gravity_point.z() < config_.map.height_min || gravity_point.z() > config_.map.height_max) {
+    const Eigen::Vector3f odom_point = transform * body_point;
+    if (odom_point.z() < config_.map.height_min || odom_point.z() > config_.map.height_max) {
       continue;
     }
 
-    const Point3f point_in_gravity{gravity_point.x(), gravity_point.y(), gravity_point.z()};
+    const Point3f point_in_odom{odom_point.x(), odom_point.y(), odom_point.z()};
     if (!config_.preprocess.enable_downsample) {
-      output.cloud_in_gravity.push_back(point_in_gravity);
-      output.gravity_samples.push_back(GravityPointSample{raw_point, point_in_gravity});
+      output.cloud_in_odom.push_back(point_in_odom);
+      output.odom_samples.push_back(OdomPointSample{raw_point, point_in_odom});
       continue;
     }
 
     const VoxelKey key{
-        static_cast<int>(std::floor(point_in_gravity.x / voxel_size)),
-        static_cast<int>(std::floor(point_in_gravity.y / voxel_size)),
-        static_cast<int>(std::floor(point_in_gravity.z / voxel_size)),
+        static_cast<int>(std::floor(point_in_odom.x / voxel_size)),
+        static_cast<int>(std::floor(point_in_odom.y / voxel_size)),
+        static_cast<int>(std::floor(point_in_odom.z / voxel_size)),
     };
-    voxels.emplace(key, GravityPointSample{raw_point, point_in_gravity});
+    voxels.emplace(key, OdomPointSample{raw_point, point_in_odom});
   }
 
   if (config_.preprocess.enable_downsample) {
-    output.cloud_in_gravity.reserve(voxels.size());
-    output.gravity_samples.reserve(voxels.size());
+    output.cloud_in_odom.reserve(voxels.size());
+    output.odom_samples.reserve(voxels.size());
     for (const auto &entry : voxels) {
-      output.cloud_in_gravity.push_back(entry.second.point_in_gravity);
-      output.gravity_samples.push_back(entry.second);
+      output.cloud_in_odom.push_back(entry.second.point_in_odom);
+      output.odom_samples.push_back(entry.second);
     }
   }
 
-  return !output.cloud_in_base.empty() && !output.cloud_in_gravity.empty();
+  return !output.cloud_in_base.empty() && !output.cloud_in_odom.empty();
 }
 
 } // namespace passable_area::core

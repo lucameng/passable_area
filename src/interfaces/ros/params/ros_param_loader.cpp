@@ -41,8 +41,9 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
   config.preprocess.voxel_size =
       node.declare_parameter("downsample.voxel_size", config.preprocess.voxel_size);
 
-  config.world_frame = node.declare_parameter("world_frame", config.world_frame);
-  config.gravity_frame = node.declare_parameter("gravity_frame", config.gravity_frame);
+  config.odom_frame = node.declare_parameter("odom_frame", config.odom_frame);
+  config.base_gravity_frame =
+      node.declare_parameter("base_gravity_frame", config.base_gravity_frame);
   config.body_frame = node.declare_parameter("body_frame", config.body_frame);
   config.debug.publish_grid_map =
       node.declare_parameter("debug.publish_grid_map", config.debug.publish_grid_map);

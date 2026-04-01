@@ -1,9 +1,29 @@
 #include "passable_area/core/pipeline/processor.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace passable_area::core {
+namespace {
+
+Point3f TransformOdomPointToBaseGravity(const Point3f &point_in_odom, const Pose3D &base_pose_in_odom) {
+  const float yaw = YawFromQuaternion(base_pose_in_odom.orientation);
+  const float cos_yaw = std::cos(yaw);
+  const float sin_yaw = std::sin(yaw);
+  const float dx = point_in_odom.x - base_pose_in_odom.position.x();
+  const float dy = point_in_odom.y - base_pose_in_odom.position.y();
+  return Point3f{cos_yaw * dx + sin_yaw * dy,
+                 -sin_yaw * dx + cos_yaw * dy,
+                 point_in_odom.z - base_pose_in_odom.position.z()};
+}
+
+bool IsNear(float lhs, float rhs, float tolerance) {
+  return std::isfinite(lhs) && std::isfinite(rhs) && std::abs(lhs - rhs) <= tolerance;
+}
+
+} // namespace
 
 Processor::Processor(const Config &config)
     : config_(config), preprocessor_(config), observability_estimator_(config), frontend_(config),
@@ -15,7 +35,7 @@ FrameOutput Processor::update(const FrameInput &input) {
     return FrameOutput{};
   }
 
-  map_.recenter(preprocessed.base_pose_in_local.position.head<2>());
+  map_.recenter(preprocessed.base_pose_in_odom.position.head<2>());
   if (last_stamp_ > 0 && preprocessed.stamp > last_stamp_) {
     const double dt_sec = static_cast<double>(preprocessed.stamp - last_stamp_) * 1e-9;
     map_.setFramePeriodSec(static_cast<float>(std::clamp(dt_sec, 0.02, 0.5)));
@@ -39,7 +59,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.resolution = map_.resolution();
   output.origin = map_.origin();
   output.base_point_count = static_cast<uint32_t>(frame.cloud_in_base.size());
-  output.gravity_point_count = static_cast<uint32_t>(frame.cloud_in_gravity.size());
+  output.odom_point_count = static_cast<uint32_t>(frame.cloud_in_odom.size());
   output.observability = observability;
 
   const auto &layers = map_.layers();
@@ -58,32 +78,40 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.support_continuity = layers.support_continuity;
   output.support_state = layers.support_state;
 
-  output.support_points.reserve(map_.size() / 4);
-  output.obstacle_points.reserve(map_.size() / 8);
+  output.support_points.reserve(frame.odom_samples.size() / 4);
+  output.obstacle_points.reserve(frame.odom_samples.size() / 8);
   output.unknown_points.reserve(map_.size() / 4);
-  const float base_x = frame.base_pose_in_local.position.x();
-  const float base_y = frame.base_pose_in_local.position.y();
-  const float base_z = frame.base_pose_in_local.position.z();
-  const float yaw = YawFromQuaternion(frame.base_pose_in_local.orientation);
-  const float cos_yaw = std::cos(yaw);
-  const float sin_yaw = std::sin(yaw);
-  for (int cell = 0; cell < map_.size(); ++cell) {
-    const auto xy = map_.indexToWorld(cell);
-    const float dx_world = xy.x() - base_x;
-    const float dy_world = xy.y() - base_y;
-    const float debug_x = cos_yaw * dx_world + sin_yaw * dy_world;
-    const float debug_y = -sin_yaw * dx_world + cos_yaw * dy_world;
-    if (std::isfinite(layers.support_height[cell]) && layers.support_confidence[cell] > 0.15f) {
+  const float support_tolerance =
+      std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
+  const float obstacle_tolerance =
+      std::max(config_.preprocess.voxel_size * 2.0f, config_.geometry.max_step_up);
+
+  for (const auto &sample : frame.odom_samples) {
+    int cell = -1;
+    if (!map_.odomToIndex(sample.point_in_odom.x, sample.point_in_odom.y, cell)) {
+      continue;
+    }
+
+    if (layers.support_confidence[cell] > 0.15f &&
+        IsNear(sample.point_in_odom.z, layers.support_height[cell], support_tolerance)) {
       output.support_points.push_back(
-          CellDebugPoint{{debug_x, debug_y, layers.support_height[cell] - base_z}});
+          CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
     }
-    if (std::isfinite(layers.overhead_height[cell]) && layers.obstacle_evidence[cell] > 0.2f) {
+
+    if (layers.obstacle_evidence[cell] > 0.2f &&
+        IsNear(sample.point_in_odom.z, layers.overhead_height[cell], obstacle_tolerance)) {
       output.obstacle_points.push_back(
-          CellDebugPoint{{debug_x, debug_y, layers.overhead_height[cell] - base_z}});
+          CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
     }
+  }
+
+  for (int cell = 0; cell < map_.size(); ++cell) {
     if (layers.passability_state[cell] == static_cast<int8_t>(PassabilityState::kUnknown)) {
-      const float z = std::isfinite(layers.support_height[cell]) ? layers.support_height[cell] : 0.0f;
-      output.unknown_points.push_back(CellDebugPoint{{debug_x, debug_y, z - base_z}});
+      const auto xy = map_.indexToOdom(cell);
+      const float z =
+          std::isfinite(layers.support_height[cell]) ? layers.support_height[cell] : 0.0f;
+      output.unknown_points.push_back(CellDebugPoint{TransformOdomPointToBaseGravity(
+          Point3f{xy.x(), xy.y(), z}, frame.base_pose_in_odom)});
     }
   }
 

@@ -19,8 +19,8 @@ passable_area:
     min_points_per_sector: 12
     support_persistence_frames: 5
 
-    world_frame: "camera_init"
-    gravity_frame: "base_gravity"
+    odom_frame: "odom"
+    base_gravity_frame: "base_gravity"
     body_frame: "base_link"
 
     downsample:

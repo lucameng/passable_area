@@ -19,7 +19,7 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
   std::vector<uint8_t> touched_obstacle(map.size(), 0);
 
   const auto sector_state_for_cell = [&](int cell) {
-    const auto cell_center = map.indexToWorld(cell);
+    const auto cell_center = map.indexToOdom(cell);
     const float angle = std::atan2(cell_center.y() - map.center().y(), cell_center.x() - map.center().x());
     const float normalized = angle + static_cast<float>(M_PI);
     const int sector = std::clamp(

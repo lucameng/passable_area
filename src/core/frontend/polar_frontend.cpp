@@ -26,15 +26,15 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                                   const LocalTerrainMap &map) const {
   FrontendOutput output;
   std::unordered_map<int, CellStats> stats_by_cell;
-  stats_by_cell.reserve(frame.gravity_samples.size() / 4U + 1U);
+  stats_by_cell.reserve(frame.odom_samples.size() / 4U + 1U);
 
   const float sector_size =
       2.0f * static_cast<float>(M_PI) / static_cast<float>(observability.sectors.size());
-  const float yaw = YawFromQuaternion(frame.base_pose_in_local.orientation);
+  const float yaw = YawFromQuaternion(frame.base_pose_in_odom.orientation);
 
-  for (const auto &sample : frame.gravity_samples) {
+  for (const auto &sample : frame.odom_samples) {
     int cell = -1;
-    if (!map.worldToIndex(sample.point_in_gravity.x, sample.point_in_gravity.y, cell)) {
+    if (!map.odomToIndex(sample.point_in_odom.x, sample.point_in_odom.y, cell)) {
       continue;
     }
     const float sample_body_angle = std::atan2(sample.point_in_base.y, sample.point_in_base.x);
@@ -45,8 +45,8 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       continue;
     }
     auto &stats = stats_by_cell[cell];
-    stats.min_z = std::min(stats.min_z, sample.point_in_gravity.z);
-    stats.max_z = std::max(stats.max_z, sample.point_in_gravity.z);
+    stats.min_z = std::min(stats.min_z, sample.point_in_odom.z);
+    stats.max_z = std::max(stats.max_z, sample.point_in_odom.z);
     ++stats.count;
   }
 
@@ -58,11 +58,11 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     if (stats.count == 0) {
       continue;
     }
-    const Eigen::Vector2f center = map.indexToWorld(cell);
+    const Eigen::Vector2f center = map.indexToOdom(cell);
     // Use the cell-center body angle as the stable sector representative for this cell.
     const float representative_base_angle =
-        NormalizeAngle(std::atan2(center.y() - frame.base_pose_in_local.position.y(),
-                                  center.x() - frame.base_pose_in_local.position.x()) -
+        NormalizeAngle(std::atan2(center.y() - frame.base_pose_in_odom.position.y(),
+                                  center.x() - frame.base_pose_in_odom.position.x()) -
                        yaw);
     const int sector = std::clamp(
         static_cast<int>(

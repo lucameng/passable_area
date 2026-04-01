@@ -52,8 +52,8 @@ passable_area::core::Config MakeConfig() {
 FrameInput MakeBaseFrame(int64_t stamp) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   return input;
 }
 
@@ -328,7 +328,7 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
     }
     FrameInput input;
     input.stamp = stamp;
-    input.base_pose_in_local = pose;
+    input.base_pose_in_odom = pose;
     input.input_cloud_in_base = std::move(cloud);
     const auto output = processor.update(input);
     if (!output.valid) {

@@ -26,8 +26,8 @@ using passable_area::core::SupportState;
 FrameInput MakeFlatFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.2f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.2f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
@@ -39,8 +39,8 @@ FrameInput MakeFlatFrame(int stamp = 1) {
 FrameInput MakeRampFrame(float slope, int stamp = 1) {
   passable_area::core::FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.2f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.2f) {
       input.input_cloud_in_base.push_back({x, y, slope * x});
@@ -52,8 +52,8 @@ FrameInput MakeRampFrame(float slope, int stamp = 1) {
 FrameInput MakeStairFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.08f) {
     const float z = 0.08f * std::floor((x + 1.0f) / 0.4f);
     for (float y = -1.0f; y <= 1.0f; y += 0.08f) {
@@ -76,8 +76,8 @@ FrameInput MakeLowCeilingFrame(float ceiling_height, int stamp = 1) {
 FrameInput MakeFrontOnlyFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   for (float x = 0.0f; x <= 1.2f; x += 0.1f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.1f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
@@ -114,8 +114,8 @@ FrameInput MakeLocalHoleFrame(int stamp = 1) {
 FrameInput MakeSparseFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   int counter = 0;
   for (float x = -1.0f; x <= 1.0f; x += 0.08f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.08f) {
@@ -130,8 +130,8 @@ FrameInput MakeSparseFrame(int stamp = 1) {
 FrameInput MakeForwardStripFrame(const Eigen::Quaternionf &orientation, int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = orientation.normalized();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = orientation.normalized();
   for (float x = 0.4f; x <= 1.2f; x += 0.08f) {
     for (float y = -0.12f; y <= 0.12f; y += 0.06f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
@@ -328,16 +328,16 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
   }
 
   ProcessedFrame forward;
-  forward.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
-  forward.base_pose_in_local.position = Eigen::Vector3f::Zero();
+  forward.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  forward.base_pose_in_odom.position = Eigen::Vector3f::Zero();
   forward.cloud_in_base = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
-  forward.cloud_in_gravity = {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.2f}};
-  forward.gravity_samples.push_back(
-      passable_area::core::GravityPointSample{{1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.0f}});
-  forward.gravity_samples.push_back(
-      passable_area::core::GravityPointSample{{-1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.2f}});
+  forward.cloud_in_odom = {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.2f}};
+  forward.odom_samples.push_back(
+      passable_area::core::OdomPointSample{{1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.0f}});
+  forward.odom_samples.push_back(
+      passable_area::core::OdomPointSample{{-1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.2f}});
   ProcessedFrame reversed = forward;
-  std::reverse(reversed.gravity_samples.begin(), reversed.gravity_samples.end());
+  std::reverse(reversed.odom_samples.begin(), reversed.odom_samples.end());
 
   const auto forward_output = frontend.run(forward, observability, map);
   const auto reversed_output = frontend.run(reversed, observability, map);
@@ -362,14 +362,14 @@ TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
   LocalTerrainMap map(config);
 
   int original_index = -1;
-  ASSERT_TRUE(map.worldToIndex(0.5f, 0.5f, original_index));
+  ASSERT_TRUE(map.odomToIndex(0.5f, 0.5f, original_index));
   map.layers().support_confidence[original_index] = 0.75f;
   map.layers().support_state[original_index] = static_cast<uint8_t>(SupportState::kPersistent);
 
   map.recenter(Eigen::Vector2f(1.0f, 0.0f));
 
   int shifted_index = -1;
-  ASSERT_TRUE(map.worldToIndex(0.5f, 0.5f, shifted_index));
+  ASSERT_TRUE(map.odomToIndex(0.5f, 0.5f, shifted_index));
   EXPECT_NE(original_index, shifted_index);
   EXPECT_FLOAT_EQ(map.layers().support_confidence[shifted_index], 0.75f);
   EXPECT_EQ(map.layers().support_state[shifted_index],

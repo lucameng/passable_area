@@ -29,8 +29,8 @@ passable_area::core::Config MakeConfig() {
 passable_area::core::FrameInput MakeBenchmarkFrame(int point_count, int64_t stamp) {
   passable_area::core::FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_local.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_local.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base.reserve(point_count);
 
   std::mt19937 rng(42 + point_count);

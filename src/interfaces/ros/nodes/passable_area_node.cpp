@@ -55,7 +55,7 @@ void PassableAreaNode::onSynced(const sensor_msgs::msg::PointCloud2::ConstShared
 
   passable_area::core::FrameInput input;
   input.stamp = rclcpp::Time(cloud_msg->header.stamp).nanoseconds();
-  input.base_pose_in_local = pose;
+  input.base_pose_in_odom = pose;
   input.input_cloud_in_base = std::move(cloud);
 
   const auto output = processor_.update(input);
@@ -64,11 +64,15 @@ void PassableAreaNode::onSynced(const sensor_msgs::msg::PointCloud2::ConstShared
     return;
   }
 
-  std_msgs::msg::Header header;
-  header.stamp = cloud_msg->header.stamp;
-  header.frame_id = config_.gravity_frame;
-  result_publishers_.publish(output, header);
-  debug_publishers_.publish(output, header);
+  std_msgs::msg::Header odom_header;
+  odom_header.stamp = cloud_msg->header.stamp;
+  odom_header.frame_id = config_.odom_frame;
+  result_publishers_.publish(output, odom_header);
+
+  std_msgs::msg::Header base_gravity_header;
+  base_gravity_header.stamp = cloud_msg->header.stamp;
+  base_gravity_header.frame_id = config_.base_gravity_frame;
+  debug_publishers_.publish(output, base_gravity_header);
 
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
                         .count();

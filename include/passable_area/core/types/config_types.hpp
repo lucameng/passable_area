@@ -57,8 +57,8 @@ struct Config {
   PersistenceConfig persistence;
   PreprocessConfig preprocess;
   DebugConfig debug;
-  std::string world_frame = "camera_init";
-  std::string gravity_frame = "base_gravity";
+  std::string odom_frame = "odom";
+  std::string base_gravity_frame = "base_gravity";
   std::string body_frame = "base_link";
 };
 
