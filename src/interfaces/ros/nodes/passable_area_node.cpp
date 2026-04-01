@@ -19,7 +19,7 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
     : Node("passable_area", options), node_params_(RosParamLoader{}.load(*this)),
       config_(node_params_.config), processor_(config_), topic_config_(node_params_.topics) {
   result_publishers_.initialize(*this, topic_config_);
-  debug_publishers_.initialize(*this, topic_config_);
+  debug_publishers_.initialize(*this, topic_config_, config_.debug);
   watchdog_.initialize(*this, topic_config_.input_cloud_topic, topic_config_.odom_topic);
   perf_stats_.initialize(*this);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);

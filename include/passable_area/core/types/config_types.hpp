@@ -47,6 +47,7 @@ struct PreprocessConfig {
 struct DebugConfig {
   bool publish_grid_map = true;
   bool publish_points = true;
+  bool publish_base_gravity_cloud = false;
   bool publish_observability = true;
 };
 

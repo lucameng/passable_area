@@ -13,6 +13,7 @@
   - `/terrain_state` (`nav_msgs/msg/OccupancyGrid`)
   - `/terrain_cost` (`nav_msgs/msg/OccupancyGrid`)
   - `/terrain_debug/grid_map` (`grid_map_msgs/msg/GridMap`)
+  - `/terrain_debug/base_gravity_cloud`
   - `/terrain_debug/support_points`
   - `/terrain_debug/obstacle_points`
   - `/terrain_debug/unknown_mask`
@@ -48,6 +49,7 @@ Frame semantics are intentionally split:
 - `base_gravity_frame`: robot-centric gravity frame used by debug point clouds; origin is the current robot pose, roll/pitch are removed, yaw is preserved
 
 Current debug point semantics:
+- `/terrain_debug/base_gravity_cloud`: full preprocessed algorithm cloud expressed in `base_gravity_frame`
 - `/terrain_debug/support_points`: real input samples that land in support cells and remain close to the cell support height, expressed in `base_gravity_frame`
 - `/terrain_debug/obstacle_points`: real input samples that land in obstacle cells and remain close to the cell `overhead_height`, so they currently represent overhead or upper-surface obstacle samples rather than every obstacle-labeled sample in the cell
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
@@ -81,3 +83,7 @@ Config is split across:
 - `config/passable_area.yaml`
 - `config/sensors.yaml`
 - `config/debug.yaml`
+
+Relevant debug controls:
+- `debug.publish_base_gravity_cloud`: enable publishing the full preprocessed algorithm cloud in `base_gravity_frame`
+- `output.base_gravity_cloud_topic`: topic name for that cloud

@@ -78,6 +78,9 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.support_continuity = layers.support_continuity;
   output.support_state = layers.support_state;
 
+  if (config_.debug.publish_base_gravity_cloud) {
+    output.base_gravity_cloud_points.reserve(frame.cloud_in_odom.size());
+  }
   output.support_points.reserve(frame.odom_samples.size() / 4);
   output.obstacle_points.reserve(frame.odom_samples.size() / 8);
   output.unknown_points.reserve(map_.size() / 4);
@@ -87,6 +90,11 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
       std::max(config_.preprocess.voxel_size * 2.0f, config_.geometry.max_step_up);
 
   for (const auto &sample : frame.odom_samples) {
+    if (config_.debug.publish_base_gravity_cloud) {
+      output.base_gravity_cloud_points.push_back(CellDebugPoint{
+          TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
+    }
+
     int cell = -1;
     if (!map_.odomToIndex(sample.point_in_odom.x, sample.point_in_odom.y, cell)) {
       continue;

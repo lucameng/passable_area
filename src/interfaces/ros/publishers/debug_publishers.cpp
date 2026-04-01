@@ -2,7 +2,13 @@
 
 namespace passable_area::interfaces::ros {
 
-void DebugPublishers::initialize(rclcpp::Node &node, const RosTopicConfig &topics) {
+void DebugPublishers::initialize(rclcpp::Node &node, const RosTopicConfig &topics,
+                                 const passable_area::core::DebugConfig &config) {
+  publish_base_gravity_cloud_ = config.publish_base_gravity_cloud;
+  if (publish_base_gravity_cloud_) {
+    base_gravity_cloud_pub_ = node.create_publisher<sensor_msgs::msg::PointCloud2>(
+        topics.base_gravity_cloud_topic, 10);
+  }
   support_points_pub_ = node.create_publisher<sensor_msgs::msg::PointCloud2>(
       topics.support_points_topic, 10);
   obstacle_points_pub_ = node.create_publisher<sensor_msgs::msg::PointCloud2>(
@@ -15,6 +21,9 @@ void DebugPublishers::initialize(rclcpp::Node &node, const RosTopicConfig &topic
 
 void DebugPublishers::publish(const passable_area::core::FrameOutput &output,
                               const std_msgs::msg::Header &header) {
+  if (publish_base_gravity_cloud_ && base_gravity_cloud_pub_) {
+    base_gravity_cloud_pub_->publish(point_converter_.toRos(output.base_gravity_cloud_points, header));
+  }
   support_points_pub_->publish(point_converter_.toRos(output.support_points, header));
   obstacle_points_pub_->publish(point_converter_.toRos(output.obstacle_points, header));
   unknown_mask_pub_->publish(point_converter_.toRos(output.unknown_points, header));

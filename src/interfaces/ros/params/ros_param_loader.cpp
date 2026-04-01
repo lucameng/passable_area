@@ -49,6 +49,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       node.declare_parameter("debug.publish_grid_map", config.debug.publish_grid_map);
   config.debug.publish_points =
       node.declare_parameter("debug.publish_points", config.debug.publish_points);
+  config.debug.publish_base_gravity_cloud = node.declare_parameter(
+      "debug.publish_base_gravity_cloud", config.debug.publish_base_gravity_cloud);
   config.debug.publish_observability =
       node.declare_parameter("debug.publish_observability", config.debug.publish_observability);
   topics.input_cloud_topic =
@@ -61,6 +63,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       node.declare_parameter("output.terrain_cost_topic", topics.terrain_cost_topic);
   topics.debug_grid_map_topic =
       node.declare_parameter("output.debug_grid_map_topic", topics.debug_grid_map_topic);
+  topics.base_gravity_cloud_topic = node.declare_parameter("output.base_gravity_cloud_topic",
+                                                           topics.base_gravity_cloud_topic);
   topics.support_points_topic =
       node.declare_parameter("output.support_points_topic", topics.support_points_topic);
   topics.obstacle_points_topic =

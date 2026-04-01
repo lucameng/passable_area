@@ -14,6 +14,7 @@ struct RosTopicConfig {
   std::string terrain_state_topic = "/terrain_state";
   std::string terrain_cost_topic = "/terrain_cost";
   std::string debug_grid_map_topic = "/terrain_debug/grid_map";
+  std::string base_gravity_cloud_topic = "/terrain_debug/base_gravity_cloud";
   std::string support_points_topic = "/terrain_debug/support_points";
   std::string obstacle_points_topic = "/terrain_debug/obstacle_points";
   std::string unknown_mask_topic = "/terrain_debug/unknown_mask";

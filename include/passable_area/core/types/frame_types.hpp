@@ -68,6 +68,7 @@ struct FrameOutput {
   std::vector<float> clearance;
   std::vector<float> support_continuity;
   std::vector<uint8_t> support_state;
+  std::vector<CellDebugPoint> base_gravity_cloud_points;
   std::vector<CellDebugPoint> support_points;
   std::vector<CellDebugPoint> obstacle_points;
   std::vector<CellDebugPoint> unknown_points;

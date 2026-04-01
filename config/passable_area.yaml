@@ -23,9 +23,15 @@ passable_area:
     base_gravity_frame: "base_gravity"
     body_frame: "base_link"
 
+    debug:
+      publish_base_gravity_cloud: false
+
     downsample:
       enable: true
       voxel_size: 0.05
+
+    output:
+      base_gravity_cloud_topic: "/terrain_debug/base_gravity_cloud"
 
     sync:
       queue_size: 10

@@ -13,11 +13,14 @@ namespace passable_area::interfaces::ros {
 
 class DebugPublishers {
 public:
-  void initialize(rclcpp::Node &node, const RosTopicConfig &topics);
+  void initialize(rclcpp::Node &node, const RosTopicConfig &topics,
+                  const passable_area::core::DebugConfig &config);
   void publish(const passable_area::core::FrameOutput &output, const std_msgs::msg::Header &header);
 
 private:
   PointCloudConverter point_converter_;
+  bool publish_base_gravity_cloud_ = false;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr base_gravity_cloud_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr support_points_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr obstacle_points_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr unknown_mask_pub_;
