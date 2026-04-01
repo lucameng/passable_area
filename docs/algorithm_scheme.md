@@ -580,7 +580,7 @@ TF：
 
 ### 13.7 调试参数
 
-来自 `config/debug.yaml` 和 `config/passable_area.yaml`：
+来自 `config/debug.yaml`：
 
 - `debug.publish_grid_map`
 - `debug.publish_points`
@@ -588,6 +588,8 @@ TF：
 - `debug.publish_observability`
 
 ### 13.8 调试输出 topic 参数
+
+来自 `config/debug.yaml`：
 
 - `output.terrain_state_topic`
 - `output.terrain_cost_topic`
@@ -779,6 +781,11 @@ source install/setup.bash
    - `config/passable_area.yaml`
    - `config/debug.yaml`
    - README / docs
+
+其中：
+
+- 算法、建图、预处理参数放在 `config/passable_area.yaml`
+- debug 开关和 debug 输出 topic 放在 `config/debug.yaml`
 6. 新增重要行为时同步补：
    - gtest
    - 运行验证步骤

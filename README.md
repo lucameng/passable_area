@@ -89,6 +89,8 @@ Config is split across:
 - `config/sensors.yaml`
 - `config/debug.yaml`
 
+`config/passable_area.yaml` holds algorithm and preprocessing parameters. `config/debug.yaml` holds debug publishers and debug output topics.
+
 Relevant debug controls:
 - `debug.publish_base_gravity_cloud`: enable publishing the full preprocessed algorithm cloud in `base_gravity_frame`
 - `output.base_gravity_cloud_topic`: topic name for that cloud
