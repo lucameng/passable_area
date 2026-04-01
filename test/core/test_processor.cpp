@@ -2,6 +2,7 @@
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/pipeline/processor.hpp"
+#include "passable_area/core/preprocess/frame_preprocessor.hpp"
 
 #include <gtest/gtest.h>
 
@@ -20,6 +21,7 @@ using passable_area::core::PolarFrontend;
 using passable_area::core::ProcessedFrame;
 using passable_area::core::Processor;
 using passable_area::core::DropoutAwareMapUpdater;
+using passable_area::core::FramePreprocessor;
 using passable_area::core::SupportCandidate;
 using passable_area::core::SupportState;
 
@@ -179,6 +181,70 @@ TEST(ProcessorTest, FlatGroundProducesPassableCells) {
     }
   }
   EXPECT_GT(passable_count, 0);
+}
+
+TEST(PreprocessorTest, BodyFilterRemovesPointsInsideConfiguredBaseLinkBox) {
+  auto config = MakeConfig();
+  config.preprocess.body_filter.enable = true;
+  config.preprocess.body_filter.x_min = -0.4f;
+  config.preprocess.body_filter.x_max = 0.4f;
+  config.preprocess.body_filter.y_min = -0.2f;
+  config.preprocess.body_filter.y_max = 0.2f;
+  config.preprocess.body_filter.z_min = -0.5f;
+  config.preprocess.body_filter.z_max = 0.5f;
+  FramePreprocessor preprocessor(config);
+
+  FrameInput input;
+  input.stamp = 1;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {{0.0f, 0.0f, 0.0f}, {0.6f, 0.0f, 0.0f}};
+
+  ProcessedFrame output;
+  ASSERT_TRUE(preprocessor.process(input, output));
+  ASSERT_EQ(output.cloud_in_base.size(), 1U);
+  ASSERT_EQ(output.cloud_in_odom.size(), 1U);
+  EXPECT_FLOAT_EQ(output.cloud_in_base.front().x, 0.6f);
+}
+
+TEST(PreprocessorTest, CropToMapRemovesPointsOutsideLocalMapWindow) {
+  auto config = MakeConfig();
+  config.preprocess.crop_to_map.enable = true;
+  config.preprocess.crop_to_map.xy_margin = 0.0f;
+  FramePreprocessor preprocessor(config);
+
+  FrameInput input;
+  input.stamp = 1;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {{0.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}};
+
+  ProcessedFrame output;
+  ASSERT_TRUE(preprocessor.process(input, output));
+  ASSERT_EQ(output.cloud_in_base.size(), 1U);
+  ASSERT_EQ(output.cloud_in_odom.size(), 1U);
+  EXPECT_FLOAT_EQ(output.cloud_in_base.front().x, 0.0f);
+}
+
+TEST(PreprocessorTest, CropToMapUsesRobotRelativeHeightForZWindow) {
+  auto config = MakeConfig();
+  config.map.height_min = -0.5f;
+  config.map.height_max = 0.5f;
+  config.preprocess.crop_to_map.enable = true;
+  config.preprocess.crop_to_map.xy_margin = 0.0f;
+  FramePreprocessor preprocessor(config);
+
+  FrameInput input;
+  input.stamp = 1;
+  input.base_pose_in_odom.position = Eigen::Vector3f(0.0f, 0.0f, 1.0f);
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {{0.6f, 0.0f, 0.2f}, {0.8f, 0.0f, 0.7f}};
+
+  ProcessedFrame output;
+  ASSERT_TRUE(preprocessor.process(input, output));
+  ASSERT_EQ(output.cloud_in_base.size(), 1U);
+  ASSERT_EQ(output.cloud_in_odom.size(), 1U);
+  EXPECT_NEAR(output.cloud_in_odom.front().z, 1.2f, 1e-5f);
 }
 
 TEST(ProcessorTest, MissingCoverageLeavesUnknownCells) {

@@ -7,8 +7,8 @@
   - `/LOC_BODY_POINTS` (`sensor_msgs/msg/PointCloud2`)
   - `/ODOM` (`nav_msgs/msg/Odometry`)
 - The preprocessor now produces two explicit views from the synchronized input cloud:
-  - `cloud_in_base`: body-centric view for observability and sector semantics
-  - `cloud_in_odom`: gravity-aligned odom view for mapping, features, and traversability
+  - `cloud_in_base`: body-centric view for observability and sector semantics after body-box noise removal and local crop
+  - `cloud_in_odom`: internal local-map view for mapping, features, and traversability
 - Outputs are:
   - `/terrain_state` (`nav_msgs/msg/OccupancyGrid`)
   - `/terrain_cost` (`nav_msgs/msg/OccupancyGrid`)
@@ -45,8 +45,13 @@ The current implementation already supports:
 `PolarFrontend` keeps body-centric observability semantics separate from odom-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use odom-view samples.
 
 Frame semantics are intentionally split:
-- `odom_frame`: internal gravity-aligned local mapping frame used by `grid_map`, occupancy outputs, and map indexing
+- `odom_frame`: internal local mapping frame used by `grid_map`, occupancy outputs, and map indexing
 - `base_gravity_frame`: robot-centric gravity frame used by debug point clouds; origin is the current robot pose, roll/pitch are removed, yaw is preserved
+
+Preprocessing semantics are intentionally split as well:
+- `preprocess.body_filter.*` is interpreted in `base_link`
+- `map_height_min/max` is interpreted as robot-relative height, matching `base_gravity` z semantics
+- local XY crop is implemented internally against the current local map window
 
 Current debug point semantics:
 - `/terrain_debug/base_gravity_cloud`: full preprocessed algorithm cloud expressed in `base_gravity_frame`
@@ -87,3 +92,8 @@ Config is split across:
 Relevant debug controls:
 - `debug.publish_base_gravity_cloud`: enable publishing the full preprocessed algorithm cloud in `base_gravity_frame`
 - `output.base_gravity_cloud_topic`: topic name for that cloud
+
+Relevant preprocessing controls:
+- `preprocess.body_filter.*`: reject points inside a configured `base_link` box, intended for body-interior noise
+- `preprocess.crop_to_map.enable`: reject points outside the current local map support window
+- `preprocess.crop_to_map.xy_margin`: extra XY padding for the local crop window

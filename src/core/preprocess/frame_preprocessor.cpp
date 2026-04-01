@@ -32,6 +32,32 @@ bool IsFinite(const Point3f &point) {
   return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
 }
 
+bool IsInsideBodyFilter(const Point3f &point, const PreprocessConfig::BodyFilterConfig &config) {
+  return point.x >= config.x_min && point.x <= config.x_max && point.y >= config.y_min &&
+         point.y <= config.y_max && point.z >= config.z_min && point.z <= config.z_max;
+}
+
+bool IsInsideCropWindow(const Eigen::Vector3f &point_in_odom, const Pose3D &base_pose_in_odom,
+                        const Config &config, float voxel_size) {
+  if (!config.preprocess.crop_to_map.enable) {
+    return true;
+  }
+
+  const float xy_margin =
+      std::max(config.preprocess.crop_to_map.xy_margin,
+               std::max(config.map.resolution, voxel_size));
+  const float half_length = 0.5f * config.map.length + xy_margin;
+  const float half_width = 0.5f * config.map.width + xy_margin;
+  const float dx = point_in_odom.x() - base_pose_in_odom.position.x();
+  const float dy = point_in_odom.y() - base_pose_in_odom.position.y();
+  if (std::abs(dx) > half_length || std::abs(dy) > half_width) {
+    return false;
+  }
+
+  const float relative_z = point_in_odom.z() - base_pose_in_odom.position.z();
+  return relative_z >= config.map.height_min && relative_z <= config.map.height_max;
+}
+
 } // namespace
 
 bool FramePreprocessor::process(const FrameInput &input, ProcessedFrame &output) const {
@@ -57,14 +83,18 @@ bool FramePreprocessor::process(const FrameInput &input, ProcessedFrame &output)
     if (!IsFinite(raw_point)) {
       continue;
     }
-    output.cloud_in_base.push_back(raw_point);
-
-    const Eigen::Vector3f body_point(raw_point.x, raw_point.y, raw_point.z);
-    const Eigen::Vector3f odom_point = transform * body_point;
-    if (odom_point.z() < config_.map.height_min || odom_point.z() > config_.map.height_max) {
+    if (config_.preprocess.body_filter.enable &&
+        IsInsideBodyFilter(raw_point, config_.preprocess.body_filter)) {
       continue;
     }
 
+    const Eigen::Vector3f body_point(raw_point.x, raw_point.y, raw_point.z);
+    const Eigen::Vector3f odom_point = transform * body_point;
+    if (!IsInsideCropWindow(odom_point, input.base_pose_in_odom, config_, voxel_size)) {
+      continue;
+    }
+
+    output.cloud_in_base.push_back(raw_point);
     const Point3f point_in_odom{odom_point.x(), odom_point.y(), odom_point.z()};
     if (!config_.preprocess.enable_downsample) {
       output.cloud_in_odom.push_back(point_in_odom);

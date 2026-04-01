@@ -40,8 +40,25 @@ struct PersistenceConfig {
 };
 
 struct PreprocessConfig {
+  struct BodyFilterConfig {
+    bool enable = false;
+    float x_min = -0.4f;
+    float x_max = 0.4f;
+    float y_min = -0.2f;
+    float y_max = 0.2f;
+    float z_min = -0.5f;
+    float z_max = 0.5f;
+  };
+
+  struct CropToMapConfig {
+    bool enable = true;
+    float xy_margin = 0.0f;
+  };
+
   float voxel_size = 0.08f;
   bool enable_downsample = true;
+  BodyFilterConfig body_filter;
+  CropToMapConfig crop_to_map;
 };
 
 struct DebugConfig {

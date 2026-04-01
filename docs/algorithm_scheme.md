@@ -296,8 +296,10 @@ TF：
 
 - 清空输出结构并复制基础位姿
 - 对输入点做有限值检查
+- 在 `base_link` 下按 `preprocess.body_filter.*` 剔除车体内部噪点
 - 由 `base_link` 变换到 `odom`
-- 按高度窗口裁剪
+- 按当前局部地图窗口裁剪
+- 高度窗口按相对当前机器人高度解释，即对应 `base_gravity` 的 z 语义
 - 按配置决定是否做 voxel downsample
 
 当前保留：
@@ -305,6 +307,12 @@ TF：
 - `cloud_in_base`：机体系点
 - `cloud_in_odom`：建图系点
 - `odom_samples`：同时保留 `point_in_base` 和 `point_in_odom`
+
+其中：
+
+- `cloud_in_base` 仍服务于观测性分析，但已经去除了车体包围盒内噪点
+- `cloud_in_odom` 的 XY 裁切依赖内部局部地图窗口
+- `cloud_in_odom` 的 Z 裁切使用 `relative_z = point_in_odom.z - base_pose_in_odom.position.z()`
 
 ### 9.2 `FrameObservabilityEstimator`
 
@@ -520,6 +528,11 @@ TF：
 - `map_height_min`
 - `map_height_max`
 
+说明：
+
+- `map_height_min/max` 表示相对当前机器人高度的窗口，语义对应 `base_gravity` z 轴
+- 当前实现仅把 XY 裁切放在内部 `odom` 局部地图窗口上完成
+
 ### 13.2 几何参数
 
 - `max_support_slope`
@@ -546,7 +559,21 @@ TF：
 - `base_gravity_frame`
 - `body_frame`
 
-### 13.6 下采样参数
+### 13.6 预处理参数
+
+- `preprocess.body_filter.enable`
+- `preprocess.body_filter.x_min`
+- `preprocess.body_filter.x_max`
+- `preprocess.body_filter.y_min`
+- `preprocess.body_filter.y_max`
+- `preprocess.body_filter.z_min`
+- `preprocess.body_filter.z_max`
+- `preprocess.crop_to_map.enable`
+- `preprocess.crop_to_map.xy_margin`
+- `downsample.enable`
+- `downsample.voxel_size`
+
+### 13.7 下采样参数
 
 - `downsample.enable`
 - `downsample.voxel_size`

@@ -40,6 +40,24 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       node.declare_parameter("downsample.enable", config.preprocess.enable_downsample);
   config.preprocess.voxel_size =
       node.declare_parameter("downsample.voxel_size", config.preprocess.voxel_size);
+  config.preprocess.body_filter.enable =
+      node.declare_parameter("preprocess.body_filter.enable", config.preprocess.body_filter.enable);
+  config.preprocess.body_filter.x_min =
+      node.declare_parameter("preprocess.body_filter.x_min", config.preprocess.body_filter.x_min);
+  config.preprocess.body_filter.x_max =
+      node.declare_parameter("preprocess.body_filter.x_max", config.preprocess.body_filter.x_max);
+  config.preprocess.body_filter.y_min =
+      node.declare_parameter("preprocess.body_filter.y_min", config.preprocess.body_filter.y_min);
+  config.preprocess.body_filter.y_max =
+      node.declare_parameter("preprocess.body_filter.y_max", config.preprocess.body_filter.y_max);
+  config.preprocess.body_filter.z_min =
+      node.declare_parameter("preprocess.body_filter.z_min", config.preprocess.body_filter.z_min);
+  config.preprocess.body_filter.z_max =
+      node.declare_parameter("preprocess.body_filter.z_max", config.preprocess.body_filter.z_max);
+  config.preprocess.crop_to_map.enable =
+      node.declare_parameter("preprocess.crop_to_map.enable", config.preprocess.crop_to_map.enable);
+  config.preprocess.crop_to_map.xy_margin = node.declare_parameter(
+      "preprocess.crop_to_map.xy_margin", config.preprocess.crop_to_map.xy_margin);
 
   config.odom_frame = node.declare_parameter("odom_frame", config.odom_frame);
   config.base_gravity_frame =
