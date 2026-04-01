@@ -2,8 +2,11 @@
 
 namespace passable_area::interfaces::ros {
 
-passable_area::core::Config RosParamLoader::load(rclcpp::Node &node) const {
-  passable_area::core::Config config;
+RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
+  RosNodeParams params;
+  auto &config = params.config;
+  auto &topics = params.topics;
+
   config.map.length = node.declare_parameter("map_length", config.map.length);
   config.map.width = node.declare_parameter("map_width", config.map.width);
   config.map.resolution = node.declare_parameter("map_resolution", config.map.resolution);
@@ -47,7 +50,25 @@ passable_area::core::Config RosParamLoader::load(rclcpp::Node &node) const {
       node.declare_parameter("debug.publish_points", config.debug.publish_points);
   config.debug.publish_observability =
       node.declare_parameter("debug.publish_observability", config.debug.publish_observability);
-  return config;
+  topics.input_cloud_topic =
+      node.declare_parameter("input_cloud_topic", topics.input_cloud_topic);
+  topics.odom_topic = node.declare_parameter("odom_topic", topics.odom_topic);
+  topics.sync_queue_size = node.declare_parameter("sync.queue_size", topics.sync_queue_size);
+  topics.terrain_state_topic =
+      node.declare_parameter("output.terrain_state_topic", topics.terrain_state_topic);
+  topics.terrain_cost_topic =
+      node.declare_parameter("output.terrain_cost_topic", topics.terrain_cost_topic);
+  topics.debug_grid_map_topic =
+      node.declare_parameter("output.debug_grid_map_topic", topics.debug_grid_map_topic);
+  topics.support_points_topic =
+      node.declare_parameter("output.support_points_topic", topics.support_points_topic);
+  topics.obstacle_points_topic =
+      node.declare_parameter("output.obstacle_points_topic", topics.obstacle_points_topic);
+  topics.unknown_mask_topic =
+      node.declare_parameter("output.unknown_mask_topic", topics.unknown_mask_topic);
+  topics.observability_topic =
+      node.declare_parameter("output.observability_topic", topics.observability_topic);
+  return params;
 }
 
 } // namespace passable_area::interfaces::ros

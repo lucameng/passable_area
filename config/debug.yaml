@@ -1,5 +1,13 @@
 passable_area:
   ros__parameters:
+    output:
+      terrain_state_topic: "/terrain_state"
+      terrain_cost_topic: "/terrain_cost"
+      debug_grid_map_topic: "/terrain_debug/grid_map"
+      support_points_topic: "/terrain_debug/support_points"
+      obstacle_points_topic: "/terrain_debug/obstacle_points"
+      unknown_mask_topic: "/terrain_debug/unknown_mask"
+      observability_topic: "/terrain_debug/observability"
     debug:
       publish_grid_map: true
       publish_points: true

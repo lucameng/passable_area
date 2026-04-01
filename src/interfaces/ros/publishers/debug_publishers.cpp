@@ -2,15 +2,15 @@
 
 namespace passable_area::interfaces::ros {
 
-void DebugPublishers::initialize(rclcpp::Node &node) {
+void DebugPublishers::initialize(rclcpp::Node &node, const RosTopicConfig &topics) {
   support_points_pub_ = node.create_publisher<sensor_msgs::msg::PointCloud2>(
-      "/terrain_debug/support_points", 10);
+      topics.support_points_topic, 10);
   obstacle_points_pub_ = node.create_publisher<sensor_msgs::msg::PointCloud2>(
-      "/terrain_debug/obstacle_points", 10);
+      topics.obstacle_points_topic, 10);
   unknown_mask_pub_ = node.create_publisher<sensor_msgs::msg::PointCloud2>(
-      "/terrain_debug/unknown_mask", 10);
+      topics.unknown_mask_topic, 10);
   observability_pub_ = node.create_publisher<passable_area::msg::TerrainObservability>(
-      "/terrain_debug/observability", 10);
+      topics.observability_topic, 10);
 }
 
 void DebugPublishers::publish(const passable_area::core::FrameOutput &output,

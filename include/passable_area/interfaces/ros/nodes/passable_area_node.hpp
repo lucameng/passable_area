@@ -32,19 +32,16 @@ private:
   void onSynced(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg,
                 const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg);
 
+  RosNodeParams node_params_;
   passable_area::core::Config config_;
   passable_area::core::Processor processor_;
-  RosParamLoader param_loader_;
+  RosTopicConfig topic_config_;
   PointCloudConverter point_converter_;
   OdomConverter odom_converter_;
   ResultPublishers result_publishers_;
   DebugPublishers debug_publishers_;
   WatchdogManager watchdog_;
   PerfStats perf_stats_;
-
-  std::string input_cloud_topic_;
-  std::string odom_topic_;
-  int sync_queue_size_ = 10;
 
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_;
   message_filters::Subscriber<nav_msgs::msg::Odometry> odom_sub_;

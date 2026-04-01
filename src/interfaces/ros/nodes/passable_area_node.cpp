@@ -5,25 +5,22 @@
 namespace passable_area::interfaces::ros {
 
 PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
-    : Node("passable_area", options), config_(param_loader_.load(*this)), processor_(config_) {
-  input_cloud_topic_ = declare_parameter("input_cloud_topic", std::string("/LOC_BODY_POINTS"));
-  odom_topic_ = declare_parameter("odom_topic", std::string("/ODOM"));
-  sync_queue_size_ = declare_parameter("sync.queue_size", 10);
-
-  result_publishers_.initialize(*this);
-  debug_publishers_.initialize(*this);
-  watchdog_.initialize(*this, input_cloud_topic_, odom_topic_);
+    : Node("passable_area", options), node_params_(RosParamLoader{}.load(*this)),
+      config_(node_params_.config), processor_(config_), topic_config_(node_params_.topics) {
+  result_publishers_.initialize(*this, topic_config_);
+  debug_publishers_.initialize(*this, topic_config_);
+  watchdog_.initialize(*this, topic_config_.input_cloud_topic, topic_config_.odom_topic);
   perf_stats_.initialize(*this);
 
   const auto sensor_qos = rclcpp::SensorDataQoS();
-  cloud_sub_.subscribe(this, input_cloud_topic_, sensor_qos.get_rmw_qos_profile());
-  odom_sub_.subscribe(this, odom_topic_, sensor_qos.get_rmw_qos_profile());
+  cloud_sub_.subscribe(this, topic_config_.input_cloud_topic, sensor_qos.get_rmw_qos_profile());
+  odom_sub_.subscribe(this, topic_config_.odom_topic, sensor_qos.get_rmw_qos_profile());
   cloud_sub_.registerCallback(
       std::bind(&PassableAreaNode::onCloudObserved, this, std::placeholders::_1));
   odom_sub_.registerCallback(
       std::bind(&PassableAreaNode::onOdomObserved, this, std::placeholders::_1));
   sync_ = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(
-      SyncPolicy(sync_queue_size_), cloud_sub_, odom_sub_);
+      SyncPolicy(topic_config_.sync_queue_size), cloud_sub_, odom_sub_);
   sync_->registerCallback(std::bind(&PassableAreaNode::onSynced, this, std::placeholders::_1,
                                     std::placeholders::_2));
 }

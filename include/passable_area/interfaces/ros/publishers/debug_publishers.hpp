@@ -4,6 +4,7 @@
 #include "passable_area/msg/terrain_observability.hpp"
 #include "passable_area/core/types/frame_types.hpp"
 #include "passable_area/interfaces/ros/converters/pointcloud_converter.hpp"
+#include "passable_area/interfaces/ros/params/ros_param_loader.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -12,7 +13,7 @@ namespace passable_area::interfaces::ros {
 
 class DebugPublishers {
 public:
-  void initialize(rclcpp::Node &node);
+  void initialize(rclcpp::Node &node, const RosTopicConfig &topics);
   void publish(const passable_area::core::FrameOutput &output, const std_msgs::msg::Header &header);
 
 private:
