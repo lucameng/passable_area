@@ -156,6 +156,45 @@ FrameInput MakeObstacleColumnFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeDynamicObstacleCellFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {
+      {0.25f, 0.25f, 0.0f},
+      {0.25f, 0.25f, 0.18f},
+      {0.25f, 0.25f, 0.45f},
+  };
+  return input;
+}
+
+FrameInput MakeGroundOnlyCellFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {
+      {0.25f, 0.25f, 0.0f},
+      {0.28f, 0.22f, 0.0f},
+      {0.22f, 0.28f, 0.0f},
+  };
+  return input;
+}
+
+FrameInput MakeRearObstacleCellFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {
+      {-0.8f, 0.8f, 0.0f},
+      {-0.8f, 0.8f, 0.18f},
+      {-0.8f, 0.8f, 0.45f},
+  };
+  return input;
+}
+
 int CellIndex(const passable_area::core::FrameOutput &output, float x, float y) {
   const int col = static_cast<int>(std::floor((x - output.origin.x()) / output.resolution));
   const int row = static_cast<int>(std::floor((y - output.origin.y()) / output.resolution));
@@ -534,4 +573,85 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   }
   EXPECT_NEAR(min_z, 0.0f, 1e-5f);
   EXPECT_NEAR(max_z, 0.30f, 1e-5f);
+}
+
+TEST(ProcessorTest, DynamicObstacleClearsAfterObservedGroundReturns) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.persistence.obstacle_clear_observed_decay = 0.20f;
+  config.persistence.obstacle_clear_partial_decay_scale = 0.35f;
+  config.persistence.obstacle_height_clear_threshold = 0.25f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeDynamicObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeDynamicObstacleCellFrame(100000001)).valid);
+  const auto obstacle_output = processor.update(MakeDynamicObstacleCellFrame(200000001));
+  ASSERT_TRUE(obstacle_output.valid);
+
+  const int cell = CellIndex(obstacle_output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  EXPECT_GT(obstacle_output.obstacle_evidence[cell], 0.25f);
+  ASSERT_TRUE(std::isfinite(obstacle_output.overhead_height[cell]));
+
+  ASSERT_TRUE(processor.update(MakeGroundOnlyCellFrame(300000001)).valid);
+  const auto cleared_output = processor.update(MakeGroundOnlyCellFrame(400000001));
+  ASSERT_TRUE(cleared_output.valid);
+  EXPECT_LE(cleared_output.obstacle_evidence[cell], config.persistence.obstacle_height_clear_threshold);
+  EXPECT_FALSE(std::isfinite(cleared_output.overhead_height[cell]));
+  EXPECT_TRUE(std::isinf(cleared_output.clearance[cell]));
+  EXPECT_NE(cleared_output.passability[cell], static_cast<int8_t>(PassabilityState::kImpassable));
+}
+
+TEST(ProcessorTest, ObstacleNotClearedAggressivelyDuringDropout) {
+  auto config = MakeConfig();
+  config.map.length = 4.0f;
+  config.map.width = 4.0f;
+  config.map.resolution = 0.2f;
+  config.preprocess.enable_downsample = false;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto obstacle_output = processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(obstacle_output.valid);
+  const int cell = CellIndex(obstacle_output, -0.8f, 0.8f);
+  ASSERT_GE(cell, 0);
+  ASSERT_TRUE(std::isfinite(obstacle_output.overhead_height[cell]));
+  const float evidence_before = obstacle_output.obstacle_evidence[cell];
+
+  const auto dropout_output = processor.update(MakeFrontOnlyFrame(300000001));
+  ASSERT_TRUE(dropout_output.valid);
+  EXPECT_TRUE(dropout_output.observability.rear_dropout);
+  EXPECT_GT(dropout_output.obstacle_evidence[cell], config.persistence.obstacle_height_clear_threshold);
+  EXPECT_GT(dropout_output.obstacle_evidence[cell], evidence_before - config.persistence.obstacle_clear_observed_decay);
+  EXPECT_TRUE(std::isfinite(dropout_output.overhead_height[cell]));
+}
+
+TEST(ProcessorTest, StaticLowCeilingStillRemainsImpassable) {
+  auto config = MakeConfig();
+  config.map.length = 4.0f;
+  config.map.width = 4.0f;
+  config.map.resolution = 0.2f;
+  config.preprocess.enable_downsample = false;
+  config.persistence.obstacle_clear_observed_decay = 0.20f;
+  config.persistence.obstacle_clear_partial_decay_scale = 0.35f;
+  config.persistence.obstacle_height_clear_threshold = 0.25f;
+  Processor processor(config);
+
+  passable_area::core::FrameOutput output;
+  for (int i = 0; i < 5; ++i) {
+    output = processor.update(MakeLowCeilingFrame(0.2f, 100000000 * i + 1));
+    ASSERT_TRUE(output.valid);
+  }
+
+  const int center_cell = CellIndex(output, 0.0f, 0.0f);
+  ASSERT_GE(center_cell, 0);
+  EXPECT_TRUE(std::isfinite(output.overhead_height[center_cell]));
+  EXPECT_LT(output.clearance[center_cell], config.geometry.min_clearance);
+  EXPECT_EQ(output.passability[center_cell], static_cast<int8_t>(PassabilityState::kImpassable));
 }

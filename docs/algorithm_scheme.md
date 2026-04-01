@@ -552,6 +552,9 @@ TF：
 ### 13.4 持续性参数
 
 - `support_persistence_frames`
+- `obstacle_clear_observed_decay`
+- `obstacle_clear_partial_decay_scale`
+- `obstacle_height_clear_threshold`
 
 ### 13.5 坐标系参数
 

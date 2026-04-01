@@ -6,6 +6,14 @@
 #include <unordered_set>
 
 namespace passable_area::core {
+namespace {
+
+void ClearObstacleLayer(TerrainLayers &layers, int cell) {
+  layers.overhead_height[cell] = std::numeric_limits<float>::quiet_NaN();
+  layers.overhead_confidence[cell] = 0.0f;
+}
+
+} // namespace
 
 std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
                                                 const FrameObservability &observability,
@@ -90,7 +98,13 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
     }
     if (!touched_obstacle[cell]) {
       float obstacle_decay = 0.0f;
-      if (sector.state == ObservabilityState::kObserved) {
+      const bool support_reobserved = touched_support[cell] != 0U;
+      if (support_reobserved && sector.state == ObservabilityState::kObserved) {
+        obstacle_decay = config_.persistence.obstacle_clear_observed_decay;
+      } else if (support_reobserved && sector.state == ObservabilityState::kPartiallyObserved) {
+        obstacle_decay = config_.persistence.obstacle_clear_observed_decay *
+                         config_.persistence.obstacle_clear_partial_decay_scale;
+      } else if (sector.state == ObservabilityState::kObserved) {
         obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.4f;
       } else if (sector.state == ObservabilityState::kPartiallyObserved) {
         obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.1f;
@@ -99,9 +113,17 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
       }
       layers.obstacle_evidence[cell] =
           std::max(0.0f, layers.obstacle_evidence[cell] - obstacle_decay);
+      if (obstacle_decay > 0.0f) {
+        layers.overhead_confidence[cell] =
+            std::max(0.0f, layers.overhead_confidence[cell] - obstacle_decay);
+      }
     }
 
     if (touched_support[cell]) {
+      if (!touched_obstacle[cell] &&
+          layers.obstacle_evidence[cell] <= config_.persistence.obstacle_height_clear_threshold) {
+        ClearObstacleLayer(layers, cell);
+      }
       continue;
     }
 
@@ -116,9 +138,9 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
                !persistent_allowed) {
       layers.support_state[cell] = static_cast<uint8_t>(SupportState::kNone);
       layers.support_height[cell] = std::numeric_limits<float>::quiet_NaN();
-      layers.overhead_height[cell] = layers.obstacle_evidence[cell] > 0.1f
-                                         ? layers.overhead_height[cell]
-                                         : std::numeric_limits<float>::quiet_NaN();
+      if (layers.obstacle_evidence[cell] <= config_.persistence.obstacle_height_clear_threshold) {
+        ClearObstacleLayer(layers, cell);
+      }
     }
   }
 

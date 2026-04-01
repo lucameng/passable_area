@@ -37,6 +37,9 @@ struct PersistenceConfig {
   float support_confidence_decay = 0.08f;
   float obstacle_evidence_gain = 0.25f;
   float obstacle_evidence_decay = 0.05f;
+  float obstacle_clear_observed_decay = 0.20f;
+  float obstacle_clear_partial_decay_scale = 0.35f;
+  float obstacle_height_clear_threshold = 0.25f;
 };
 
 struct PreprocessConfig {

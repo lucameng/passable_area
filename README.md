@@ -99,3 +99,8 @@ Relevant preprocessing controls:
 - `preprocess.body_filter.*`: reject points inside a configured `base_link` box, intended for body-interior noise
 - `preprocess.crop_to_map.enable`: reject points outside the current local map support window
 - `preprocess.crop_to_map.xy_margin`: extra XY padding for the local crop window
+
+Relevant dynamic-obstacle persistence controls:
+- `obstacle_clear_observed_decay`: faster obstacle evidence decay when ground is re-observed without a new obstacle
+- `obstacle_clear_partial_decay_scale`: scales that faster decay under partially observed sectors
+- `obstacle_height_clear_threshold`: clears `overhead_height` once obstacle evidence has fallen below this threshold

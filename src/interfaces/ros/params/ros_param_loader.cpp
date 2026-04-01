@@ -36,6 +36,12 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
 
   config.persistence.support_persistence_frames = node.declare_parameter(
       "support_persistence_frames", config.persistence.support_persistence_frames);
+  config.persistence.obstacle_clear_observed_decay = node.declare_parameter(
+      "obstacle_clear_observed_decay", config.persistence.obstacle_clear_observed_decay);
+  config.persistence.obstacle_clear_partial_decay_scale = node.declare_parameter(
+      "obstacle_clear_partial_decay_scale", config.persistence.obstacle_clear_partial_decay_scale);
+  config.persistence.obstacle_height_clear_threshold = node.declare_parameter(
+      "obstacle_height_clear_threshold", config.persistence.obstacle_height_clear_threshold);
   config.preprocess.enable_downsample =
       node.declare_parameter("downsample.enable", config.preprocess.enable_downsample);
   config.preprocess.voxel_size =
