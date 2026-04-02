@@ -77,6 +77,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "debug.publish_base_gravity_cloud", config.debug.publish_base_gravity_cloud);
   config.debug.publish_observability =
       node.declare_parameter("debug.publish_observability", config.debug.publish_observability);
+  config.debug.obstacle_points_min_evidence = node.declare_parameter(
+      "debug.obstacle_points_min_evidence", config.debug.obstacle_points_min_evidence);
   topics.input_cloud_topic =
       node.declare_parameter("input_cloud_topic", topics.input_cloud_topic);
   topics.odom_topic = node.declare_parameter("odom_topic", topics.odom_topic);

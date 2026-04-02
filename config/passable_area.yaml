@@ -26,6 +26,9 @@ passable_area:
     base_gravity_frame: "base_gravity"
     body_frame: "base_link"
 
+    debug:
+      obstacle_points_min_evidence: 0.4
+
     downsample:
       enable: true
       voxel_size: 0.05

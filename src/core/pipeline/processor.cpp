@@ -105,7 +105,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
           CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
     }
 
-    if (layers.obstacle_evidence[cell] > 0.2f) {
+    if (layers.obstacle_evidence[cell] >= config_.debug.obstacle_points_min_evidence) {
       output.obstacle_points.push_back(
           CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
     }

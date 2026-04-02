@@ -68,6 +68,7 @@ struct DebugConfig {
   bool publish_points = true;
   bool publish_base_gravity_cloud = false;
   bool publish_observability = true;
+  float obstacle_points_min_evidence = 0.4f;
 };
 
 struct Config {

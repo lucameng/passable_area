@@ -591,6 +591,7 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   config.preprocess.enable_downsample = false;
   config.observability.sector_count = 8;
   config.observability.min_points_per_sector = 1;
+  config.debug.obstacle_points_min_evidence = 0.2f;
   Processor processor(config);
 
   ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(1)).valid);
@@ -608,6 +609,28 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   }
   EXPECT_NEAR(min_z, 0.0f, 1e-5f);
   EXPECT_NEAR(max_z, 0.30f, 1e-5f);
+}
+
+TEST(ProcessorTest, DebugObstaclePointsIgnoreWeakObstacleEvidenceByDefault) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeDynamicObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeDynamicObstacleCellFrame(100000001)).valid);
+  const auto output = processor.update(MakeDynamicObstacleCellFrame(200000001));
+  ASSERT_TRUE(output.valid);
+
+  const int cell = CellIndex(output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  EXPECT_GT(output.obstacle_evidence[cell], 0.25f);
+  EXPECT_LT(output.obstacle_evidence[cell], config.debug.obstacle_points_min_evidence);
+  EXPECT_TRUE(output.obstacle_points.empty());
 }
 
 TEST(ProcessorTest, DynamicObstacleClearsAfterObservedGroundReturns) {
