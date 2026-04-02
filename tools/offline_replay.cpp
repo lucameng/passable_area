@@ -357,20 +357,37 @@ std::string FormatDetectionBox(const passable_area::tools::FalseObstacleDetectio
   return oss.str();
 }
 
+constexpr size_t kCardColumns = 72;
+constexpr size_t kSectionHeaderColumns = kCardColumns + 2;
+
+std::string RepeatGlyph(const std::string &glyph, size_t count) {
+  std::string out;
+  out.reserve(glyph.size() * count);
+  for (size_t i = 0; i < count; ++i) {
+    out += glyph;
+  }
+  return out;
+}
+
 void PrintBanner(const std::string &title, const TerminalStyle &style) {
-  std::cout << Colorize("╔══════════════════════════════════════════════════════════════╗", "\033[36m",
-                        style)
+  std::cout << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m", style)
             << '\n';
   std::cout << Colorize("║ " + title, "\033[1;36m", style) << '\n';
-  std::cout << Colorize("╚══════════════════════════════════════════════════════════════╝", "\033[36m",
-                        style)
+  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
             << '\n';
 }
 
 void PrintSectionHeader(const std::string &title, const TerminalStyle &style) {
+  std::string line = "╭─ " + title + " ";
+  const size_t visible_prefix_columns = 3 + title.size() + 1;
+  if (visible_prefix_columns < kSectionHeaderColumns) {
+    const size_t fill_count = kSectionHeaderColumns - visible_prefix_columns;
+    for (size_t i = 0; i < fill_count; ++i) {
+      line += "─";
+    }
+  }
   std::cout << '\n'
-            << Colorize("╭─ " + title + " ───────────────────────────────────────────────", "\033[36m",
-                        style)
+            << Colorize(line, "\033[36m", style)
             << '\n';
 }
 
@@ -388,15 +405,13 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
   const auto class_label = Colorize(passable_area::tools::ToString(frame.classification),
                                     RootCauseColor(frame.classification).c_str(), style);
   std::cout << '\n'
-            << Colorize("╔══════════════════════════════════════════════════════════════╗", "\033[36m",
-                        style)
+            << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m", style)
             << '\n';
   std::cout << Colorize("║ frame " + std::to_string(rank), "\033[1;36m", style)
             << "  " << class_label
             << "  severity=" << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
             << '\n';
-  std::cout << Colorize("╟──────────────────────────────────────────────────────────────╢", "\033[36m",
-                        style)
+  std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m", style)
             << '\n';
   PrintKeyValueLine("stamp", std::to_string(frame.stamp));
   PrintKeyValueLine("in_box_obstacle_points", std::to_string(frame.in_box_obstacle_point_count));
@@ -432,8 +447,7 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
               << "  clearance: " << FormatFloat(hotspot.clearance)
               << "  support_continuity: " << FormatFloat(hotspot.support_continuity) << '\n';
   }
-  std::cout << Colorize("╚══════════════════════════════════════════════════════════════╝", "\033[36m",
-                        style)
+  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
             << '\n';
 }
 
@@ -475,13 +489,11 @@ void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSumma
 
   PrintSectionHeader("Ranked Frames", style);
   if (summary.ranked_frames.empty()) {
-    std::cout << Colorize("╭──────────────────────────────────────────────────────────────╮", "\033[32m",
-                          style)
+    std::cout << Colorize("╭" + RepeatGlyph("─", kCardColumns) + "╮", "\033[32m", style)
               << '\n';
     std::cout << Colorize("│ No Candidate Frames", "\033[1;32m", style) << '\n';
     std::cout << "  no obstacle_points were found inside the detection box\n";
-    std::cout << Colorize("╰──────────────────────────────────────────────────────────────╯", "\033[32m",
-                          style)
+    std::cout << Colorize("╰" + RepeatGlyph("─", kCardColumns) + "╯", "\033[32m", style)
               << '\n';
     return;
   }
