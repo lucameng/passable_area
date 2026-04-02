@@ -21,6 +21,7 @@
 #include <map>
 #include <numeric>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -297,89 +298,194 @@ struct FalseObstacleReplayArgs {
   std::string params_file;
   passable_area::tools::FalseObstacleAnalyzerConfig analyzer_config;
   int top_k = 10;
+  bool use_color = true;
 };
 
-void PrintDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
-  std::cout << "\ndetection_box: "
-            << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max
-            << "] y[" << box.y_min << ", " << box.y_max << "]\n";
+struct TerminalStyle {
+  bool use_color = true;
+};
+
+std::string Colorize(const std::string &text, const char *ansi_code, const TerminalStyle &style) {
+  if (!style.use_color) {
+    return text;
+  }
+  return std::string(ansi_code) + text + "\033[0m";
+}
+
+std::string RootCauseColor(passable_area::tools::FalseObstacleRootCause cause) {
+  switch (cause) {
+    case passable_area::tools::FalseObstacleRootCause::kClearanceDriven:
+      return "\033[33m";
+    case passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven:
+      return "\033[31m";
+    case passable_area::tools::FalseObstacleRootCause::kObstacleEvidencePlusLowContinuity:
+      return "\033[35m";
+    case passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced:
+      return "\033[34m";
+    case passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed:
+      return "\033[37m";
+  }
+  return "\033[37m";
+}
+
+std::string ObservabilityColor(passable_area::core::ObservabilityState state) {
+  switch (state) {
+    case passable_area::core::ObservabilityState::kObserved:
+      return "\033[32m";
+    case passable_area::core::ObservabilityState::kPartiallyObserved:
+      return "\033[33m";
+    case passable_area::core::ObservabilityState::kMissingByDropout:
+      return "\033[31m";
+  }
+  return "\033[37m";
+}
+
+std::string BoolBadge(bool value, const TerminalStyle &style) {
+  return Colorize(value ? "true" : "false", value ? "\033[32m" : "\033[90m", style);
+}
+
+std::string FormatFloat(double value, int precision = 2) {
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(precision) << value;
+  return oss.str();
+}
+
+std::string FormatDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
+  std::ostringstream oss;
+  oss << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max << "] y["
+      << box.y_min << ", " << box.y_max << "]";
+  return oss.str();
+}
+
+void PrintBanner(const std::string &title, const TerminalStyle &style) {
+  std::cout << Colorize("╔══════════════════════════════════════════════════════════════╗", "\033[36m",
+                        style)
+            << '\n';
+  std::cout << Colorize("║ " + title, "\033[1;36m", style) << '\n';
+  std::cout << Colorize("╚══════════════════════════════════════════════════════════════╝", "\033[36m",
+                        style)
+            << '\n';
+}
+
+void PrintSectionHeader(const std::string &title, const TerminalStyle &style) {
+  std::cout << '\n'
+            << Colorize("╭─ " + title + " ───────────────────────────────────────────────", "\033[36m",
+                        style)
+            << '\n';
+}
+
+void PrintKeyValueLine(const std::string &label, const std::string &value) {
+  std::cout << "  " << label << ": " << value << '\n';
+}
+
+void PrintDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box,
+                       const TerminalStyle &style) {
+  PrintKeyValueLine("detection_box", Colorize(FormatDetectionBox(box), "\033[36m", style));
 }
 
 void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnalysis &frame,
-                             int rank) {
-  std::cout << "\nframe " << rank << '\n';
-  std::cout << "  stamp: " << frame.stamp << '\n';
-  std::cout << "  class: " << passable_area::tools::ToString(frame.classification) << '\n';
-  std::cout << "  severity: " << std::fixed << std::setprecision(2) << frame.severity << '\n';
-  std::cout << "  in_box_obstacle_points: " << frame.in_box_obstacle_point_count << '\n';
-  std::cout << "  hotspot_count: " << frame.hotspots.size() << '\n';
-  std::cout << "  frame_partial: " << std::boolalpha << frame.frame_partial << '\n';
-  std::cout << "  rear_dropout: " << std::boolalpha << frame.rear_dropout << '\n';
-  std::cout << "  max_obstacle_evidence: " << std::fixed << std::setprecision(2)
-            << frame.max_local_obstacle_evidence << '\n';
-  std::cout << "  min_clearance: " << std::fixed << std::setprecision(2)
-            << frame.min_local_clearance << '\n';
-  std::cout << "  min_support_continuity: " << std::fixed << std::setprecision(2)
-            << frame.min_local_support_continuity << '\n';
+                             int rank, const TerminalStyle &style) {
+  const auto class_label = Colorize(passable_area::tools::ToString(frame.classification),
+                                    RootCauseColor(frame.classification).c_str(), style);
+  std::cout << '\n'
+            << Colorize("╔══════════════════════════════════════════════════════════════╗", "\033[36m",
+                        style)
+            << '\n';
+  std::cout << Colorize("║ frame " + std::to_string(rank), "\033[1;36m", style)
+            << "  " << class_label
+            << "  severity=" << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
+            << '\n';
+  std::cout << Colorize("╟──────────────────────────────────────────────────────────────╢", "\033[36m",
+                        style)
+            << '\n';
+  PrintKeyValueLine("stamp", std::to_string(frame.stamp));
+  PrintKeyValueLine("in_box_obstacle_points", std::to_string(frame.in_box_obstacle_point_count));
+  PrintKeyValueLine("hotspot_count", std::to_string(frame.hotspots.size()));
+  PrintKeyValueLine("frame_partial", BoolBadge(frame.frame_partial, style));
+  PrintKeyValueLine("rear_dropout", BoolBadge(frame.rear_dropout, style));
+  PrintKeyValueLine("max_obstacle_evidence", FormatFloat(frame.max_local_obstacle_evidence));
+  PrintKeyValueLine("min_clearance", FormatFloat(frame.min_local_clearance));
+  PrintKeyValueLine("min_support_continuity", FormatFloat(frame.min_local_support_continuity));
 
   for (size_t i = 0; i < frame.hotspots.size(); ++i) {
     const auto &hotspot = frame.hotspots[i];
-    std::cout << "  hotspot " << (i + 1) << '\n';
-    std::cout << "    pos: (" << std::fixed << std::setprecision(2) << hotspot.x << ", "
-              << hotspot.y << ")"
-              << "  obstacle_points: " << hotspot.obstacle_point_count
-              << "  severity: " << hotspot.severity << '\n';
-    std::cout << "    class: " << passable_area::tools::ToString(hotspot.classification)
-              << "  observability: ";
-    if (hotspot.has_observability) {
-      std::cout << passable_area::tools::ToString(hotspot.observability_state);
-    } else {
-      std::cout << "Unavailable";
-    }
-    std::cout << "  explanation: " << hotspot.explanation << '\n';
-    std::cout << "    obstacle_evidence: " << std::fixed << std::setprecision(2)
-              << hotspot.obstacle_evidence
-              << "  clearance: " << hotspot.clearance
-              << "  support_continuity: " << hotspot.support_continuity << '\n';
+    const std::string hotspot_class =
+        Colorize(passable_area::tools::ToString(hotspot.classification),
+                 RootCauseColor(hotspot.classification).c_str(), style);
+    const std::string observability = hotspot.has_observability
+                                          ? Colorize(passable_area::tools::ToString(
+                                                         hotspot.observability_state),
+                                                     ObservabilityColor(hotspot.observability_state)
+                                                         .c_str(),
+                                                     style)
+                                          : "Unavailable";
+    std::cout << "  "
+              << Colorize("• hotspot " + std::to_string(i + 1), "\033[1;35m", style) << '\n';
+    std::cout << "    pos: (" << FormatFloat(hotspot.x) << ", " << FormatFloat(hotspot.y)
+              << ")  obstacle_points: " << hotspot.obstacle_point_count
+              << "  severity: " << Colorize(FormatFloat(hotspot.severity), "\033[1;33m", style)
+              << '\n';
+    std::cout << "    class: " << hotspot_class << "  observability: " << observability
+              << '\n';
+    std::cout << "    why: " << Colorize(hotspot.explanation, "\033[1;37m", style) << '\n';
+    std::cout << "    obstacle_evidence: " << FormatFloat(hotspot.obstacle_evidence)
+              << "  clearance: " << FormatFloat(hotspot.clearance)
+              << "  support_continuity: " << FormatFloat(hotspot.support_continuity) << '\n';
   }
+  std::cout << Colorize("╚══════════════════════════════════════════════════════════════╝", "\033[36m",
+                        style)
+            << '\n';
 }
 
 void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSummary &summary,
-                               const std::string &bag_path) {
-  std::cout << "false_obstacle_summary bag=" << bag_path << '\n';
-  PrintDetectionBox(summary.detection_box);
+                               const std::string &bag_path, const std::string &params_file,
+                               int top_k, const TerminalStyle &style) {
+  PrintBanner("False Obstacle Offline Analysis", style);
+  PrintSectionHeader("Run", style);
+  PrintKeyValueLine("bag", bag_path);
+  PrintKeyValueLine("params_file", params_file);
+  PrintDetectionBox(summary.detection_box, style);
+  PrintKeyValueLine("top_k", std::to_string(top_k));
+
   const double candidate_ratio =
       summary.total_frames > 0
           ? static_cast<double>(summary.candidate_frames) / static_cast<double>(summary.total_frames)
           : 0.0;
-  std::cout << "total_frames: " << summary.total_frames
-            << "  candidate_frames: " << summary.candidate_frames
-            << "  candidate_ratio: " << std::fixed << std::setprecision(3) << candidate_ratio
-            << "  longest_consecutive_run: " << summary.longest_consecutive_candidate_run << '\n';
-  std::cout << "root_causes:\n";
-  std::cout << "  ClearanceDriven: "
-            << summary.root_cause_counts[static_cast<int>(
-                   passable_area::tools::FalseObstacleRootCause::kClearanceDriven)]
-            << '\n';
-  std::cout << "  ObstacleEvidenceDriven: "
-            << summary.root_cause_counts[static_cast<int>(
-                   passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven)]
-            << '\n';
-  std::cout << "  ObstacleEvidencePlusLowContinuity: "
-            << summary.root_cause_counts[static_cast<int>(passable_area::tools::FalseObstacleRootCause::
-                                                              kObstacleEvidencePlusLowContinuity)]
-            << '\n';
-  std::cout << "  ObservabilityInfluenced: "
-            << summary.root_cause_counts[static_cast<int>(
-                   passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced)]
-            << '\n';
-  std::cout << "  UnknownOrMixed: "
-            << summary.root_cause_counts[static_cast<int>(
-                   passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed)]
-            << '\n';
-  std::cout << "\nranked_frames:\n";
+  PrintSectionHeader("Summary", style);
+  PrintKeyValueLine("total_frames", std::to_string(summary.total_frames));
+  PrintKeyValueLine("candidate_frames",
+                    Colorize(std::to_string(summary.candidate_frames),
+                             summary.candidate_frames > 0 ? "\033[1;31m" : "\033[1;32m", style));
+  PrintKeyValueLine("candidate_ratio", FormatFloat(candidate_ratio, 3));
+  PrintKeyValueLine("longest_consecutive_run",
+                    std::to_string(summary.longest_consecutive_candidate_run));
+
+  PrintSectionHeader("Root Causes", style);
+  const auto print_root_cause = [&](passable_area::tools::FalseObstacleRootCause cause) {
+    const std::string label = passable_area::tools::ToString(cause);
+    const std::string value = std::to_string(summary.root_cause_counts[static_cast<int>(cause)]);
+    PrintKeyValueLine(Colorize(label, RootCauseColor(cause).c_str(), style), value);
+  };
+  print_root_cause(passable_area::tools::FalseObstacleRootCause::kClearanceDriven);
+  print_root_cause(passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven);
+  print_root_cause(passable_area::tools::FalseObstacleRootCause::kObstacleEvidencePlusLowContinuity);
+  print_root_cause(passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced);
+  print_root_cause(passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed);
+
+  PrintSectionHeader("Ranked Frames", style);
+  if (summary.ranked_frames.empty()) {
+    std::cout << Colorize("╭──────────────────────────────────────────────────────────────╮", "\033[32m",
+                          style)
+              << '\n';
+    std::cout << Colorize("│ No Candidate Frames", "\033[1;32m", style) << '\n';
+    std::cout << "  no obstacle_points were found inside the detection box\n";
+    std::cout << Colorize("╰──────────────────────────────────────────────────────────────╯", "\033[32m",
+                          style)
+              << '\n';
+    return;
+  }
   for (size_t i = 0; i < summary.ranked_frames.size(); ++i) {
-    PrintFalseObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1));
+    PrintFalseObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1), style);
   }
 }
 
@@ -433,6 +539,7 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   FalseObstacleReplayArgs replay_args;
   replay_args.bag_path = *bag_path;
   replay_args.params_file = params_file;
+  replay_args.use_color = !HasFlag(args, "--no-color");
   replay_args.analyzer_config.detection_box = passable_area::tools::FalseObstacleDetectionBox{
       *range_x_min, *range_x_max, *range_y_min, *range_y_max};
   if (const auto top_k = ParseIntFlagValue(args, "--top-k")) {
@@ -553,11 +660,6 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     return std::nullopt;
   }
 
-  std::cout << "false_obstacle_analysis bag=" << args.bag_path << '\n';
-  std::cout << "params_file=" << args.params_file << '\n';
-  PrintDetectionBox(args.analyzer_config.detection_box);
-  std::cout << "top_k=" << args.top_k << '\n';
-
   const auto config = LoadConfigFromParamsFile(args.params_file);
   if (!config) {
     return std::nullopt;
@@ -645,7 +747,8 @@ int main(int argc, char **argv) {
       rclcpp::shutdown();
       return 1;
     }
-    PrintFalseObstacleSummary(*summary, replay_args->bag_path);
+    PrintFalseObstacleSummary(*summary, replay_args->bag_path, replay_args->params_file,
+                              replay_args->top_k, TerminalStyle{replay_args->use_color});
     rclcpp::shutdown();
     return 0;
   }
