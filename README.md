@@ -74,6 +74,8 @@ Current debug point semantics:
 - `src/interfaces/ros`: ROS integration
 - `msg/TerrainObservability.msg`: observability debug contract
 - `test/core`: gtests for processor behavior
+- `config/offline_benchmark_bags.yaml`: batch false-obstacle benchmark manifest
+- workspace-level `scripts/passable_obstacle_benchmark.sh`: runs the manifest bags and writes a timestamped Markdown summary under the workspace root
 
 ## Build and test
 From the workspace root:

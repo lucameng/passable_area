@@ -1,0 +1,22 @@
+bags_root: /home/deep/deeprobotics/bags/offline_bags
+
+defaults:
+  range_x_min: 0.0
+  range_x_max: 1.4
+  range_y_min: -0.25
+  range_y_max: 0.25
+  top_k: 1
+  max_suspicious_frames: 0
+
+bags:
+  - name: rosbag2_mtbf_down_up_slope
+    dir_name: rosbag2_mtbf_down_up_slope
+
+  - name: rosbag2_mtbf_long_corridor
+    dir_name: rosbag2_mtbf_long_corridor
+
+  - name: rosbag2_mtbf_upstair_and_downslope
+    dir_name: rosbag2_mtbf_upstair_and_downslope
+
+  - name: rosbag2_mtbf_upstair_and_downslope_2
+    dir_name: rosbag2_mtbf_upstair_and_downslope_2
