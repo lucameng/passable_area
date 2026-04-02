@@ -55,6 +55,7 @@ struct FalseObstacleHotspot {
 
 struct FalseObstacleFrameAnalysis {
   passable_area::core::Timestamp stamp = 0;
+  double start_offset_sec = 0.0;
   int in_box_obstacle_point_count = 0;
   float severity = 0.0f;
   FalseObstacleRootCause classification = FalseObstacleRootCause::kUnknownOrMixed;

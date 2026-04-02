@@ -414,6 +414,7 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
   std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m", style)
             << '\n';
   PrintKeyValueLine("stamp", std::to_string(frame.stamp));
+  PrintKeyValueLine("start_offset", FormatFloat(frame.start_offset_sec, 3) + " s");
   PrintKeyValueLine("in_box_obstacle_points", std::to_string(frame.in_box_obstacle_point_count));
   PrintKeyValueLine("hotspot_count", std::to_string(frame.hotspots.size()));
   PrintKeyValueLine("frame_partial", BoolBadge(frame.frame_partial, style));
@@ -685,14 +686,23 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
   rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
   rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
   std::map<int64_t, sensor_msgs::msg::PointCloud2> clouds;
+  std::map<int64_t, int64_t> cloud_bag_times;
   std::map<int64_t, nav_msgs::msg::Odometry> odoms;
+  std::optional<int64_t> bag_start_time;
   while (reader.has_next()) {
     auto bag_msg = reader.read_next();
+    if (!bag_start_time.has_value()) {
+      bag_start_time = bag_msg->time_stamp;
+    } else {
+      bag_start_time = std::min(*bag_start_time, bag_msg->time_stamp);
+    }
     rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
     if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
       sensor_msgs::msg::PointCloud2 cloud_msg;
       cloud_ser.deserialize_message(&serialized, &cloud_msg);
-      clouds.emplace(rclcpp::Time(cloud_msg.header.stamp).nanoseconds(), std::move(cloud_msg));
+      const int64_t stamp = rclcpp::Time(cloud_msg.header.stamp).nanoseconds();
+      clouds.emplace(stamp, std::move(cloud_msg));
+      cloud_bag_times.emplace(stamp, bag_msg->time_stamp);
     } else if (bag_msg->topic_name == "/ODOM") {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
@@ -736,7 +746,13 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     }
     const auto analysis = analyzer.analyzeFrame(output);
     if (analysis) {
-      candidate_frames.push_back(*analysis);
+      auto frame_analysis = *analysis;
+      const auto bag_time_it = cloud_bag_times.find(stamp);
+      if (bag_start_time.has_value() && bag_time_it != cloud_bag_times.end()) {
+        frame_analysis.start_offset_sec =
+            static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
+      }
+      candidate_frames.push_back(std::move(frame_analysis));
       ++current_candidate_run;
       longest_candidate_run = std::max(longest_candidate_run, current_candidate_run);
     } else {
