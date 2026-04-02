@@ -3,8 +3,8 @@ passable_area:
     map_length: 8.0
     map_width: 8.0
     map_resolution: 0.1
-    map_height_min: -1.0
-    map_height_max: 0.8
+    map_height_min: -1.5
+    map_height_max: 1.0
 
     max_support_slope: 28.0
     max_step_up: 0.28
@@ -33,11 +33,11 @@ passable_area:
     preprocess:
       body_filter:
         enable: true
-        x_min: -0.4
-        x_max: 0.4
-        y_min: -0.2
-        y_max: 0.2
-        z_min: -0.5
+        x_min: -0.5
+        x_max: 0.5
+        y_min: -0.3
+        y_max: 0.3
+        z_min: -0.8
         z_max: 0.5
       crop_to_map:
         enable: true
