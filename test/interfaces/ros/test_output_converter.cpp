@@ -148,3 +148,28 @@ TEST(OutputConverterTest, GridMapAndOccupancyOutputsStayAligned) {
   EXPECT_FLOAT_EQ(grid_map.atPosition("passability", grid_map::Position(0.0, 0.0)),
                   static_cast<float>(static_cast<int8_t>(PassabilityState::kPassable)));
 }
+
+TEST(OutputConverterTest, GridMapUsesSameRobotCentricDirectionAsOccupancyOutputs) {
+  OutputConverter converter;
+  auto output = MakeOutput();
+
+  const int forward_index = 2 * output.cols + 1; // odom/base_gravity (0, 1)
+  output.passability[forward_index] = static_cast<int8_t>(PassabilityState::kImpassable);
+  output.support_height[forward_index] = 3.0f;
+
+  std_msgs::msg::Header header;
+  header.frame_id = "base_gravity";
+
+  const auto terrain_state = converter.toTerrainState(output, header);
+  const auto grid_map_msg = converter.toGridMap(output, header);
+  const auto grid_map = ToGridMap(grid_map_msg);
+
+  const int forward_target_index = IndexForCellCenter(terrain_state, 0.0f, 1.0f);
+  ASSERT_GE(forward_target_index, 0);
+  ASSERT_LT(forward_target_index, static_cast<int>(terrain_state.data.size()));
+  EXPECT_EQ(terrain_state.data[forward_target_index],
+            static_cast<int8_t>(PassabilityState::kImpassable));
+  EXPECT_FLOAT_EQ(grid_map.atPosition("passability", grid_map::Position(0.0, 1.0)),
+                  static_cast<float>(static_cast<int8_t>(PassabilityState::kImpassable)));
+  EXPECT_FLOAT_EQ(grid_map.atPosition("support_height", grid_map::Position(0.0, 1.0)), 3.0f);
+}

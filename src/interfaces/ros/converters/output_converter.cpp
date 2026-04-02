@@ -91,15 +91,16 @@ nav_msgs::msg::OccupancyGrid CreateGrid(const RobotCentricGeometry &geometry,
   return msg;
 }
 
-void AddLayer(grid_map::GridMap &map, const std::string &name, const std::vector<float> &values,
-              int rows, int cols) {
-  grid_map::Matrix matrix(rows, cols);
-  for (int row = 0; row < rows; ++row) {
-    for (int col = 0; col < cols; ++col) {
-      matrix(row, col) = values[row * cols + col];
+void AddLayer(grid_map::GridMap &map, const std::string &name, const RobotCentricGeometry &geometry,
+              const std::vector<float> &values) {
+  map.add(name);
+  for (int row = 0; row < geometry.rows; ++row) {
+    for (int col = 0; col < geometry.cols; ++col) {
+      const auto position = CellCenter(geometry, row, col);
+      map.atPosition(name, grid_map::Position(position.x(), position.y())) =
+          values[row * geometry.cols + col];
     }
   }
-  map.add(name, matrix);
 }
 
 } // namespace
@@ -131,43 +132,32 @@ grid_map_msgs::msg::GridMap OutputConverter::toGridMap(
                          "passability"});
   map.setFrameId(header.frame_id);
   map.setGeometry(geometry.length, geometry.resolution, geometry.center);
-  AddLayer(map, "support_height",
+  AddLayer(map, "support_height", geometry,
            ResampleLayer(output, geometry, output.support_height,
-                         std::numeric_limits<float>::quiet_NaN()),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "support_confidence",
-           ResampleLayer(output, geometry, output.support_confidence, 0.0f),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "overhead_height",
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "support_confidence", geometry,
+           ResampleLayer(output, geometry, output.support_confidence, 0.0f));
+  AddLayer(map, "overhead_height", geometry,
            ResampleLayer(output, geometry, output.overhead_height,
-                         std::numeric_limits<float>::quiet_NaN()),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "obstacle_evidence",
-           ResampleLayer(output, geometry, output.obstacle_evidence, 0.0f),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "coverage_confidence",
-           ResampleLayer(output, geometry, output.coverage_confidence, 0.0f),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "slope", ResampleLayer(output, geometry, output.slope, 0.0f), geometry.rows,
-           geometry.cols);
-  AddLayer(map, "step_up", ResampleLayer(output, geometry, output.step_up, 0.0f), geometry.rows,
-           geometry.cols);
-  AddLayer(map, "step_down", ResampleLayer(output, geometry, output.step_down, 0.0f),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "roughness", ResampleLayer(output, geometry, output.roughness, 0.0f),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "clearance",
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "obstacle_evidence", geometry,
+           ResampleLayer(output, geometry, output.obstacle_evidence, 0.0f));
+  AddLayer(map, "coverage_confidence", geometry,
+           ResampleLayer(output, geometry, output.coverage_confidence, 0.0f));
+  AddLayer(map, "slope", geometry, ResampleLayer(output, geometry, output.slope, 0.0f));
+  AddLayer(map, "step_up", geometry, ResampleLayer(output, geometry, output.step_up, 0.0f));
+  AddLayer(map, "step_down", geometry, ResampleLayer(output, geometry, output.step_down, 0.0f));
+  AddLayer(map, "roughness", geometry, ResampleLayer(output, geometry, output.roughness, 0.0f));
+  AddLayer(map, "clearance", geometry,
            ResampleLayer(output, geometry, output.clearance,
-                         std::numeric_limits<float>::quiet_NaN()),
-           geometry.rows, geometry.cols);
-  AddLayer(map, "support_continuity",
-           ResampleLayer(output, geometry, output.support_continuity, 0.0f),
-           geometry.rows, geometry.cols);
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "support_continuity", geometry,
+           ResampleLayer(output, geometry, output.support_continuity, 0.0f));
 
   const auto passability =
       ResampleLayer(output, geometry, output.passability, static_cast<int8_t>(-1));
   std::vector<float> passability_float(passability.begin(), passability.end());
-  AddLayer(map, "passability", passability_float, geometry.rows, geometry.cols);
+  AddLayer(map, "passability", geometry, passability_float);
 
   auto msg = grid_map::GridMapRosConverter::toMessage(map);
   (void)header;
