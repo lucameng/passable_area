@@ -1,5 +1,6 @@
 #include "passable_area/interfaces/ros/converters/odom_converter.hpp"
 #include "passable_area/interfaces/ros/converters/pointcloud_converter.hpp"
+#include "passable_area/interfaces/ros/params/ros_param_loader.hpp"
 #include "passable_area/passable_area.hpp"
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
 
@@ -29,6 +30,10 @@ using passable_area::core::FrameInput;
 using passable_area::core::FrameOutput;
 using passable_area::core::ObservabilityState;
 using passable_area::core::PassabilityState;
+
+std::string DefaultParamsFile();
+std::optional<passable_area::core::Config> LoadConfigFromParamsFile(
+    const std::string &params_file);
 
 passable_area::core::Config MakeConfig() {
   passable_area::core::Config config;
@@ -289,6 +294,7 @@ struct BagReplaySummary {
 
 struct FalseObstacleReplayArgs {
   std::string bag_path;
+  std::string params_file;
   passable_area::tools::FalseObstacleAnalyzerConfig analyzer_config;
   int top_k = 10;
 };
@@ -400,6 +406,8 @@ std::optional<std::string> ParseStringFlagValue(const std::vector<std::string> &
 std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
     const std::vector<std::string> &args) {
   const auto bag_path = ParseStringFlagValue(args, "--bag");
+  const std::string params_file =
+      ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
   const auto range_x_min = ParseFloatFlagValue(args, "--range-x-min");
   const auto range_x_max = ParseFloatFlagValue(args, "--range-x-max");
   const auto range_y_min = ParseFloatFlagValue(args, "--range-y-min");
@@ -412,6 +420,7 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
 
   FalseObstacleReplayArgs replay_args;
   replay_args.bag_path = *bag_path;
+  replay_args.params_file = params_file;
   replay_args.analyzer_config.detection_box = passable_area::tools::FalseObstacleDetectionBox{
       *range_x_min, *range_x_max, *range_y_min, *range_y_max};
   if (const auto top_k = ParseIntFlagValue(args, "--top-k")) {
@@ -434,7 +443,8 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   return replay_args;
 }
 
-std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
+std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
+                                             const passable_area::core::Config &config) {
   if (!std::filesystem::exists(bag_path)) {
     std::cerr << "bag path does not exist: " << bag_path << '\n';
     return std::nullopt;
@@ -448,7 +458,6 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
   std::map<int64_t, nav_msgs::msg::Odometry> odoms;
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
-  const auto config = MakeConfig();
   passable_area::core::Processor processor(config);
   BagReplaySummary summary;
 
@@ -509,6 +518,22 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
   return summary;
 }
 
+std::string DefaultParamsFile() {
+  return "/home/deep/deeprobotics/passable_humble_ws/src/passable_area/config/passable_area.yaml";
+}
+
+std::optional<passable_area::core::Config> LoadConfigFromParamsFile(const std::string &params_file) {
+  if (!std::filesystem::exists(params_file)) {
+    std::cerr << "params file does not exist: " << params_file << '\n';
+    return std::nullopt;
+  }
+
+  rclcpp::NodeOptions options;
+  options.arguments({"--ros-args", "--params-file", params_file});
+  auto node = std::make_shared<rclcpp::Node>("passable_area", options);
+  return passable_area::interfaces::ros::RosParamLoader{}.load(*node).config;
+}
+
 std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleReplay(
     const FalseObstacleReplayArgs &args) {
   if (!std::filesystem::exists(args.bag_path)) {
@@ -517,8 +542,14 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
   }
 
   std::cout << "false_obstacle_analysis bag=" << args.bag_path << '\n';
+  std::cout << "params_file=" << args.params_file << '\n';
   PrintDetectionBox(args.analyzer_config.detection_box);
   std::cout << "top_k=" << args.top_k << '\n';
+
+  const auto config = LoadConfigFromParamsFile(args.params_file);
+  if (!config) {
+    return std::nullopt;
+  }
 
   rosbag2_cpp::Reader reader;
   reader.open(args.bag_path);
@@ -543,9 +574,8 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
 
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
-  const auto config = MakeConfig();
-  passable_area::core::Processor processor(config);
-  passable_area::tools::FalseObstacleAnalyzer analyzer(config, args.analyzer_config);
+  passable_area::core::Processor processor(*config);
+  passable_area::tools::FalseObstacleAnalyzer analyzer(*config, args.analyzer_config);
 
   int total_frames = 0;
   int current_candidate_run = 0;
@@ -609,12 +639,20 @@ int main(int argc, char **argv) {
   }
 
   if (args.size() >= 2 && args[0] == "--bag") {
-    const auto summary = RunBagReplay(args[1]);
+    const std::string params_file =
+        ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
+    const auto config = LoadConfigFromParamsFile(params_file);
+    if (!config) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    const auto summary = RunBagReplay(args[1], *config);
     if (!summary) {
       rclcpp::shutdown();
       return 1;
     }
-    std::cout << "bag=" << args[1] << " paired_frames=" << summary->paired_frames
+    std::cout << "bag=" << args[1] << " params_file=" << params_file
+              << " paired_frames=" << summary->paired_frames
               << " rear_dropout_frames=" << summary->rear_dropout_frames
               << " max_missing_sectors=" << summary->max_missing_sectors
               << " avg_unknown_ratio=" << std::fixed << std::setprecision(3)

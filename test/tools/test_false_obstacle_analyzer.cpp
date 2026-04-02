@@ -24,7 +24,7 @@ Config MakeConfig() {
 
 FalseObstacleAnalyzerConfig MakeAnalyzerConfig() {
   FalseObstacleAnalyzerConfig config;
-  config.detection_box = FalseObstacleDetectionBox{0.5f, 0.5f, -0.5f, 0.5f};
+  config.detection_box = FalseObstacleDetectionBox{-0.5f, 0.5f, -0.5f, 0.5f};
   config.hotspot_bin_size = 0.1f;
   return config;
 }
