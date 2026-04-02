@@ -153,7 +153,7 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
 }
 
 FalseObstacleBagSummary FalseObstacleAnalyzer::buildSummary(
-    int total_frames, int longest_consecutive_candidate_run,
+    int total_frames, int rear_dropout_frames, int longest_consecutive_candidate_run,
     std::vector<FalseObstacleFrameAnalysis> candidate_frames, int top_k) const {
   const int total_candidate_frames = static_cast<int>(candidate_frames.size());
   std::array<int, 5> root_cause_counts = {0, 0, 0, 0, 0};
@@ -171,6 +171,7 @@ FalseObstacleBagSummary FalseObstacleAnalyzer::buildSummary(
   summary.detection_box = analysis_config_.detection_box;
   summary.total_frames = total_frames;
   summary.candidate_frames = total_candidate_frames;
+  summary.rear_dropout_frames = rear_dropout_frames;
   summary.longest_consecutive_candidate_run = longest_consecutive_candidate_run;
   summary.root_cause_counts = root_cause_counts;
   summary.ranked_frames = std::move(candidate_frames);

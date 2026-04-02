@@ -68,6 +68,7 @@ struct FalseObstacleBagSummary {
   FalseObstacleDetectionBox detection_box;
   int total_frames = 0;
   int candidate_frames = 0;
+  int rear_dropout_frames = 0;
   int longest_consecutive_candidate_run = 0;
   std::array<int, 5> root_cause_counts = {0, 0, 0, 0, 0};
   std::vector<FalseObstacleFrameAnalysis> ranked_frames;
@@ -82,7 +83,7 @@ public:
       const passable_area::core::FrameOutput &output) const;
 
   FalseObstacleBagSummary buildSummary(
-      int total_frames, int longest_consecutive_candidate_run,
+      int total_frames, int rear_dropout_frames, int longest_consecutive_candidate_run,
       std::vector<FalseObstacleFrameAnalysis> candidate_frames, int top_k) const;
 
   const FalseObstacleAnalyzerConfig &analysisConfig() const { return analysis_config_; }

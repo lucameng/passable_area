@@ -453,10 +453,11 @@ void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSumma
           : 0.0;
   PrintSectionHeader("Summary", style);
   PrintKeyValueLine("total_frames", std::to_string(summary.total_frames));
-  PrintKeyValueLine("candidate_frames",
+  PrintKeyValueLine("rear_dropout_frames", std::to_string(summary.rear_dropout_frames));
+  PrintKeyValueLine("suspicious_frames",
                     Colorize(std::to_string(summary.candidate_frames),
                              summary.candidate_frames > 0 ? "\033[1;31m" : "\033[1;32m", style));
-  PrintKeyValueLine("candidate_ratio", FormatFloat(candidate_ratio, 3));
+  PrintKeyValueLine("suspicious_ratio", FormatFloat(candidate_ratio, 3));
   PrintKeyValueLine("longest_consecutive_run",
                     std::to_string(summary.longest_consecutive_candidate_run));
 
@@ -692,6 +693,7 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
   passable_area::tools::FalseObstacleAnalyzer analyzer(*config, args.analyzer_config);
 
   int total_frames = 0;
+  int rear_dropout_frames = 0;
   int current_candidate_run = 0;
   int longest_candidate_run = 0;
   std::vector<passable_area::tools::FalseObstacleFrameAnalysis> candidate_frames;
@@ -716,6 +718,9 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     }
 
     ++total_frames;
+    if (output.observability.rear_dropout) {
+      ++rear_dropout_frames;
+    }
     const auto analysis = analyzer.analyzeFrame(output);
     if (analysis) {
       candidate_frames.push_back(*analysis);
@@ -726,8 +731,8 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     }
   }
 
-  return analyzer.buildSummary(total_frames, longest_candidate_run, std::move(candidate_frames),
-                               args.top_k);
+  return analyzer.buildSummary(total_frames, rear_dropout_frames, longest_candidate_run,
+                               std::move(candidate_frames), args.top_k);
 }
 
 } // namespace

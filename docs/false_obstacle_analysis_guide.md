@@ -96,7 +96,11 @@ build/passable_area/passable_area_offline_replay \
 false_obstacle_summary bag=/your/bag
 
 detection_box: x[0.00, 1.40] y[-0.25, 0.25]
-total_frames: 129  candidate_frames: 1  candidate_ratio: 0.008  longest_consecutive_run: 1
+total_frames: 129
+rear_dropout_frames: 0
+suspicious_frames: 1
+suspicious_ratio: 0.008
+longest_consecutive_run: 1
 ```
 
 ### 这些字段是什么意思
@@ -104,20 +108,21 @@ total_frames: 129  candidate_frames: 1  candidate_ratio: 0.008  longest_consecut
 | 字段 | 含义 | 怎么理解 |
 | --- | --- | --- |
 | `total_frames` | 这次一共分析了多少帧 | 总样本数 |
-| `candidate_frames` | 有多少帧在检测框内出现了障碍点 | 这是最关键的数字 |
-| `candidate_ratio` | 候选帧占总帧数的比例 | 越高说明问题越频繁 |
+| `rear_dropout_frames` | 有多少帧被判定为后向掉帧 | 用来判断后向观测异常是不是经常发生 |
+| `suspicious_frames` | 有多少帧在检测框内出现了障碍点 | 这是最关键的数字 |
+| `suspicious_ratio` | 可疑帧占总帧数的比例 | 越高说明问题越频繁 |
 | `longest_consecutive_run` | 最长连续命中的帧数 | 越长越像持续问题，越短越像偶发问题 |
 
 ### 常见情况怎么理解
 
-- `candidate_frames = 0`
+- `suspicious_frames = 0`
   - 表示这次分析里，检测框内没有出现 `obstacle_points`
   - 至少按这套规则，没有发现“检测框内障碍点”问题
 
-- `candidate_frames` 很少，`longest_consecutive_run` 也很小
+- `suspicious_frames` 很少，`longest_consecutive_run` 也很小
   - 更像偶发问题
 
-- `candidate_frames` 很多，而且 `longest_consecutive_run` 很长
+- `suspicious_frames` 很多，而且 `longest_consecutive_run` 很长
   - 更像稳定持续的问题
 
 ## 5. root_causes 怎么看
@@ -314,7 +319,7 @@ frame 的 `severity` 是把整帧里检测框内的情况汇总后的结果。
 
 ## 10. 常见结果怎么理解
 
-### 情况 1：`candidate_frames = 0`
+### 情况 1：`suspicious_frames = 0`
 
 这通常表示：
 
@@ -408,13 +413,17 @@ frame 的 `severity` 是把整帧里检测框内的情况汇总后的结果。
 
 ## 12. 两个示例
 
-### 示例一：`candidate_frames = 0`
+### 示例一：`suspicious_frames = 0`
 
 ```text
 false_obstacle_summary bag=/your/bag
 
 detection_box: x[0.00, 1.40] y[-0.25, 0.25]
-total_frames: 219  candidate_frames: 0  candidate_ratio: 0.000  longest_consecutive_run: 0
+total_frames: 219
+rear_dropout_frames: 36
+suspicious_frames: 0
+suspicious_ratio: 0.000
+longest_consecutive_run: 0
 root_causes:
   ClearanceDriven: 0
   ObstacleEvidenceDriven: 0
@@ -466,4 +475,4 @@ frame 1
 
 如果你只是想快速排查，记住一句话就够了：
 
-> 先看 `candidate_frames`，再看 `root_causes`，然后只盯着 `frame 1` 的 `hotspot 1` 去 RViz 对照。
+> 先看 `suspicious_frames`，再看 `root_causes`，然后只盯着 `frame 1` 的 `hotspot 1` 去 RViz 对照。
