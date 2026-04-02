@@ -13,10 +13,11 @@ void ResultPublishers::initialize(rclcpp::Node &node, const RosTopicConfig &topi
 
 void ResultPublishers::publish(const passable_area::core::FrameOutput &output,
                                const std_msgs::msg::Header &header) {
-  terrain_state_pub_->publish(converter_.toTerrainState(output, header));
-  terrain_cost_pub_->publish(converter_.toTerrainCost(output, header));
+  const auto messages = converter_.toMapOutputs(output, header);
+  terrain_state_pub_->publish(messages.terrain_state);
+  terrain_cost_pub_->publish(messages.terrain_cost);
   if (grid_map_pub_) {
-    grid_map_pub_->publish(converter_.toGridMap(output, header));
+    grid_map_pub_->publish(messages.grid_map);
   }
 }
 
