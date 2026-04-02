@@ -390,7 +390,7 @@ frame 的 `severity` 是把整帧里检测框内的情况汇总后的结果。
 
 ### 建议重点看的 topic
 
-- `/terrain_debug/obstacle_points`
+- `/terrain_obstacle_points`
 - `/terrain_debug/base_gravity_cloud`
 - `/terrain_debug/grid_map`
 

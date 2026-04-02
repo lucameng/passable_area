@@ -591,7 +591,7 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   config.preprocess.enable_downsample = false;
   config.observability.sector_count = 8;
   config.observability.min_points_per_sector = 1;
-  config.debug.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_evidence = 0.2f;
   Processor processor(config);
 
   ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(1)).valid);
@@ -629,7 +629,7 @@ TEST(ProcessorTest, DebugObstaclePointsIgnoreWeakObstacleEvidenceByDefault) {
   const int cell = CellIndex(output, 0.25f, 0.25f);
   ASSERT_GE(cell, 0);
   EXPECT_GT(output.obstacle_evidence[cell], 0.25f);
-  EXPECT_LT(output.obstacle_evidence[cell], config.debug.obstacle_points_min_evidence);
+  EXPECT_LT(output.obstacle_evidence[cell], config.obstacle_points_min_evidence);
   EXPECT_TRUE(output.obstacle_points.empty());
 }
 

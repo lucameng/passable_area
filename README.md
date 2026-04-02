@@ -12,10 +12,10 @@
 - Outputs are:
   - `/terrain_state` (`nav_msgs/msg/OccupancyGrid`)
   - `/terrain_cost` (`nav_msgs/msg/OccupancyGrid`)
+  - `/terrain_obstacle_points`
   - `/terrain_debug/grid_map` (`grid_map_msgs/msg/GridMap`)
   - `/terrain_debug/base_gravity_cloud`
   - `/terrain_debug/support_points`
-  - `/terrain_debug/obstacle_points`
   - `/terrain_debug/unknown_mask`
   - `/terrain_debug/observability` (`passable_area/msg/TerrainObservability`)
 
@@ -61,7 +61,7 @@ Preprocessing semantics are intentionally split as well:
 Current debug point semantics:
 - `/terrain_debug/base_gravity_cloud`: full preprocessed algorithm cloud expressed in `base_gravity_frame`
 - `/terrain_debug/support_points`: real input samples that land in support cells and remain close to the cell support height, expressed in `base_gravity_frame`
-- `/terrain_debug/obstacle_points`: real input samples that land in cells whose `obstacle_evidence` is already high enough, expressed in `base_gravity_frame`
+- `/terrain_obstacle_points`: real input samples that land in cells whose `obstacle_evidence` is already high enough, expressed in `base_gravity_frame`
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
 - these point outputs are intended to align directly with the robot-centric `grid_map`, `terrain_state`, and `terrain_cost` views in RViz
 - `TerrainObservability.odom_point_count`: number of samples in the internal `cloud_in_odom` mapping view

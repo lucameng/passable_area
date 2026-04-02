@@ -109,7 +109,7 @@
 - `/terrain_debug/grid_map` `grid_map_msgs/msg/GridMap`
 - `/terrain_debug/base_gravity_cloud` `sensor_msgs/msg/PointCloud2`
 - `/terrain_debug/support_points` `sensor_msgs/msg/PointCloud2`
-- `/terrain_debug/obstacle_points` `sensor_msgs/msg/PointCloud2`
+- `/terrain_obstacle_points` `sensor_msgs/msg/PointCloud2`
 - `/terrain_debug/unknown_mask` `sensor_msgs/msg/PointCloud2`
 - `/terrain_debug/observability` `passable_area/msg/TerrainObservability`
 
@@ -436,7 +436,7 @@ TF：
 - 落在 support cell 且与 `support_height` 接近的真实样本点
 - 发布在 `base_gravity`
 
-### 11.3 `/terrain_debug/obstacle_points`
+### 11.3 `/terrain_obstacle_points`
 
 语义：
 
@@ -723,7 +723,7 @@ source install/setup.bash
 
 - `/terrain_debug/base_gravity_cloud`
 - `/terrain_debug/support_points`
-- `/terrain_debug/obstacle_points`
+- `/terrain_obstacle_points`
 - `/terrain_debug/unknown_mask`
 
 ### 17.2 看地图与机器人相对关系
@@ -812,7 +812,7 @@ ros2 launch passable_area nav.launch.py
 - `/terrain_debug/grid_map`
 - `/terrain_debug/base_gravity_cloud`
 - `/terrain_debug/support_points`
-- `/terrain_debug/obstacle_points`
+- `/terrain_obstacle_points`
 - `/terrain_debug/unknown_mask`
 - `/terrain_debug/observability`
 - `odom -> base_gravity` TF

@@ -22,6 +22,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "max_support_roughness", config.geometry.max_support_roughness);
   config.geometry.min_clearance =
       node.declare_parameter("min_clearance", config.geometry.min_clearance);
+  config.obstacle_points_min_evidence = node.declare_parameter(
+      "obstacle_points_min_evidence", config.obstacle_points_min_evidence);
 
   config.observability.dropout_sector_gap_threshold = node.declare_parameter(
       "dropout_sector_gap_threshold", config.observability.dropout_sector_gap_threshold);
@@ -77,8 +79,6 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "debug.publish_base_gravity_cloud", config.debug.publish_base_gravity_cloud);
   config.debug.publish_observability =
       node.declare_parameter("debug.publish_observability", config.debug.publish_observability);
-  config.debug.obstacle_points_min_evidence = node.declare_parameter(
-      "debug.obstacle_points_min_evidence", config.debug.obstacle_points_min_evidence);
   topics.input_cloud_topic =
       node.declare_parameter("input_cloud_topic", topics.input_cloud_topic);
   topics.odom_topic = node.declare_parameter("odom_topic", topics.odom_topic);

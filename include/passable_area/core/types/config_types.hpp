@@ -68,7 +68,6 @@ struct DebugConfig {
   bool publish_points = true;
   bool publish_base_gravity_cloud = false;
   bool publish_observability = true;
-  float obstacle_points_min_evidence = 0.4f;
 };
 
 struct Config {
@@ -78,6 +77,7 @@ struct Config {
   PersistenceConfig persistence;
   PreprocessConfig preprocess;
   DebugConfig debug;
+  float obstacle_points_min_evidence = 0.4f;
   std::string odom_frame = "odom";
   std::string base_gravity_frame = "base_gravity";
   std::string body_frame = "base_link";
