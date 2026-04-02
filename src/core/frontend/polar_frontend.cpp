@@ -41,9 +41,6 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     const int sector = std::clamp(
         static_cast<int>(std::floor((sample_body_angle + static_cast<float>(M_PI)) / sector_size)), 0,
         static_cast<int>(observability.sectors.size()) - 1);
-    if (observability.sectors[sector].state == ObservabilityState::kBlindByStructure) {
-      continue;
-    }
     auto &stats = stats_by_cell[cell];
     stats.min_z = std::min(stats.min_z, sample.point_in_odom.z);
     stats.max_z = std::max(stats.max_z, sample.point_in_odom.z);

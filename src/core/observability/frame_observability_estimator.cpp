@@ -21,12 +21,6 @@ float NormalizeAngle(float angle) {
 
 } // namespace
 
-bool FrameObservabilityEstimator::isBlindSector(float angle_rad) const {
-  const float half_width = config_.observability.blind_rear_half_width_deg * kPi / 180.0f;
-  const float delta = std::abs(NormalizeAngle(std::abs(angle_rad) - kPi));
-  return delta <= half_width;
-}
-
 FrameObservability FrameObservabilityEstimator::estimate(const ProcessedFrame &frame) const {
   FrameObservability result;
   result.sectors.resize(config_.observability.sector_count);
@@ -61,19 +55,11 @@ FrameObservability FrameObservabilityEstimator::estimate(const ProcessedFrame &f
   for (int sector = 0; sector < config_.observability.sector_count; ++sector) {
     const float angle = -kPi + (static_cast<float>(sector) + 0.5f) * angle_per_sector;
     auto &state = result.sectors[sector];
-    const bool blind = isBlindSector(angle);
     const bool rear = std::abs(angle) > kPi / 2.0f;
     const float coverage = std::min(
         1.0f, static_cast<float>(counts[sector]) /
                   static_cast<float>(std::max(config_.observability.min_points_per_sector, 1)));
     state.coverage_confidence = coverage;
-
-    if (blind) {
-      state.state = ObservabilityState::kBlindByStructure;
-      current_rear_gap = 0;
-      current_gap_indices.clear();
-      continue;
-    }
     if (rear) {
       rear_points += counts[sector];
     } else {

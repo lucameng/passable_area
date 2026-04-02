@@ -140,8 +140,7 @@ TF：
 
 - `0` Observed
 - `1` PartiallyObserved
-- `2` BlindByStructure
-- `3` MissingByDropout
+- `2` MissingByDropout
 
 ## 6. 坐标系定义
 
@@ -327,7 +326,6 @@ TF：
 
 - `Observed`
 - `PartiallyObserved`
-- `BlindByStructure`
 - `MissingByDropout`
 
 ### 9.3 `PolarFrontend`
@@ -359,7 +357,6 @@ TF：
 - `Observed` 可以正常更新
 - `PartiallyObserved` 只做保守更新
 - `MissingByDropout` 禁止激进负更新
-- `BlindByStructure` 不推导 free-space
 
 ### 9.5 `TerrainFeatureUpdater`
 

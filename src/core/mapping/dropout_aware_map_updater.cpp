@@ -40,9 +40,6 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
 
   for (const auto &candidate : frontend_output.support_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
-    if (sector.state == ObservabilityState::kBlindByStructure) {
-      continue;
-    }
     layers.support_height[candidate.cell] = candidate.z;
     layers.support_confidence[candidate.cell] =
         std::clamp(layers.support_confidence[candidate.cell] +
@@ -62,9 +59,6 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
 
   for (const auto &candidate : frontend_output.obstacle_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
-    if (sector.state == ObservabilityState::kBlindByStructure) {
-      continue;
-    }
     layers.overhead_height[candidate.cell] = candidate.z;
     layers.overhead_confidence[candidate.cell] =
         std::clamp(layers.overhead_confidence[candidate.cell] + config_.persistence.obstacle_evidence_gain,

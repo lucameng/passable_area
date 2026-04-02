@@ -40,7 +40,8 @@ The current implementation already supports:
 - incremental feature recomputation on dirty cells
 - three-state traversability output
 
-`FrameObservabilityEstimator` only consumes `cloud_in_base`. It no longer relies on transforming points back from the debug `base_gravity` frame to recover front/rear/blind/dropout semantics.
+`FrameObservabilityEstimator` only consumes `cloud_in_base`. It derives front/rear coverage and dropout semantics directly from body-frame sector coverage.
+Rear-sector conservatism is now driven only by `rear_dropout / MissingByDropout`; there is no fixed rear blind sector.
 
 `PolarFrontend` keeps body-centric observability semantics separate from odom-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use odom-view samples.
 

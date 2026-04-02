@@ -398,6 +398,41 @@ TEST(ProcessorTest, RearGapTriggersMissingByDropoutSectors) {
   EXPECT_GT(missing_count, 0);
 }
 
+TEST(ProcessorTest, RearSupportPointsAreAllowedWhenRearCoverageIsNormal) {
+  Processor processor(MakeConfig());
+  const auto output = processor.update(MakeFlatFrame());
+  ASSERT_TRUE(output.valid);
+  EXPECT_FALSE(output.observability.rear_dropout);
+
+  int rear_support_points = 0;
+  for (const auto &point : output.support_points) {
+    if (point.point.x < -0.4f) {
+      ++rear_support_points;
+    }
+  }
+  EXPECT_GT(rear_support_points, 0);
+}
+
+TEST(ProcessorTest, NoBlindSectorStatesAreProduced) {
+  Processor processor(MakeConfig());
+
+  const auto normal_output = processor.update(MakeFlatFrame(1));
+  ASSERT_TRUE(normal_output.valid);
+  for (const auto &sector : normal_output.observability.sectors) {
+    EXPECT_TRUE(sector.state == ObservabilityState::kObserved ||
+                sector.state == ObservabilityState::kPartiallyObserved);
+  }
+
+  const auto dropout_output = processor.update(MakeFrontOnlyFrame(100000001));
+  ASSERT_TRUE(dropout_output.valid);
+  EXPECT_TRUE(dropout_output.observability.rear_dropout);
+  for (const auto &sector : dropout_output.observability.sectors) {
+    EXPECT_TRUE(sector.state == ObservabilityState::kObserved ||
+                sector.state == ObservabilityState::kPartiallyObserved ||
+                sector.state == ObservabilityState::kMissingByDropout);
+  }
+}
+
 TEST(ProcessorTest, LocalHoleDoesNotHardClearSupportImmediately) {
   Processor processor(MakeConfig());
   ASSERT_TRUE(processor.update(MakeFlatFrame(1)).valid);

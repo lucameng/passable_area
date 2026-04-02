@@ -13,7 +13,6 @@ public:
   FrameObservability estimate(const ProcessedFrame &frame) const;
 
 private:
-  bool isBlindSector(float angle_rad) const;
   Config config_;
 };
 

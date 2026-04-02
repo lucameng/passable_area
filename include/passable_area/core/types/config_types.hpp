@@ -25,7 +25,6 @@ struct ObservabilityConfig {
   int sector_count = 72;
   int min_points_per_sector = 12;
   int dropout_sector_gap_threshold = 8;
-  float blind_rear_half_width_deg = 25.0f;
   float partial_sector_ratio = 0.35f;
   float stale_to_unknown_time = 0.8f;
   float min_support_confidence = 0.2f;
