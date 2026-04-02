@@ -300,40 +300,47 @@ struct FalseObstacleReplayArgs {
 };
 
 void PrintDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
-  std::cout << "detection_box="
+  std::cout << "\ndetection_box: "
             << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max
             << "] y[" << box.y_min << ", " << box.y_max << "]\n";
 }
 
 void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnalysis &frame,
                              int rank) {
-  std::cout << "frame_rank=" << rank << " stamp=" << frame.stamp
-            << " in_box_obstacle_points=" << frame.in_box_obstacle_point_count
-            << " hotspot_count=" << frame.hotspots.size() << " severity=" << std::fixed
-            << std::setprecision(2) << frame.severity
-            << " class=" << passable_area::tools::ToString(frame.classification)
-            << " max_obstacle_evidence=" << frame.max_local_obstacle_evidence
-            << " min_clearance=" << frame.min_local_clearance
-            << " min_support_continuity=" << frame.min_local_support_continuity
-            << " frame_partial=" << std::boolalpha << frame.frame_partial
-            << " rear_dropout=" << frame.rear_dropout << '\n';
+  std::cout << "\nframe " << rank << '\n';
+  std::cout << "  stamp: " << frame.stamp << '\n';
+  std::cout << "  class: " << passable_area::tools::ToString(frame.classification) << '\n';
+  std::cout << "  severity: " << std::fixed << std::setprecision(2) << frame.severity << '\n';
+  std::cout << "  in_box_obstacle_points: " << frame.in_box_obstacle_point_count << '\n';
+  std::cout << "  hotspot_count: " << frame.hotspots.size() << '\n';
+  std::cout << "  frame_partial: " << std::boolalpha << frame.frame_partial << '\n';
+  std::cout << "  rear_dropout: " << std::boolalpha << frame.rear_dropout << '\n';
+  std::cout << "  max_obstacle_evidence: " << std::fixed << std::setprecision(2)
+            << frame.max_local_obstacle_evidence << '\n';
+  std::cout << "  min_clearance: " << std::fixed << std::setprecision(2)
+            << frame.min_local_clearance << '\n';
+  std::cout << "  min_support_continuity: " << std::fixed << std::setprecision(2)
+            << frame.min_local_support_continuity << '\n';
 
   for (size_t i = 0; i < frame.hotspots.size(); ++i) {
     const auto &hotspot = frame.hotspots[i];
-    std::cout << "  hotspot_rank=" << (i + 1) << " x=" << std::fixed << std::setprecision(2)
-              << hotspot.x << " y=" << hotspot.y
-              << " obstacle_points=" << hotspot.obstacle_point_count
-              << " severity=" << hotspot.severity
-              << " obstacle_evidence=" << hotspot.obstacle_evidence
-              << " clearance=" << hotspot.clearance
-              << " support_continuity=" << hotspot.support_continuity << " observability=";
+    std::cout << "  hotspot " << (i + 1) << '\n';
+    std::cout << "    pos: (" << std::fixed << std::setprecision(2) << hotspot.x << ", "
+              << hotspot.y << ")"
+              << "  obstacle_points: " << hotspot.obstacle_point_count
+              << "  severity: " << hotspot.severity << '\n';
+    std::cout << "    class: " << passable_area::tools::ToString(hotspot.classification)
+              << "  observability: ";
     if (hotspot.has_observability) {
       std::cout << passable_area::tools::ToString(hotspot.observability_state);
     } else {
       std::cout << "Unavailable";
     }
-    std::cout << " class=" << passable_area::tools::ToString(hotspot.classification)
-              << " explanation=\"" << hotspot.explanation << "\"\n";
+    std::cout << "  explanation: " << hotspot.explanation << '\n';
+    std::cout << "    obstacle_evidence: " << std::fixed << std::setprecision(2)
+              << hotspot.obstacle_evidence
+              << "  clearance: " << hotspot.clearance
+              << "  support_continuity: " << hotspot.support_continuity << '\n';
   }
 }
 
@@ -345,27 +352,32 @@ void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSumma
       summary.total_frames > 0
           ? static_cast<double>(summary.candidate_frames) / static_cast<double>(summary.total_frames)
           : 0.0;
-  std::cout << "total_frames=" << summary.total_frames
-            << " candidate_frames=" << summary.candidate_frames
-            << " candidate_ratio=" << std::fixed << std::setprecision(3) << candidate_ratio
-            << " longest_consecutive_run=" << summary.longest_consecutive_candidate_run << '\n';
-  std::cout << "root_causes"
-            << " ClearanceDriven="
+  std::cout << "total_frames: " << summary.total_frames
+            << "  candidate_frames: " << summary.candidate_frames
+            << "  candidate_ratio: " << std::fixed << std::setprecision(3) << candidate_ratio
+            << "  longest_consecutive_run: " << summary.longest_consecutive_candidate_run << '\n';
+  std::cout << "root_causes:\n";
+  std::cout << "  ClearanceDriven: "
             << summary.root_cause_counts[static_cast<int>(
                    passable_area::tools::FalseObstacleRootCause::kClearanceDriven)]
-            << " ObstacleEvidenceDriven="
+            << '\n';
+  std::cout << "  ObstacleEvidenceDriven: "
             << summary.root_cause_counts[static_cast<int>(
                    passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven)]
-            << " ObstacleEvidencePlusLowContinuity="
+            << '\n';
+  std::cout << "  ObstacleEvidencePlusLowContinuity: "
             << summary.root_cause_counts[static_cast<int>(passable_area::tools::FalseObstacleRootCause::
                                                               kObstacleEvidencePlusLowContinuity)]
-            << " ObservabilityInfluenced="
+            << '\n';
+  std::cout << "  ObservabilityInfluenced: "
             << summary.root_cause_counts[static_cast<int>(
                    passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced)]
-            << " UnknownOrMixed="
+            << '\n';
+  std::cout << "  UnknownOrMixed: "
             << summary.root_cause_counts[static_cast<int>(
                    passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed)]
             << '\n';
+  std::cout << "\nranked_frames:\n";
   for (size_t i = 0; i < summary.ranked_frames.size(); ++i) {
     PrintFalseObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1));
   }
