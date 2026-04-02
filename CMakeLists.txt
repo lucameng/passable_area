@@ -95,7 +95,10 @@ target_include_directories(passable_area_benchmark PUBLIC include)
 target_link_libraries(passable_area_benchmark passable_area_core ${OpenCV_LIBS})
 ament_target_dependencies(passable_area_benchmark Eigen3 OpenCV grid_map_core)
 
-add_executable(passable_area_offline_replay tools/offline_replay.cpp)
+add_executable(passable_area_offline_replay
+  tools/offline_replay.cpp
+  src/tools/false_obstacle_analyzer.cpp
+)
 target_include_directories(passable_area_offline_replay PUBLIC include)
 target_link_libraries(passable_area_offline_replay passable_area_ros passable_area_core ${OpenCV_LIBS})
 ament_target_dependencies(passable_area_offline_replay
@@ -193,6 +196,20 @@ if(BUILD_TESTING)
       std_msgs
     )
     rosidl_target_interfaces(test_debug_publishers ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  endif()
+
+  ament_add_gtest(test_false_obstacle_analyzer
+    test/tools/test_false_obstacle_analyzer.cpp
+    src/tools/false_obstacle_analyzer.cpp
+  )
+  if(TARGET test_false_obstacle_analyzer)
+    target_include_directories(test_false_obstacle_analyzer PUBLIC include)
+    target_link_libraries(test_false_obstacle_analyzer passable_area_core ${OpenCV_LIBS})
+    ament_target_dependencies(test_false_obstacle_analyzer
+      Eigen3
+      OpenCV
+      grid_map_core
+    )
   endif()
 endif()
 

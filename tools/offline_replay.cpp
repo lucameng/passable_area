@@ -1,6 +1,7 @@
 #include "passable_area/interfaces/ros/converters/odom_converter.hpp"
 #include "passable_area/interfaces/ros/converters/pointcloud_converter.hpp"
 #include "passable_area/passable_area.hpp"
+#include "passable_area/tools/false_obstacle_analyzer.hpp"
 
 #include <nav_msgs/msg/odometry.hpp>
 #include <pcl/point_cloud.h>
@@ -57,7 +58,7 @@ FrameInput MakeBaseFrame(int64_t stamp) {
   return input;
 }
 
-FrameInput MakeFlatScene(int64_t stamp) {
+FrameInput MakeFlatScene(int64_t stamp = 1) {
   auto input = MakeBaseFrame(stamp);
   for (float x = -3.0f; x <= 3.0f; x += 0.1f) {
     for (float y = -2.0f; y <= 2.0f; y += 0.1f) {
@@ -128,8 +129,8 @@ FrameInput MakeLocalHoleScene(int64_t stamp) {
   input.input_cloud_in_base.erase(
       std::remove_if(input.input_cloud_in_base.begin(), input.input_cloud_in_base.end(),
                      [](const auto &point) {
-        return std::abs(point.x) < 0.6f && std::abs(point.y) < 0.6f;
-      }),
+                       return std::abs(point.x) < 0.6f && std::abs(point.y) < 0.6f;
+                     }),
       input.input_cloud_in_base.end());
   return input;
 }
@@ -147,11 +148,13 @@ struct ScenarioSpec {
 std::vector<ScenarioSpec> BuildSyntheticScenarios() {
   return {
       {"rear_normal_open", {MakeRearNormalOpenScene(1)}, false, true, false, false, false},
-      {"rear_dropout", {MakeFlatScene(1), MakeRearDropoutScene(100000001)}, true, false, false, false, true},
+      {"rear_dropout", {MakeFlatScene(1), MakeRearDropoutScene(100000001)}, true, false, false,
+       false, true},
       {"stairs", {MakeStairScene(1)}, false, false, false, true, false},
       {"slope", {MakeSlopeScene(1)}, false, false, false, true, false},
       {"low_ceiling", {MakeLowCeilingScene(1)}, false, false, true, false, false},
-      {"local_hole", {MakeFlatScene(1), MakeLocalHoleScene(100000001)}, false, false, false, false, true},
+      {"local_hole", {MakeFlatScene(1), MakeLocalHoleScene(100000001)}, false, false, false,
+       false, true},
   };
 }
 
@@ -268,9 +271,9 @@ void PrintScenarioResult(const ScenarioResult &result) {
             << result.rear_dropout << " missing_sectors=" << result.missing_sector_count
             << " partial_sectors=" << result.partial_sector_count
             << " passable=" << result.passable_count << " impassable=" << result.impassable_count
-            << " unknown=" << result.unknown_count
-            << " max_rear_support_conf=" << std::fixed << std::setprecision(2)
-            << result.max_rear_support_confidence << " corridor=" << result.corridor_found
+            << " unknown=" << result.unknown_count << " max_rear_support_conf=" << std::fixed
+            << std::setprecision(2) << result.max_rear_support_confidence
+            << " corridor=" << result.corridor_found
             << " status=" << (result.passed ? "PASS" : "FAIL") << '\n';
   for (const auto &failure : result.failures) {
     std::cout << "  failure: " << failure << '\n';
@@ -283,6 +286,153 @@ struct BagReplaySummary {
   int max_missing_sectors = 0;
   double avg_unknown_ratio = 0.0;
 };
+
+struct FalseObstacleReplayArgs {
+  std::string bag_path;
+  passable_area::tools::FalseObstacleAnalyzerConfig analyzer_config;
+  int top_k = 10;
+};
+
+void PrintDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
+  std::cout << "detection_box="
+            << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max
+            << "] y[" << box.y_min << ", " << box.y_max << "]\n";
+}
+
+void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnalysis &frame,
+                             int rank) {
+  std::cout << "frame_rank=" << rank << " stamp=" << frame.stamp
+            << " in_box_obstacle_points=" << frame.in_box_obstacle_point_count
+            << " hotspot_count=" << frame.hotspots.size() << " severity=" << std::fixed
+            << std::setprecision(2) << frame.severity
+            << " class=" << passable_area::tools::ToString(frame.classification)
+            << " max_obstacle_evidence=" << frame.max_local_obstacle_evidence
+            << " min_clearance=" << frame.min_local_clearance
+            << " min_support_continuity=" << frame.min_local_support_continuity
+            << " frame_partial=" << std::boolalpha << frame.frame_partial
+            << " rear_dropout=" << frame.rear_dropout << '\n';
+
+  for (size_t i = 0; i < frame.hotspots.size(); ++i) {
+    const auto &hotspot = frame.hotspots[i];
+    std::cout << "  hotspot_rank=" << (i + 1) << " x=" << std::fixed << std::setprecision(2)
+              << hotspot.x << " y=" << hotspot.y
+              << " obstacle_points=" << hotspot.obstacle_point_count
+              << " severity=" << hotspot.severity
+              << " obstacle_evidence=" << hotspot.obstacle_evidence
+              << " clearance=" << hotspot.clearance
+              << " support_continuity=" << hotspot.support_continuity << " observability=";
+    if (hotspot.has_observability) {
+      std::cout << passable_area::tools::ToString(hotspot.observability_state);
+    } else {
+      std::cout << "Unavailable";
+    }
+    std::cout << " class=" << passable_area::tools::ToString(hotspot.classification)
+              << " explanation=\"" << hotspot.explanation << "\"\n";
+  }
+}
+
+void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSummary &summary,
+                               const std::string &bag_path) {
+  std::cout << "false_obstacle_summary bag=" << bag_path << '\n';
+  PrintDetectionBox(summary.detection_box);
+  const double candidate_ratio =
+      summary.total_frames > 0
+          ? static_cast<double>(summary.candidate_frames) / static_cast<double>(summary.total_frames)
+          : 0.0;
+  std::cout << "total_frames=" << summary.total_frames
+            << " candidate_frames=" << summary.candidate_frames
+            << " candidate_ratio=" << std::fixed << std::setprecision(3) << candidate_ratio
+            << " longest_consecutive_run=" << summary.longest_consecutive_candidate_run << '\n';
+  std::cout << "root_causes"
+            << " ClearanceDriven="
+            << summary.root_cause_counts[static_cast<int>(
+                   passable_area::tools::FalseObstacleRootCause::kClearanceDriven)]
+            << " ObstacleEvidenceDriven="
+            << summary.root_cause_counts[static_cast<int>(
+                   passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven)]
+            << " ObstacleEvidencePlusLowContinuity="
+            << summary.root_cause_counts[static_cast<int>(passable_area::tools::FalseObstacleRootCause::
+                                                              kObstacleEvidencePlusLowContinuity)]
+            << " ObservabilityInfluenced="
+            << summary.root_cause_counts[static_cast<int>(
+                   passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced)]
+            << " UnknownOrMixed="
+            << summary.root_cause_counts[static_cast<int>(
+                   passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed)]
+            << '\n';
+  for (size_t i = 0; i < summary.ranked_frames.size(); ++i) {
+    PrintFalseObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1));
+  }
+}
+
+std::optional<float> ParseFloatFlagValue(const std::vector<std::string> &args, const std::string &flag) {
+  for (size_t i = 0; i + 1 < args.size(); ++i) {
+    if (args[i] == flag) {
+      return std::stof(args[i + 1]);
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<int> ParseIntFlagValue(const std::vector<std::string> &args, const std::string &flag) {
+  for (size_t i = 0; i + 1 < args.size(); ++i) {
+    if (args[i] == flag) {
+      return std::stoi(args[i + 1]);
+    }
+  }
+  return std::nullopt;
+}
+
+bool HasFlag(const std::vector<std::string> &args, const std::string &flag) {
+  return std::find(args.begin(), args.end(), flag) != args.end();
+}
+
+std::optional<std::string> ParseStringFlagValue(const std::vector<std::string> &args,
+                                                const std::string &flag) {
+  for (size_t i = 0; i + 1 < args.size(); ++i) {
+    if (args[i] == flag) {
+      return args[i + 1];
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
+    const std::vector<std::string> &args) {
+  const auto bag_path = ParseStringFlagValue(args, "--bag");
+  const auto range_x_min = ParseFloatFlagValue(args, "--range-x-min");
+  const auto range_x_max = ParseFloatFlagValue(args, "--range-x-max");
+  const auto range_y_min = ParseFloatFlagValue(args, "--range-y-min");
+  const auto range_y_max = ParseFloatFlagValue(args, "--range-y-max");
+  if (!bag_path || !range_x_min || !range_x_max || !range_y_min || !range_y_max) {
+    std::cerr << "false-obstacle analysis requires --bag, --range-x-min, --range-x-max, "
+                 "--range-y-min, and --range-y-max\n";
+    return std::nullopt;
+  }
+
+  FalseObstacleReplayArgs replay_args;
+  replay_args.bag_path = *bag_path;
+  replay_args.analyzer_config.detection_box = passable_area::tools::FalseObstacleDetectionBox{
+      *range_x_min, *range_x_max, *range_y_min, *range_y_max};
+  if (const auto top_k = ParseIntFlagValue(args, "--top-k")) {
+    replay_args.top_k = *top_k;
+  }
+  if (!(replay_args.analyzer_config.detection_box.x_min <
+        replay_args.analyzer_config.detection_box.x_max)) {
+    std::cerr << "invalid detection box: require --range-x-min < --range-x-max\n";
+    return std::nullopt;
+  }
+  if (!(replay_args.analyzer_config.detection_box.y_min <
+        replay_args.analyzer_config.detection_box.y_max)) {
+    std::cerr << "invalid detection box: require --range-y-min < --range-y-max\n";
+    return std::nullopt;
+  }
+  if (replay_args.top_k <= 0) {
+    std::cerr << "invalid --top-k: require top_k > 0\n";
+    return std::nullopt;
+  }
+  return replay_args;
+}
 
 std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
   if (!std::filesystem::exists(bag_path)) {
@@ -298,7 +448,8 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
   std::map<int64_t, nav_msgs::msg::Odometry> odoms;
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
-  passable_area::core::Processor processor(MakeConfig());
+  const auto config = MakeConfig();
+  passable_area::core::Processor processor(config);
   BagReplaySummary summary;
 
   while (reader.has_next()) {
@@ -345,10 +496,10 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
       }
     }
     summary.max_missing_sectors = std::max(summary.max_missing_sectors, missing);
-    const double unknown_ratio = static_cast<double>(std::count(
-                                     output.passability.begin(), output.passability.end(),
-                                     static_cast<int8_t>(PassabilityState::kUnknown))) /
-                                 std::max<size_t>(output.passability.size(), 1U);
+    const double unknown_ratio =
+        static_cast<double>(std::count(output.passability.begin(), output.passability.end(),
+                                       static_cast<int8_t>(PassabilityState::kUnknown))) /
+        std::max<size_t>(output.passability.size(), 1U);
     unknown_ratio_sum += unknown_ratio;
   }
 
@@ -358,11 +509,104 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path) {
   return summary;
 }
 
+std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleReplay(
+    const FalseObstacleReplayArgs &args) {
+  if (!std::filesystem::exists(args.bag_path)) {
+    std::cerr << "bag path does not exist: " << args.bag_path << '\n';
+    return std::nullopt;
+  }
+
+  std::cout << "false_obstacle_analysis bag=" << args.bag_path << '\n';
+  PrintDetectionBox(args.analyzer_config.detection_box);
+  std::cout << "top_k=" << args.top_k << '\n';
+
+  rosbag2_cpp::Reader reader;
+  reader.open(args.bag_path);
+
+  rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
+  rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
+  std::map<int64_t, sensor_msgs::msg::PointCloud2> clouds;
+  std::map<int64_t, nav_msgs::msg::Odometry> odoms;
+  while (reader.has_next()) {
+    auto bag_msg = reader.read_next();
+    rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
+    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+      sensor_msgs::msg::PointCloud2 cloud_msg;
+      cloud_ser.deserialize_message(&serialized, &cloud_msg);
+      clouds.emplace(rclcpp::Time(cloud_msg.header.stamp).nanoseconds(), std::move(cloud_msg));
+    } else if (bag_msg->topic_name == "/ODOM") {
+      nav_msgs::msg::Odometry odom_msg;
+      odom_ser.deserialize_message(&serialized, &odom_msg);
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+    }
+  }
+
+  passable_area::interfaces::ros::PointCloudConverter cloud_converter;
+  passable_area::interfaces::ros::OdomConverter odom_converter;
+  const auto config = MakeConfig();
+  passable_area::core::Processor processor(config);
+  passable_area::tools::FalseObstacleAnalyzer analyzer(config, args.analyzer_config);
+
+  int total_frames = 0;
+  int current_candidate_run = 0;
+  int longest_candidate_run = 0;
+  std::vector<passable_area::tools::FalseObstacleFrameAnalysis> candidate_frames;
+
+  for (const auto &[stamp, cloud_msg] : clouds) {
+    auto odom_it = odoms.find(stamp);
+    if (odom_it == odoms.end()) {
+      continue;
+    }
+    passable_area::core::PointCloud cloud;
+    passable_area::core::Pose3D pose;
+    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+      continue;
+    }
+    FrameInput input;
+    input.stamp = stamp;
+    input.base_pose_in_odom = pose;
+    input.input_cloud_in_base = std::move(cloud);
+    const auto output = processor.update(input);
+    if (!output.valid) {
+      continue;
+    }
+
+    ++total_frames;
+    const auto analysis = analyzer.analyzeFrame(output);
+    if (analysis) {
+      candidate_frames.push_back(*analysis);
+      ++current_candidate_run;
+      longest_candidate_run = std::max(longest_candidate_run, current_candidate_run);
+    } else {
+      current_candidate_run = 0;
+    }
+  }
+
+  return analyzer.buildSummary(total_frames, longest_candidate_run, std::move(candidate_frames),
+                               args.top_k);
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   std::vector<std::string> args(argv + 1, argv + argc);
+
+  if (HasFlag(args, "--analyze-false-obstacles")) {
+    const auto replay_args = ParseFalseObstacleReplayArgs(args);
+    if (!replay_args) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    const auto summary = RunFalseObstacleReplay(*replay_args);
+    if (!summary) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    PrintFalseObstacleSummary(*summary, replay_args->bag_path);
+    rclcpp::shutdown();
+    return 0;
+  }
 
   if (args.size() >= 2 && args[0] == "--bag") {
     const auto summary = RunBagReplay(args[1]);
