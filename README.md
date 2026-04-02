@@ -46,8 +46,12 @@ Rear-sector conservatism is now driven only by `rear_dropout / MissingByDropout`
 `PolarFrontend` keeps body-centric observability semantics separate from odom-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use odom-view samples.
 
 Frame semantics are intentionally split:
-- `odom_frame`: internal local mapping frame used by `grid_map`, occupancy outputs, and map indexing
+- `odom_frame`: internal local mapping frame used by map indexing and all core terrain reasoning
 - `base_gravity_frame`: robot-centric gravity frame used by debug point clouds; origin is the current robot pose, roll/pitch are removed, yaw is preserved
+
+Published map semantics are intentionally split from internal map semantics:
+- `grid_map`, `terrain_state`, and `terrain_cost` are published as robot-centric `base_gravity` views
+- internal map storage and all core outputs remain in `odom`
 
 Preprocessing semantics are intentionally split as well:
 - `preprocess.body_filter.*` is interpreted in `base_link`
@@ -59,7 +63,9 @@ Current debug point semantics:
 - `/terrain_debug/support_points`: real input samples that land in support cells and remain close to the cell support height, expressed in `base_gravity_frame`
 - `/terrain_debug/obstacle_points`: real input samples that land in cells whose `obstacle_evidence` is already high enough, expressed in `base_gravity_frame`
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
+- these point outputs are intended to align directly with the robot-centric `grid_map`, `terrain_state`, and `terrain_cost` views in RViz
 - `TerrainObservability.odom_point_count`: number of samples in the internal `cloud_in_odom` mapping view
+- `/terrain_debug/observability`: non-geometric debug summary that still uses the same `base_gravity` debug header context
 
 ## Layout
 - `include/passable_area/core`: ROS-free data types and processing modules

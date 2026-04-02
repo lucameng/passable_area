@@ -54,6 +54,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
                                    const FrameObservability &observability) const {
   FrameOutput output;
   output.stamp = frame.stamp;
+  output.base_pose_in_odom = frame.base_pose_in_odom;
   output.rows = map_.rows();
   output.cols = map_.cols();
   output.resolution = map_.resolution();

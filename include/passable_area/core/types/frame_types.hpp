@@ -48,6 +48,8 @@ struct CellDebugPoint {
 
 struct FrameOutput {
   Timestamp stamp = 0;
+  // Publish-context only. Internal map semantics remain defined by origin/resolution/layers in odom.
+  Pose3D base_pose_in_odom;
   int rows = 0;
   int cols = 0;
   float resolution = 0.1f;

@@ -79,11 +79,11 @@ void PassableAreaNode::onSynced(const sensor_msgs::msg::PointCloud2::ConstShared
   std_msgs::msg::Header odom_header;
   odom_header.stamp = cloud_msg->header.stamp;
   odom_header.frame_id = config_.odom_frame;
-  result_publishers_.publish(output, odom_header);
 
   std_msgs::msg::Header base_gravity_header;
   base_gravity_header.stamp = cloud_msg->header.stamp;
   base_gravity_header.frame_id = config_.base_gravity_frame;
+  result_publishers_.publish(output, base_gravity_header);
   debug_publishers_.publish(output, base_gravity_header);
   publishBaseGravityTransform(pose, cloud_msg->header.stamp);
 

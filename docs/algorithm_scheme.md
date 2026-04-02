@@ -21,7 +21,7 @@
 - 输入是严格时间同步的点云和里程计
 - 内部维护一个局部连续的 `odom` 对齐地图缓冲区
 - 在地图上做 support / obstacle / coverage / feature / traversability 推理
-- 输出三态通行性和地形代价
+- 输出三态通行性和地形代价，并在发布阶段重表达为 `base_gravity` 机器人中心栅格
 - 提供一组围绕 `base_gravity` 的调试点云，便于从机器人视角观察结果
 
 当前实现不是纯单帧算法。它带有短时记忆和局部融合能力，主要体现在：
@@ -450,14 +450,16 @@ TF：
 
 - unknown cell center 转换到 `base_gravity`
 - 它不是原始观测点，而是地图状态点
+- 应与 robot-centric `grid_map / terrain_state / terrain_cost` 在 RViz 中直接对齐
 
 ### 11.5 `/terrain_debug/grid_map`
 
 语义：
 
 - 局部地图的调试输出
-- 发布在 `odom`
-- 不是 robot-centric 点云
+- 内部真值来自 `odom` 地图
+- 发布阶段重表达为 `base_gravity` robot-centric 栅格
+- 与 `/terrain_state` 和 `/terrain_cost` 共用同一套发布 geometry
 
 ### 11.6 `/terrain_debug/observability`
 
@@ -465,6 +467,7 @@ TF：
 
 - 当前帧观测完整性和扇区状态摘要
 - 不是几何点云
+- 继续使用 `base_gravity` 调试 header 上下文，但不参与 grid geometry 对齐
 
 ## 12. ROS 接口层实现说明
 

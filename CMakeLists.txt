@@ -157,6 +157,43 @@ if(BUILD_TESTING)
     target_link_libraries(test_processor ${OpenCV_LIBS})
     ament_target_dependencies(test_processor Eigen3 OpenCV grid_map_core)
   endif()
+
+  ament_add_gtest(test_output_converter
+    test/interfaces/ros/test_output_converter.cpp
+  )
+  if(TARGET test_output_converter)
+    target_include_directories(test_output_converter PUBLIC include)
+    target_link_libraries(test_output_converter passable_area_ros passable_area_core ${OpenCV_LIBS})
+    ament_target_dependencies(test_output_converter
+      Eigen3
+      OpenCV
+      grid_map_core
+      grid_map_msgs
+      grid_map_ros
+      nav_msgs
+      rclcpp
+      std_msgs
+    )
+    rosidl_target_interfaces(test_output_converter ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  endif()
+
+  ament_add_gtest(test_debug_publishers
+    test/interfaces/ros/test_debug_publishers.cpp
+  )
+  if(TARGET test_debug_publishers)
+    target_include_directories(test_debug_publishers PUBLIC include)
+    target_link_libraries(test_debug_publishers passable_area_ros passable_area_core ${OpenCV_LIBS})
+    ament_target_dependencies(test_debug_publishers
+      Eigen3
+      OpenCV
+      nav_msgs
+      pcl_conversions
+      rclcpp
+      sensor_msgs
+      std_msgs
+    )
+    rosidl_target_interfaces(test_debug_publishers ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  endif()
 endif()
 
 ament_export_include_directories(include)
