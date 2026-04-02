@@ -235,7 +235,7 @@ frame 1
 
 ```text
 hotspot 1
-  pos: (0.45, -0.19)  obstacle_points: 223  severity: 225.93
+  pos: (0.45, -0.19)  z: [0.02, 0.31]  obstacle_points: 223  severity: 225.93
   class: ClearanceDriven  observability: Observed  explanation: clearance below threshold
   obstacle_evidence: 0.47  clearance: 0.18  support_continuity: 1.00
 ```
@@ -261,6 +261,7 @@ hotspot 1
 | `obstacle_evidence` | 这个位置的障碍证据强度 | 越高说明系统越像“真的看到了障碍” |
 | `clearance` | 这个位置的净空 | 越小越说明上方可通过空间不够 |
 | `support_continuity` | 这个位置的地面连续性 | 越小越说明地面建模比较断、不稳定 |
+| `z: [min_z, max_z]` | 这个热点里障碍点的最低和最高高度 | 越能看出这团点在竖直方向上有没有明显跨度 |
 
 ### hotspot 最重要的三项
 

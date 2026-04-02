@@ -17,6 +17,8 @@ struct BinStats {
   int count = 0;
   float sum_x = 0.0f;
   float sum_y = 0.0f;
+  float min_z = std::numeric_limits<float>::infinity();
+  float max_z = -std::numeric_limits<float>::infinity();
 };
 
 float NormalizeAngle(float angle) {
@@ -98,6 +100,8 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
     ++bin.count;
     bin.sum_x += x;
     bin.sum_y += y;
+    bin.min_z = std::min(bin.min_z, obstacle_point.point.z);
+    bin.max_z = std::max(bin.max_z, obstacle_point.point.z);
   }
 
   if (in_box_count == 0) {
@@ -117,7 +121,8 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
     (void)key;
     const float center_x = bin.sum_x / static_cast<float>(std::max(bin.count, 1));
     const float center_y = bin.sum_y / static_cast<float>(std::max(bin.count, 1));
-    analysis.hotspots.push_back(buildHotspot(output, center_x, center_y, bin.count));
+    analysis.hotspots.push_back(
+        buildHotspot(output, center_x, center_y, bin.min_z, bin.max_z, bin.count));
   }
 
   std::sort(analysis.hotspots.begin(), analysis.hotspots.end(),
@@ -200,10 +205,13 @@ FalseObstacleAnalyzer::LocalCellContext FalseObstacleAnalyzer::lookupLocalContex
 }
 
 FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
-    const passable_area::core::FrameOutput &output, float x, float y, int obstacle_point_count) const {
+    const passable_area::core::FrameOutput &output, float x, float y, float min_z, float max_z,
+    int obstacle_point_count) const {
   FalseObstacleHotspot hotspot;
   hotspot.x = x;
   hotspot.y = y;
+  hotspot.min_z = min_z;
+  hotspot.max_z = max_z;
   hotspot.obstacle_point_count = obstacle_point_count;
 
   const auto context = lookupLocalContext(output, x, y);

@@ -437,7 +437,8 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
     std::cout << "  "
               << Colorize("• hotspot " + std::to_string(i + 1), "\033[1;35m", style) << '\n';
     std::cout << "    pos: (" << FormatFloat(hotspot.x) << ", " << FormatFloat(hotspot.y)
-              << ")  obstacle_points: " << hotspot.obstacle_point_count
+              << ")  z: [" << FormatFloat(hotspot.min_z) << ", " << FormatFloat(hotspot.max_z)
+              << "]  obstacle_points: " << hotspot.obstacle_point_count
               << "  severity: " << Colorize(FormatFloat(hotspot.severity), "\033[1;33m", style)
               << '\n';
     std::cout << "    class: " << hotspot_class << "  observability: " << observability

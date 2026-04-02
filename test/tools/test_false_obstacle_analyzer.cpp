@@ -106,12 +106,14 @@ TEST(FalseObstacleAnalyzerTest, ClassifiesObstacleEvidencePlusLowContinuity) {
 TEST(FalseObstacleAnalyzerTest, ProducesHotspotRankingForMultipleInBoxClusters) {
   FalseObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
-  output.obstacle_points.push_back(CellDebugPoint{{-0.2f, -0.2f, 0.0f}});
-  output.obstacle_points.push_back(CellDebugPoint{{-0.18f, -0.18f, 0.0f}});
-  output.obstacle_points.push_back(CellDebugPoint{{0.25f, 0.25f, 0.0f}});
+  output.obstacle_points.push_back(CellDebugPoint{{-0.2f, -0.2f, 0.1f}});
+  output.obstacle_points.push_back(CellDebugPoint{{-0.18f, -0.18f, 0.3f}});
+  output.obstacle_points.push_back(CellDebugPoint{{0.25f, 0.25f, 0.5f}});
 
   const auto analysis = analyzer.analyzeFrame(output);
   ASSERT_TRUE(analysis.has_value());
   ASSERT_GE(analysis->hotspots.size(), 2U);
   EXPECT_GE(analysis->hotspots[0].obstacle_point_count, analysis->hotspots[1].obstacle_point_count);
+  EXPECT_FLOAT_EQ(analysis->hotspots[0].min_z, 0.1f);
+  EXPECT_FLOAT_EQ(analysis->hotspots[0].max_z, 0.3f);
 }

@@ -37,6 +37,8 @@ struct FalseObstacleAnalyzerConfig {
 struct FalseObstacleHotspot {
   float x = 0.0f;
   float y = 0.0f;
+  float min_z = 0.0f;
+  float max_z = 0.0f;
   int obstacle_point_count = 0;
   float severity = 0.0f;
   float obstacle_evidence = 0.0f;
@@ -103,7 +105,8 @@ private:
   LocalCellContext lookupLocalContext(const passable_area::core::FrameOutput &output, float x,
                                       float y) const;
   FalseObstacleHotspot buildHotspot(const passable_area::core::FrameOutput &output, float x,
-                                    float y, int obstacle_point_count) const;
+                                    float y, float min_z, float max_z,
+                                    int obstacle_point_count) const;
   float computeHotspotSeverity(const FalseObstacleHotspot &hotspot) const;
   FalseObstacleRootCause classifyHotspot(const FalseObstacleHotspot &hotspot) const;
   FalseObstacleRootCause reduceFrameClass(const std::vector<FalseObstacleHotspot> &hotspots) const;
