@@ -45,6 +45,10 @@ struct FalseObstacleHotspot {
   float clearance = 0.0f;
   float support_continuity = 0.0f;
   float overhead_height = 0.0f;
+  bool upper_support_cell = false;
+  bool obstacle_suspicious = false;
+  bool obstacle_rejected_by_neighbor_support = false;
+  int8_t neighbor_upper_support_count = 0;
   bool has_grid_values = false;
   bool has_observability = false;
   passable_area::core::ObservabilityState observability_state =
@@ -64,6 +68,7 @@ struct FalseObstacleFrameAnalysis {
   float max_local_obstacle_evidence = 0.0f;
   float min_local_clearance = 0.0f;
   float min_local_support_continuity = 0.0f;
+  int rejected_suspicious_cell_count = 0;
   std::vector<FalseObstacleHotspot> hotspots;
 };
 
@@ -98,15 +103,19 @@ private:
     float clearance = 0.0f;
     float support_continuity = 0.0f;
     float overhead_height = 0.0f;
+    bool upper_support_cell = false;
+    bool obstacle_suspicious = false;
+    bool obstacle_rejected_by_neighbor_support = false;
+    int8_t neighbor_upper_support_count = 0;
     bool has_observability = false;
     passable_area::core::ObservabilityState observability_state =
         passable_area::core::ObservabilityState::kObserved;
   };
 
   LocalCellContext lookupLocalContext(const passable_area::core::FrameOutput &output, float x,
-                                      float y) const;
+                                      float y, int source_cell) const;
   FalseObstacleHotspot buildHotspot(const passable_area::core::FrameOutput &output, float x,
-                                    float y, float min_z, float max_z,
+                                    float y, float min_z, float max_z, int source_cell,
                                     int obstacle_point_count) const;
   float computeHotspotSeverity(const FalseObstacleHotspot &hotspot) const;
   FalseObstacleRootCause classifyHotspot(const FalseObstacleHotspot &hotspot) const;

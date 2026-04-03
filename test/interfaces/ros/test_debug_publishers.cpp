@@ -62,7 +62,8 @@ FrameOutput MakeDebugOutput() {
   output.clearance.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(9, 0.0f);
   output.support_state.assign(9, 0U);
-  output.unknown_points.push_back(CellDebugPoint{{0.0f, 0.0f, 0.0f}});
+  output.unknown_points.push_back(passable_area::core::MakeCellDebugPointWithoutSource(
+      {0.0f, 0.0f, 0.0f}));
   output.observability.sectors.resize(1);
   output.observability.sectors.front().state = ObservabilityState::kObserved;
   output.observability.sectors.front().coverage_confidence = 1.0f;

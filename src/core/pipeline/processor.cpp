@@ -47,11 +47,12 @@ FrameOutput Processor::update(const FrameInput &input) {
   const std::vector<int> dirty_cells = map_updater_.update(frontend_output, observability, map_);
   feature_updater_.update(dirty_cells, map_);
   traversability_solver_.update(map_);
-  return buildOutput(preprocessed, observability);
+  return buildOutput(preprocessed, observability, frontend_output);
 }
 
 FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
-                                   const FrameObservability &observability) const {
+                                   const FrameObservability &observability,
+                                   const FrontendOutput &frontend_output) const {
   FrameOutput output;
   output.stamp = frame.stamp;
   output.base_pose_in_odom = frame.base_pose_in_odom;
@@ -77,6 +78,11 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.roughness = layers.roughness;
   output.clearance = layers.clearance;
   output.support_continuity = layers.support_continuity;
+  output.upper_support_cell = frontend_output.upper_support_cell;
+  output.obstacle_suspicious = frontend_output.obstacle_suspicious;
+  output.obstacle_rejected_by_neighbor_support =
+      frontend_output.obstacle_rejected_by_neighbor_support;
+  output.neighbor_upper_support_count = frontend_output.neighbor_upper_support_count;
   output.support_state = layers.support_state;
 
   if (config_.debug.publish_base_gravity_cloud) {
@@ -90,8 +96,9 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
 
   for (const auto &sample : frame.odom_samples) {
     if (config_.debug.publish_base_gravity_cloud) {
-      output.base_gravity_cloud_points.push_back(CellDebugPoint{
-          TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
+      output.base_gravity_cloud_points.push_back(
+          MakeCellDebugPointWithoutSource(
+              TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)));
     }
 
     int cell = -1;
@@ -102,12 +109,14 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
     if (layers.support_confidence[cell] > 0.15f &&
         IsNear(sample.point_in_odom.z, layers.support_height[cell], support_tolerance)) {
       output.support_points.push_back(
-          CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
+          MakeCellDebugPoint(
+              TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom), cell));
     }
 
     if (layers.obstacle_evidence[cell] >= config_.obstacle_points_min_evidence) {
       output.obstacle_points.push_back(
-          CellDebugPoint{TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom)});
+          MakeCellDebugPoint(
+              TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom), cell));
     }
   }
 
@@ -116,8 +125,9 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
       const auto xy = map_.indexToOdom(cell);
       const float z =
           std::isfinite(layers.support_height[cell]) ? layers.support_height[cell] : 0.0f;
-      output.unknown_points.push_back(CellDebugPoint{TransformOdomPointToBaseGravity(
-          Point3f{xy.x(), xy.y(), z}, frame.base_pose_in_odom)});
+      output.unknown_points.push_back(MakeCellDebugPoint(
+          TransformOdomPointToBaseGravity(Point3f{xy.x(), xy.y(), z}, frame.base_pose_in_odom),
+          cell));
     }
   }
 

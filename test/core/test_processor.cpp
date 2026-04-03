@@ -152,8 +152,25 @@ FrameInput MakeObstacleColumnFrame(int stamp = 1) {
       {0.25f, 0.25f, 0.0f},
       {0.25f, 0.25f, 0.12f},
       {0.25f, 0.25f, 0.30f},
+      {-0.25f, 0.25f, 0.0f},
+      {-0.25f, 0.25f, 0.12f},
+      {-0.25f, 0.25f, 0.30f},
   };
   return input;
+}
+
+ProcessedFrame MakeProcessedFrame(const std::vector<passable_area::core::OdomPointSample> &samples) {
+  ProcessedFrame frame;
+  frame.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  frame.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  frame.odom_samples = samples;
+  frame.cloud_in_base.reserve(samples.size());
+  frame.cloud_in_odom.reserve(samples.size());
+  for (const auto &sample : samples) {
+    frame.cloud_in_base.push_back(sample.point_in_base);
+    frame.cloud_in_odom.push_back(sample.point_in_odom);
+  }
+  return frame;
 }
 
 FrameInput MakeDynamicObstacleCellFrame(int stamp = 1) {
@@ -165,6 +182,9 @@ FrameInput MakeDynamicObstacleCellFrame(int stamp = 1) {
       {0.25f, 0.25f, 0.0f},
       {0.25f, 0.25f, 0.18f},
       {0.25f, 0.25f, 0.45f},
+      {-0.25f, 0.25f, 0.0f},
+      {-0.25f, 0.25f, 0.18f},
+      {-0.25f, 0.25f, 0.45f},
   };
   return input;
 }
@@ -178,6 +198,9 @@ FrameInput MakeGroundOnlyCellFrame(int stamp = 1) {
       {0.25f, 0.25f, 0.0f},
       {0.28f, 0.22f, 0.0f},
       {0.22f, 0.28f, 0.0f},
+      {-0.25f, 0.25f, 0.0f},
+      {-0.22f, 0.22f, 0.0f},
+      {-0.28f, 0.28f, 0.0f},
   };
   return input;
 }
@@ -191,6 +214,9 @@ FrameInput MakeRearObstacleCellFrame(int stamp = 1) {
       {-0.8f, 0.8f, 0.0f},
       {-0.8f, 0.8f, 0.18f},
       {-0.8f, 0.8f, 0.45f},
+      {-0.6f, 0.8f, 0.0f},
+      {-0.6f, 0.8f, 0.18f},
+      {-0.6f, 0.8f, 0.45f},
   };
   return input;
 }
@@ -485,11 +511,16 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
   forward.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
   forward.base_pose_in_odom.position = Eigen::Vector3f::Zero();
   forward.cloud_in_base = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
-  forward.cloud_in_odom = {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.2f}};
+  forward.cloud_in_odom = {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.2f}, {-0.25f, 0.25f, 0.0f},
+                           {-0.25f, 0.25f, 0.2f}};
   forward.odom_samples.push_back(
       passable_area::core::OdomPointSample{{1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.0f}});
   forward.odom_samples.push_back(
       passable_area::core::OdomPointSample{{-1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.2f}});
+  forward.odom_samples.push_back(
+      passable_area::core::OdomPointSample{{1.0f, 0.0f, 0.0f}, {-0.25f, 0.25f, 0.0f}});
+  forward.odom_samples.push_back(
+      passable_area::core::OdomPointSample{{1.0f, 0.0f, 0.2f}, {-0.25f, 0.25f, 0.2f}});
   ProcessedFrame reversed = forward;
   std::reverse(reversed.odom_samples.begin(), reversed.odom_samples.end());
 
@@ -501,11 +532,115 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
   EXPECT_EQ(forward_output.support_candidates[0].cell, reversed_output.support_candidates[0].cell);
   EXPECT_FLOAT_EQ(forward_output.support_candidates[0].confidence,
                   reversed_output.support_candidates[0].confidence);
-  ASSERT_EQ(forward_output.obstacle_candidates.size(), 1U);
-  ASSERT_EQ(reversed_output.obstacle_candidates.size(), 1U);
-  EXPECT_EQ(forward_output.obstacle_candidates[0].cell, reversed_output.obstacle_candidates[0].cell);
-  EXPECT_FLOAT_EQ(forward_output.obstacle_candidates[0].evidence,
-                  reversed_output.obstacle_candidates[0].evidence);
+  ASSERT_EQ(forward_output.obstacle_candidates.size(), 2U);
+  ASSERT_EQ(reversed_output.obstacle_candidates.size(), 2U);
+  auto sorted_forward_obstacles = forward_output.obstacle_candidates;
+  auto sorted_reversed_obstacles = reversed_output.obstacle_candidates;
+  std::sort(sorted_forward_obstacles.begin(), sorted_forward_obstacles.end(),
+            [](const auto &lhs, const auto &rhs) { return lhs.cell < rhs.cell; });
+  std::sort(sorted_reversed_obstacles.begin(), sorted_reversed_obstacles.end(),
+            [](const auto &lhs, const auto &rhs) { return lhs.cell < rhs.cell; });
+  for (size_t i = 0; i < sorted_forward_obstacles.size(); ++i) {
+    EXPECT_EQ(sorted_forward_obstacles[i].cell, sorted_reversed_obstacles[i].cell);
+    EXPECT_FLOAT_EQ(sorted_forward_obstacles[i].evidence, sorted_reversed_obstacles[i].evidence);
+  }
+}
+
+TEST(ProcessorTest, PolarFrontendRejectsIsolatedSuspiciousObstacleWithoutNeighborSupport) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.0f}},
+      {{0.25f, 0.25f, 0.45f}, {0.25f, 0.25f, 0.45f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  int cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  EXPECT_TRUE(output.obstacle_candidates.empty());
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(cell)], 1);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)], 1U);
+}
+
+TEST(ProcessorTest, PolarFrontendConfirmsSuspiciousObstacleWithNeighborSupportCluster) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 0.0f}, {0.25f, 0.25f, 0.0f}},
+      {{0.25f, 0.25f, 0.45f}, {0.25f, 0.25f, 0.45f}},
+      {{0.45f, 0.25f, 0.0f}, {0.45f, 0.25f, 0.0f}},
+      {{0.45f, 0.25f, 0.38f}, {0.45f, 0.25f, 0.38f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  int primary_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_EQ(output.obstacle_candidates.size(), 2U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 2);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 0U);
+}
+
+TEST(ProcessorTest, PolarFrontendUsesFrameMinZWhenHistoricalSupportIsMissing) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int supported_neighbor = -1;
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, supported_neighbor));
+  map.layers().support_height[static_cast<size_t>(supported_neighbor)] = 0.0f;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 0.05f}, {0.25f, 0.25f, 0.05f}},
+      {{0.25f, 0.25f, 0.32f}, {0.25f, 0.25f, 0.32f}},
+      {{0.45f, 0.25f, 0.0f}, {0.45f, 0.25f, 0.0f}},
+      {{0.45f, 0.25f, 0.33f}, {0.45f, 0.25f, 0.33f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  int fallback_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, fallback_cell));
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(fallback_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(fallback_cell)], 2);
+  ASSERT_EQ(output.obstacle_candidates.size(), 2U);
 }
 
 TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
@@ -600,7 +735,7 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   const auto output = processor.update(MakeObstacleColumnFrame(300000001));
   ASSERT_TRUE(output.valid);
 
-  ASSERT_EQ(output.obstacle_points.size(), 3U);
+  ASSERT_EQ(output.obstacle_points.size(), 6U);
   float min_z = std::numeric_limits<float>::infinity();
   float max_z = -std::numeric_limits<float>::infinity();
   for (const auto &point : output.obstacle_points) {

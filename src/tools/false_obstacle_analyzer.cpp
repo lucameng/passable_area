@@ -19,6 +19,8 @@ struct BinStats {
   float sum_y = 0.0f;
   float min_z = std::numeric_limits<float>::infinity();
   float max_z = -std::numeric_limits<float>::infinity();
+  int first_source_cell = -1;
+  std::unordered_map<int, int> source_cell_counts;
 };
 
 float NormalizeAngle(float angle) {
@@ -46,6 +48,16 @@ int CellIndex(const passable_area::core::FrameOutput &output, float odom_x, floa
     return -1;
   }
   return row * output.cols + col;
+}
+
+passable_area::core::Point3f TransformOdomPointToBaseGravity(float x, float y,
+                                                             const passable_area::core::Pose3D &pose) {
+  const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
+  const float cos_yaw = std::cos(yaw);
+  const float sin_yaw = std::sin(yaw);
+  const float dx = x - pose.position.x();
+  const float dy = y - pose.position.y();
+  return passable_area::core::Point3f{cos_yaw * dx + sin_yaw * dy, -sin_yaw * dx + cos_yaw * dy, 0.0f};
 }
 
 passable_area::core::Point3f TransformBaseGravityPointToOdom(float x, float y,
@@ -102,6 +114,10 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
     bin.sum_y += y;
     bin.min_z = std::min(bin.min_z, obstacle_point.point.z);
     bin.max_z = std::max(bin.max_z, obstacle_point.point.z);
+    if (bin.first_source_cell < 0) {
+      bin.first_source_cell = obstacle_point.source_cell;
+    }
+    ++bin.source_cell_counts[obstacle_point.source_cell];
   }
 
   if (in_box_count == 0) {
@@ -116,13 +132,41 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
   analysis.max_local_obstacle_evidence = 0.0f;
   analysis.min_local_clearance = std::numeric_limits<float>::infinity();
   analysis.min_local_support_continuity = std::numeric_limits<float>::infinity();
+  analysis.rejected_suspicious_cell_count = 0;
+
+  for (size_t cell = 0; cell < output.obstacle_rejected_by_neighbor_support.size(); ++cell) {
+    if (output.obstacle_rejected_by_neighbor_support[cell] == 0U) {
+      continue;
+    }
+    const int row = static_cast<int>(cell) / output.cols;
+    const int col = static_cast<int>(cell) % output.cols;
+    const float odom_x = output.origin.x() + (static_cast<float>(col) + 0.5f) * output.resolution;
+    const float odom_y = output.origin.y() + (static_cast<float>(row) + 0.5f) * output.resolution;
+    const auto point_in_base_gravity =
+        TransformOdomPointToBaseGravity(odom_x, odom_y, output.base_pose_in_odom);
+    if (IsInsideDetectionBox(analysis_config_.detection_box, point_in_base_gravity.x,
+                             point_in_base_gravity.y)) {
+      ++analysis.rejected_suspicious_cell_count;
+    }
+  }
 
   for (const auto &[key, bin] : bins) {
     (void)key;
     const float center_x = bin.sum_x / static_cast<float>(std::max(bin.count, 1));
     const float center_y = bin.sum_y / static_cast<float>(std::max(bin.count, 1));
+    int representative_source_cell = bin.first_source_cell;
+    int representative_count = -1;
+    for (const auto &[source_cell, count] : bin.source_cell_counts) {
+      if (count > representative_count ||
+          (count == representative_count && source_cell >= 0 &&
+           (representative_source_cell < 0 || source_cell < representative_source_cell))) {
+        representative_source_cell = source_cell;
+        representative_count = count;
+      }
+    }
     analysis.hotspots.push_back(
-        buildHotspot(output, center_x, center_y, bin.min_z, bin.max_z, bin.count));
+        buildHotspot(output, center_x, center_y, bin.min_z, bin.max_z, representative_source_cell,
+                     bin.count));
   }
 
   std::sort(analysis.hotspots.begin(), analysis.hotspots.end(),
@@ -184,16 +228,35 @@ FalseObstacleBagSummary FalseObstacleAnalyzer::buildSummary(
 }
 
 FalseObstacleAnalyzer::LocalCellContext FalseObstacleAnalyzer::lookupLocalContext(
-    const passable_area::core::FrameOutput &output, float x, float y) const {
+    const passable_area::core::FrameOutput &output, float x, float y, int source_cell) const {
   LocalCellContext context;
+  const int total_cells = output.rows * output.cols;
+  const bool source_cell_valid = source_cell >= 0 && source_cell < total_cells;
+  if (source_cell_valid) {
+    if (output.upper_support_cell.size() > static_cast<size_t>(source_cell)) {
+      context.upper_support_cell = output.upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
+    }
+    if (output.obstacle_suspicious.size() > static_cast<size_t>(source_cell)) {
+      context.obstacle_suspicious = output.obstacle_suspicious[static_cast<size_t>(source_cell)] != 0U;
+    }
+    if (output.obstacle_rejected_by_neighbor_support.size() > static_cast<size_t>(source_cell)) {
+      context.obstacle_rejected_by_neighbor_support =
+          output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(source_cell)] != 0U;
+    }
+    if (output.neighbor_upper_support_count.size() > static_cast<size_t>(source_cell)) {
+      context.neighbor_upper_support_count =
+          output.neighbor_upper_support_count[static_cast<size_t>(source_cell)];
+    }
+  }
+
   const auto point_in_odom = TransformBaseGravityPointToOdom(x, y, output.base_pose_in_odom);
-  const int cell = CellIndex(output, point_in_odom.x, point_in_odom.y);
-  if (cell >= 0) {
+  const int center_cell = CellIndex(output, point_in_odom.x, point_in_odom.y);
+  if (center_cell >= 0) {
     context.has_grid_values = true;
-    context.obstacle_evidence = output.obstacle_evidence[static_cast<size_t>(cell)];
-    context.clearance = output.clearance[static_cast<size_t>(cell)];
-    context.support_continuity = output.support_continuity[static_cast<size_t>(cell)];
-    context.overhead_height = output.overhead_height[static_cast<size_t>(cell)];
+    context.obstacle_evidence = output.obstacle_evidence[static_cast<size_t>(center_cell)];
+    context.clearance = output.clearance[static_cast<size_t>(center_cell)];
+    context.support_continuity = output.support_continuity[static_cast<size_t>(center_cell)];
+    context.overhead_height = output.overhead_height[static_cast<size_t>(center_cell)];
   }
 
   const int sector_index = SectorIndexForBaseGravityPoint(output, x, y);
@@ -206,7 +269,7 @@ FalseObstacleAnalyzer::LocalCellContext FalseObstacleAnalyzer::lookupLocalContex
 
 FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
     const passable_area::core::FrameOutput &output, float x, float y, float min_z, float max_z,
-    int obstacle_point_count) const {
+    int source_cell, int obstacle_point_count) const {
   FalseObstacleHotspot hotspot;
   hotspot.x = x;
   hotspot.y = y;
@@ -214,12 +277,16 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.max_z = max_z;
   hotspot.obstacle_point_count = obstacle_point_count;
 
-  const auto context = lookupLocalContext(output, x, y);
+  const auto context = lookupLocalContext(output, x, y, source_cell);
   hotspot.has_grid_values = context.has_grid_values;
   hotspot.obstacle_evidence = context.obstacle_evidence;
   hotspot.clearance = context.clearance;
   hotspot.support_continuity = context.support_continuity;
   hotspot.overhead_height = context.overhead_height;
+  hotspot.upper_support_cell = context.upper_support_cell;
+  hotspot.obstacle_suspicious = context.obstacle_suspicious;
+  hotspot.obstacle_rejected_by_neighbor_support = context.obstacle_rejected_by_neighbor_support;
+  hotspot.neighbor_upper_support_count = context.neighbor_upper_support_count;
   hotspot.has_observability = context.has_observability;
   hotspot.observability_state = context.observability_state;
   hotspot.classification = classifyHotspot(hotspot);

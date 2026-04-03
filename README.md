@@ -44,6 +44,7 @@ The current implementation already supports:
 Rear-sector conservatism is now driven only by `rear_dropout / MissingByDropout`; there is no fixed rear blind sector.
 
 `PolarFrontend` keeps body-centric observability semantics separate from odom-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use odom-view samples.
+Obstacle formation is additionally guarded by local structure: a single-cell vertical span only marks the cell as suspicious, and the cell is promoted to an obstacle only when its fixed 3x3 neighborhood contains enough upper-support cells.
 
 Frame semantics are intentionally split:
 - `odom_frame`: internal local mapping frame used by map indexing and all core terrain reasoning
@@ -113,3 +114,7 @@ Relevant dynamic-obstacle persistence controls:
 - `obstacle_clear_observed_decay`: faster obstacle evidence decay when ground is re-observed without a new obstacle
 - `obstacle_clear_partial_decay_scale`: scales that faster decay under partially observed sectors
 - `obstacle_height_clear_threshold`: clears `overhead_height` once obstacle evidence has fallen below this threshold
+
+Relevant obstacle-formation controls:
+- `upper_min_height_above_support`: minimum height above the support reference required to mark a cell as containing upper support; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
+- `min_neighbor_upper_support_cells`: minimum number of upper-support cells inside the fixed 3x3 neighborhood required to confirm a suspicious obstacle cell

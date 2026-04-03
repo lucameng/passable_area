@@ -19,6 +19,8 @@ struct GeometryConfig {
   float max_step_down = 0.25f;
   float max_support_roughness = 0.08f;
   float min_clearance = 0.35f;
+  float upper_min_height_above_support = 0.20f;
+  int min_neighbor_upper_support_cells = 2;
 };
 
 struct ObservabilityConfig {

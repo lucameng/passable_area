@@ -422,6 +422,8 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
   PrintKeyValueLine("max_obstacle_evidence", FormatFloat(frame.max_local_obstacle_evidence));
   PrintKeyValueLine("min_clearance", FormatFloat(frame.min_local_clearance));
   PrintKeyValueLine("min_support_continuity", FormatFloat(frame.min_local_support_continuity));
+  PrintKeyValueLine("rejected_suspicious_cells",
+                    std::to_string(frame.rejected_suspicious_cell_count));
 
   for (size_t i = 0; i < frame.hotspots.size(); ++i) {
     const auto &hotspot = frame.hotspots[i];
@@ -448,6 +450,11 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
     std::cout << "    obstacle_evidence: " << FormatFloat(hotspot.obstacle_evidence)
               << "  clearance: " << FormatFloat(hotspot.clearance)
               << "  support_continuity: " << FormatFloat(hotspot.support_continuity) << '\n';
+    std::cout << "    upper_support_cell: " << (hotspot.upper_support_cell ? "true" : "false")
+              << "  neighbor_upper_support_count: "
+              << std::to_string(hotspot.neighbor_upper_support_count)
+              << "  rejected_by_neighbor_support: "
+              << (hotspot.obstacle_rejected_by_neighbor_support ? "true" : "false") << '\n';
   }
   std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
             << '\n';

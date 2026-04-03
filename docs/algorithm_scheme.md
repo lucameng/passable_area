@@ -335,6 +335,7 @@ TF：
 - 遍历 `odom_samples`
 - 以 `point_in_base` 计算扇区语义
 - 以 `point_in_odom` 聚合到地图 cell
+- 先按单格竖向跨度产生 suspicious obstacle，再用固定 3x3 邻域确认 obstacle
 - 输出：
   - `support_candidates`
   - `obstacle_candidates`
@@ -343,6 +344,7 @@ TF：
 设计目标：
 
 - 把“机体观测语义”和“地图投影语义”解耦
+- 避免孤立高点直接形成 obstacle candidate，要求局部最小空间支持
 
 ### 9.4 `DropoutAwareMapUpdater`
 
@@ -540,6 +542,8 @@ TF：
 - `max_step_down`
 - `max_support_roughness`
 - `min_clearance`
+- `upper_min_height_above_support`
+- `min_neighbor_upper_support_cells`
 
 ### 13.3 观测参数
 

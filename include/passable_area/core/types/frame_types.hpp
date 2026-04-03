@@ -44,7 +44,16 @@ struct FrameObservability {
 
 struct CellDebugPoint {
   Point3f point;
+  int source_cell = -1;
 };
+
+inline CellDebugPoint MakeCellDebugPoint(const Point3f &point, int source_cell) {
+  return CellDebugPoint{point, source_cell};
+}
+
+inline CellDebugPoint MakeCellDebugPointWithoutSource(const Point3f &point) {
+  return CellDebugPoint{point, -1};
+}
 
 struct FrameOutput {
   Timestamp stamp = 0;
@@ -69,6 +78,10 @@ struct FrameOutput {
   std::vector<float> roughness;
   std::vector<float> clearance;
   std::vector<float> support_continuity;
+  std::vector<uint8_t> upper_support_cell;
+  std::vector<uint8_t> obstacle_suspicious;
+  std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
+  std::vector<int8_t> neighbor_upper_support_count;
   std::vector<uint8_t> support_state;
   std::vector<CellDebugPoint> base_gravity_cloud_points;
   std::vector<CellDebugPoint> support_points;
