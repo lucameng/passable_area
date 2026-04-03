@@ -28,6 +28,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "min_neighbor_upper_support_cells", config.geometry.min_neighbor_upper_support_cells);
   config.obstacle_points_min_evidence = node.declare_parameter(
       "obstacle_points_min_evidence", config.obstacle_points_min_evidence);
+  config.obstacle_points_min_height = node.declare_parameter(
+      "obstacle_points_min_height", config.obstacle_points_min_height);
 
   config.observability.dropout_sector_gap_threshold = node.declare_parameter(
       "dropout_sector_gap_threshold", config.observability.dropout_sector_gap_threshold);

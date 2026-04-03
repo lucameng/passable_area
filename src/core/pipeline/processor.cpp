@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 
 namespace passable_area::core {
 namespace {
@@ -93,6 +94,24 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.unknown_points.reserve(map_.size() / 4);
   const float support_tolerance =
       std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
+  std::unordered_map<int, float> fallback_support_ref_by_cell;
+  fallback_support_ref_by_cell.reserve(frame.odom_samples.size() / 8U + 1U);
+
+  for (const auto &sample : frame.odom_samples) {
+    int cell = -1;
+    if (!map_.odomToIndex(sample.point_in_odom.x, sample.point_in_odom.y, cell)) {
+      continue;
+    }
+    if (layers.obstacle_evidence[cell] < config_.obstacle_points_min_evidence ||
+        std::isfinite(layers.support_height[cell])) {
+      continue;
+    }
+    auto [it, inserted] =
+        fallback_support_ref_by_cell.emplace(cell, sample.point_in_odom.z);
+    if (!inserted) {
+      it->second = std::min(it->second, sample.point_in_odom.z);
+    }
+  }
 
   for (const auto &sample : frame.odom_samples) {
     if (config_.debug.publish_base_gravity_cloud) {
@@ -113,7 +132,16 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
               TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom), cell));
     }
 
-    if (layers.obstacle_evidence[cell] >= config_.obstacle_points_min_evidence) {
+    float support_ref = layers.support_height[cell];
+    if (!std::isfinite(support_ref)) {
+      const auto it = fallback_support_ref_by_cell.find(cell);
+      support_ref = it != fallback_support_ref_by_cell.end()
+                        ? it->second
+                        : std::numeric_limits<float>::infinity();
+    }
+    if (layers.obstacle_evidence[cell] >= config_.obstacle_points_min_evidence &&
+        std::isfinite(support_ref) &&
+        sample.point_in_odom.z >= support_ref + config_.obstacle_points_min_height) {
       output.obstacle_points.push_back(
           MakeCellDebugPoint(
               TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom), cell));

@@ -80,6 +80,7 @@ struct Config {
   PreprocessConfig preprocess;
   DebugConfig debug;
   float obstacle_points_min_evidence = 0.4f;
+  float obstacle_points_min_height = 0.20f;
   std::string odom_frame = "odom";
   std::string base_gravity_frame = "base_gravity";
   std::string body_frame = "base_link";

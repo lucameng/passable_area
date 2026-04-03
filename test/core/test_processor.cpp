@@ -159,6 +159,24 @@ FrameInput MakeObstacleColumnFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeWallWithBaseNoiseFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {
+      {0.25f, 0.25f, 0.0f},
+      {0.25f, 0.25f, 0.05f},
+      {0.25f, 0.25f, 0.25f},
+      {0.25f, 0.25f, 0.45f},
+      {-0.25f, 0.25f, 0.0f},
+      {-0.25f, 0.25f, 0.05f},
+      {-0.25f, 0.25f, 0.25f},
+      {-0.25f, 0.25f, 0.45f},
+  };
+  return input;
+}
+
 ProcessedFrame MakeProcessedFrame(const std::vector<passable_area::core::OdomPointSample> &samples) {
   ProcessedFrame frame;
   frame.base_pose_in_odom.position = Eigen::Vector3f::Zero();
@@ -718,7 +736,7 @@ TEST(ProcessorTest, DebugSupportPointsRespectRobotCentricGravityFrame) {
   EXPECT_LT(std::abs(mean_y), 0.2f);
 }
 
-TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
+TEST(ProcessorTest, ObstaclePointsPublishUpperBandSamplesFromObstacleCells) {
   auto config = MakeConfig();
   config.map.length = 2.0f;
   config.map.width = 2.0f;
@@ -727,6 +745,7 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   config.observability.sector_count = 8;
   config.observability.min_points_per_sector = 1;
   config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
   Processor processor(config);
 
   ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(1)).valid);
@@ -735,15 +754,68 @@ TEST(ProcessorTest, DebugObstaclePointsIncludeAllSamplesFromObstacleCells) {
   const auto output = processor.update(MakeObstacleColumnFrame(300000001));
   ASSERT_TRUE(output.valid);
 
-  ASSERT_EQ(output.obstacle_points.size(), 6U);
+  ASSERT_EQ(output.obstacle_points.size(), 4U);
   float min_z = std::numeric_limits<float>::infinity();
   float max_z = -std::numeric_limits<float>::infinity();
   for (const auto &point : output.obstacle_points) {
     min_z = std::min(min_z, point.point.z);
     max_z = std::max(max_z, point.point.z);
   }
-  EXPECT_NEAR(min_z, 0.0f, 1e-5f);
+  EXPECT_NEAR(min_z, 0.12f, 1e-5f);
   EXPECT_NEAR(max_z, 0.30f, 1e-5f);
+}
+
+TEST(ProcessorTest, ObstaclePointsExcludeGroundSamplesUnderLowCeiling) {
+  auto config = MakeConfig();
+  config.preprocess.enable_downsample = false;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.15f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeLowCeilingFrame(0.2f, 1)).valid);
+  ASSERT_TRUE(processor.update(MakeLowCeilingFrame(0.2f, 100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeLowCeilingFrame(0.2f, 200000001)).valid);
+  const auto output = processor.update(MakeLowCeilingFrame(0.2f, 300000001));
+  ASSERT_TRUE(output.valid);
+  ASSERT_FALSE(output.obstacle_points.empty());
+
+  float min_z = std::numeric_limits<float>::infinity();
+  float max_z = -std::numeric_limits<float>::infinity();
+  for (const auto &point : output.obstacle_points) {
+    min_z = std::min(min_z, point.point.z);
+    max_z = std::max(max_z, point.point.z);
+  }
+  EXPECT_NEAR(min_z, 0.2f, 1e-5f);
+  EXPECT_NEAR(max_z, 0.2f, 1e-5f);
+}
+
+TEST(ProcessorTest, ObstaclePointsExcludeWallBaseNoise) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.2f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeWallWithBaseNoiseFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeWallWithBaseNoiseFrame(100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeWallWithBaseNoiseFrame(200000001)).valid);
+  const auto output = processor.update(MakeWallWithBaseNoiseFrame(300000001));
+  ASSERT_TRUE(output.valid);
+
+  ASSERT_EQ(output.obstacle_points.size(), 4U);
+  float min_z = std::numeric_limits<float>::infinity();
+  float max_z = -std::numeric_limits<float>::infinity();
+  for (const auto &point : output.obstacle_points) {
+    min_z = std::min(min_z, point.point.z);
+    max_z = std::max(max_z, point.point.z);
+  }
+  EXPECT_NEAR(min_z, 0.25f, 1e-5f);
+  EXPECT_NEAR(max_z, 0.45f, 1e-5f);
 }
 
 TEST(ProcessorTest, DebugObstaclePointsIgnoreWeakObstacleEvidenceByDefault) {

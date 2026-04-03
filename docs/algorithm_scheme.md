@@ -443,7 +443,8 @@ TF：
 语义：
 
 - 落在 `obstacle_evidence` 已足够高的 obstacle cell 内的真实样本点
-- 当前表示 obstacle cell 内全部原始障碍样本，而不是仅顶面样本
+- 仅发布相对该 cell support 参考面高度至少为 `obstacle_points_min_height` 的上部障碍样本，不按绝对 z 阈值解释
+- 当历史 `support_height` 不可用时，使用当前帧该 cell 的 `min_z` 作为 support 参考
 - 发布在 `base_gravity`
 
 ### 11.4 `/terrain_debug/unknown_mask`
@@ -762,9 +763,9 @@ source install/setup.bash
 
 当前它更接近：
 
-- `obstacle_evidence` 足够高的 obstacle cell 内全部原始样本点
+- `obstacle_evidence` 足够高的 obstacle cell 内、相对 support 参考面达到最小高度门槛的上部样本点
 
-因此它仍不是“所有 impassable cell 的点”，而是 obstacle 分支对应的 cell 内原始点。
+因此它仍不是“所有 impassable cell 的点”，而是 obstacle 分支对应的 cell 内上部障碍样本。
 
 ### 18.3 局部地图不是全局地图
 

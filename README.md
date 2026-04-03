@@ -62,7 +62,7 @@ Preprocessing semantics are intentionally split as well:
 Current debug point semantics:
 - `/terrain_debug/base_gravity_cloud`: full preprocessed algorithm cloud expressed in `base_gravity_frame`
 - `/terrain_debug/support_points`: real input samples that land in support cells and remain close to the cell support height, expressed in `base_gravity_frame`
-- `/terrain_obstacle_points`: real input samples that land in cells whose `obstacle_evidence` is already high enough, expressed in `base_gravity_frame`
+- `/terrain_obstacle_points`: real input samples that land in obstacle cells whose `obstacle_evidence` is already high enough and whose height is at least `obstacle_points_min_height` relative to the cell support reference, not as an absolute z threshold, expressed in `base_gravity_frame`
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
 - these point outputs are intended to align directly with the robot-centric `grid_map`, `terrain_state`, and `terrain_cost` views in RViz
 - `TerrainObservability.odom_point_count`: number of samples in the internal `cloud_in_odom` mapping view
@@ -118,3 +118,7 @@ Relevant dynamic-obstacle persistence controls:
 Relevant obstacle-formation controls:
 - `upper_min_height_above_support`: minimum height above the support reference required to mark a cell as containing upper support; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
 - `min_neighbor_upper_support_cells`: minimum number of upper-support cells inside the fixed 3x3 neighborhood required to confirm a suspicious obstacle cell
+
+Relevant obstacle-point output controls:
+- `obstacle_points_min_evidence`: minimum obstacle evidence required before a cell can contribute to `/terrain_obstacle_points`
+- `obstacle_points_min_height`: minimum height relative to the cell support reference required for a sample to be published to `/terrain_obstacle_points`, not an absolute z threshold; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
