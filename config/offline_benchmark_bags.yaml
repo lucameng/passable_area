@@ -20,3 +20,9 @@ bags:
 
   - name: rosbag2_mtbf_upstair_and_downslope_2
     dir_name: rosbag2_mtbf_upstair_and_downslope_2
+
+  - name: rosbag2_b1_upstairs
+    dir_name: rosbag2_b1_upstairs
+
+  - name: rosbag2_b1_upstairs_slow
+    dir_name: rosbag2_b1_upstairs_slow
