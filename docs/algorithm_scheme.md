@@ -662,6 +662,7 @@ colcon test --packages-select passable_area --event-handlers console_direct+
 - 观察 8 万到 16 万点点云下的处理耗时
 - 离线重放 bag 检查 unknown 比例和 dropout 行为
 - 回归性能趋势
+- workspace 级 batch benchmark 可分别输出 obstacle profile 与 timing profile
 
 ### 15.3 运行时联调检查
 

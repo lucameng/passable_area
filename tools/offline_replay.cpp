@@ -15,6 +15,7 @@
 #include <Eigen/Geometry>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -287,10 +288,21 @@ void PrintScenarioResult(const ScenarioResult &result) {
 }
 
 struct BagReplaySummary {
+  int cloud_total_frames = 0;
+  int odom_total_frames = 0;
   int paired_frames = 0;
+  int cloud_unpaired_frames = 0;
+  int odom_unpaired_frames = 0;
+  int invalid_frames = 0;
   int rear_dropout_frames = 0;
   int max_missing_sectors = 0;
   double avg_unknown_ratio = 0.0;
+  double max_unknown_ratio = 0.0;
+  double avg_input_point_count = 0.0;
+  double max_input_point_count = 0.0;
+  double avg_processing_ms = 0.0;
+  double max_processing_ms = 0.0;
+  double p95_processing_ms = 0.0;
 };
 
 struct FalseObstacleReplayArgs {
@@ -348,6 +360,16 @@ std::string FormatFloat(double value, int precision = 2) {
   std::ostringstream oss;
   oss << std::fixed << std::setprecision(precision) << value;
   return oss.str();
+}
+
+double Percentile(std::vector<double> samples, double p) {
+  if (samples.empty()) {
+    return 0.0;
+  }
+  std::sort(samples.begin(), samples.end());
+  const size_t idx = std::min(samples.size() - 1,
+                              static_cast<size_t>(std::floor(p * (samples.size() - 1))));
+  return samples[idx];
 }
 
 std::string FormatDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
@@ -601,6 +623,8 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
   passable_area::interfaces::ros::OdomConverter odom_converter;
   passable_area::core::Processor processor(config);
   BagReplaySummary summary;
+  std::vector<double> processing_ms_samples;
+  std::vector<double> input_point_count_samples;
 
   while (reader.has_next()) {
     auto bag_msg = reader.read_next();
@@ -616,12 +640,17 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
     }
   }
 
+  summary.cloud_total_frames = static_cast<int>(clouds.size());
+  summary.odom_total_frames = static_cast<int>(odoms.size());
+
   double unknown_ratio_sum = 0.0;
+  int paired_stamp_count = 0;
   for (const auto &[stamp, cloud_msg] : clouds) {
     auto odom_it = odoms.find(stamp);
     if (odom_it == odoms.end()) {
       continue;
     }
+    ++paired_stamp_count;
     passable_area::core::PointCloud cloud;
     passable_area::core::Pose3D pose;
     if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
@@ -631,8 +660,15 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
     input.stamp = stamp;
     input.base_pose_in_odom = pose;
     input.input_cloud_in_base = std::move(cloud);
+    input_point_count_samples.push_back(static_cast<double>(input.input_cloud_in_base.size()));
+    const auto start = std::chrono::steady_clock::now();
     const auto output = processor.update(input);
+    const double processing_ms = std::chrono::duration<double, std::milli>(
+                                     std::chrono::steady_clock::now() - start)
+                                     .count();
+    processing_ms_samples.push_back(processing_ms);
     if (!output.valid) {
+      ++summary.invalid_frames;
       continue;
     }
     ++summary.paired_frames;
@@ -651,10 +687,28 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
                                        static_cast<int8_t>(PassabilityState::kUnknown))) /
         std::max<size_t>(output.passability.size(), 1U);
     unknown_ratio_sum += unknown_ratio;
+    summary.max_unknown_ratio = std::max(summary.max_unknown_ratio, unknown_ratio);
   }
 
   if (summary.paired_frames > 0) {
     summary.avg_unknown_ratio = unknown_ratio_sum / static_cast<double>(summary.paired_frames);
+  }
+  summary.cloud_unpaired_frames = std::max(0, summary.cloud_total_frames - paired_stamp_count);
+  summary.odom_unpaired_frames = std::max(0, summary.odom_total_frames - paired_stamp_count);
+  if (!input_point_count_samples.empty()) {
+    summary.avg_input_point_count =
+        std::accumulate(input_point_count_samples.begin(), input_point_count_samples.end(), 0.0) /
+        static_cast<double>(input_point_count_samples.size());
+    summary.max_input_point_count =
+        *std::max_element(input_point_count_samples.begin(), input_point_count_samples.end());
+  }
+  if (!processing_ms_samples.empty()) {
+    summary.avg_processing_ms =
+        std::accumulate(processing_ms_samples.begin(), processing_ms_samples.end(), 0.0) /
+        static_cast<double>(processing_ms_samples.size());
+    summary.max_processing_ms =
+        *std::max_element(processing_ms_samples.begin(), processing_ms_samples.end());
+    summary.p95_processing_ms = Percentile(processing_ms_samples, 0.95);
   }
   return summary;
 }
@@ -794,7 +848,13 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  if (args.size() >= 2 && args[0] == "--bag") {
+  if (HasFlag(args, "--benchmark-timing") || (args.size() >= 2 && args[0] == "--bag")) {
+    const auto bag_path = ParseStringFlagValue(args, "--bag");
+    if (!bag_path) {
+      std::cerr << "timing benchmark requires --bag <path>\n";
+      rclcpp::shutdown();
+      return 1;
+    }
     const std::string params_file =
         ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
     const auto config = LoadConfigFromParamsFile(params_file);
@@ -802,17 +862,29 @@ int main(int argc, char **argv) {
       rclcpp::shutdown();
       return 1;
     }
-    const auto summary = RunBagReplay(args[1], *config);
+    const auto summary = RunBagReplay(*bag_path, *config);
     if (!summary) {
       rclcpp::shutdown();
       return 1;
     }
-    std::cout << "bag=" << args[1] << " params_file=" << params_file
+    std::cout << "bag=" << *bag_path << " params_file=" << params_file
+              << " cloud_total_frames=" << summary->cloud_total_frames
+              << " odom_total_frames=" << summary->odom_total_frames
               << " paired_frames=" << summary->paired_frames
+              << " cloud_unpaired_frames=" << summary->cloud_unpaired_frames
+              << " odom_unpaired_frames=" << summary->odom_unpaired_frames
+              << " invalid_frames=" << summary->invalid_frames
               << " rear_dropout_frames=" << summary->rear_dropout_frames
               << " max_missing_sectors=" << summary->max_missing_sectors
               << " avg_unknown_ratio=" << std::fixed << std::setprecision(3)
-              << summary->avg_unknown_ratio << '\n';
+              << summary->avg_unknown_ratio
+              << " max_unknown_ratio=" << summary->max_unknown_ratio
+              << " avg_input_points=" << std::setprecision(1) << summary->avg_input_point_count
+              << " max_input_points=" << std::setprecision(0) << summary->max_input_point_count
+              << " avg_processing_ms=" << std::setprecision(3) << summary->avg_processing_ms
+              << " max_processing_ms=" << summary->max_processing_ms
+              << " p95_processing_ms=" << summary->p95_processing_ms
+              << '\n';
     rclcpp::shutdown();
     return 0;
   }
