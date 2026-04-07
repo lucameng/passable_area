@@ -74,7 +74,8 @@ Current debug point semantics:
 - `src/core`: algorithm implementation
 - `src/interfaces/ros`: ROS integration
 - `msg/TerrainObservability.msg`: observability debug contract
-- `test/core`: gtests for processor behavior
+- `test/`: automated gtests only
+- `benchmarks/`: manual core and ROS performance benchmarks
 - `config/offline_benchmark_bags.yaml`: shared offline benchmark manifest for obstacle and timing batch runs
 - workspace-level `scripts/passable_obstacle_benchmark.sh`: obstacle-focused batch benchmark
 - workspace-level `scripts/passable_timing_benchmark.sh`: timing-focused batch benchmark
@@ -88,6 +89,10 @@ colcon build --packages-select passable_area --symlink-install
 source install/setup.bash
 colcon test --packages-select passable_area --event-handlers console_direct+
 ```
+
+Detailed test inventory, coverage matrix, and benchmark classification:
+
+- `docs/test_guide.md`
 
 ## Launch
 Use the single-node launch:
@@ -144,3 +149,4 @@ Relevant obstacle-point output controls:
 See:
 - `docs/false_obstacle_analysis_guide.md`
 - `docs/miss_obstacle_analysis_guide.md`
+- `docs/test_guide.md`

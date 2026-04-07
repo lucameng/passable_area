@@ -91,7 +91,8 @@ add_executable(passable_area_node src/main/passable_area_node_main.cpp)
 target_link_libraries(passable_area_node passable_area_ros)
 ament_target_dependencies(passable_area_node rclcpp)
 
-add_executable(passable_area_benchmark test/core/benchmark_processor.cpp)
+# Manual core throughput benchmark. This is intentionally not part of ament gtests.
+add_executable(passable_area_benchmark benchmarks/core/benchmark_processor.cpp)
 target_include_directories(passable_area_benchmark PUBLIC include)
 target_link_libraries(passable_area_benchmark passable_area_core ${OpenCV_LIBS})
 ament_target_dependencies(passable_area_benchmark Eigen3 OpenCV grid_map_core)
@@ -115,7 +116,8 @@ ament_target_dependencies(passable_area_offline_replay
   tf2_ros
 )
 
-add_executable(passable_area_e2e_benchmark test/interfaces/ros/e2e_benchmark.cpp)
+# Manual ROS end-to-end latency benchmark. This is intentionally not part of ament gtests.
+add_executable(passable_area_e2e_benchmark benchmarks/interfaces/ros/e2e_benchmark.cpp)
 target_include_directories(passable_area_e2e_benchmark PUBLIC include)
 target_link_libraries(passable_area_e2e_benchmark passable_area_ros passable_area_core ${OpenCV_LIBS})
 ament_target_dependencies(passable_area_e2e_benchmark

@@ -666,8 +666,8 @@ colcon test --packages-select passable_area --event-handlers console_direct+
 
 可用工具：
 
-- `test/core/benchmark_processor.cpp`
-- `test/interfaces/ros/e2e_benchmark.cpp`
+- `benchmarks/core/benchmark_processor.cpp`
+- `benchmarks/interfaces/ros/e2e_benchmark.cpp`
 - `tools/offline_replay.cpp`
 
 典型用途：
