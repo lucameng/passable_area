@@ -26,3 +26,6 @@ bags:
 
   - name: rosbag2_b1_upstairs_slow
     dir_name: rosbag2_b1_upstairs_slow
+
+  - name: rosbag2_mtbf_upslope_and_downstair
+    dir_name: rosbag2_mtbf_upslope_and_downstair
