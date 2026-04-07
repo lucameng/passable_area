@@ -99,6 +99,7 @@ ament_target_dependencies(passable_area_benchmark Eigen3 OpenCV grid_map_core)
 add_executable(passable_area_offline_replay
   tools/offline_replay.cpp
   src/tools/false_obstacle_analyzer.cpp
+  src/tools/miss_obstacle_analyzer.cpp
 )
 target_include_directories(passable_area_offline_replay PUBLIC include)
 target_link_libraries(passable_area_offline_replay passable_area_ros passable_area_core ${OpenCV_LIBS})
@@ -207,6 +208,20 @@ if(BUILD_TESTING)
     target_include_directories(test_false_obstacle_analyzer PUBLIC include)
     target_link_libraries(test_false_obstacle_analyzer passable_area_core ${OpenCV_LIBS})
     ament_target_dependencies(test_false_obstacle_analyzer
+      Eigen3
+      OpenCV
+      grid_map_core
+    )
+  endif()
+
+  ament_add_gtest(test_miss_obstacle_analyzer
+    test/tools/test_miss_obstacle_analyzer.cpp
+    src/tools/miss_obstacle_analyzer.cpp
+  )
+  if(TARGET test_miss_obstacle_analyzer)
+    target_include_directories(test_miss_obstacle_analyzer PUBLIC include)
+    target_link_libraries(test_miss_obstacle_analyzer passable_area_core ${OpenCV_LIBS})
+    ament_target_dependencies(test_miss_obstacle_analyzer
       Eigen3
       OpenCV
       grid_map_core

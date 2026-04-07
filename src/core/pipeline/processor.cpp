@@ -83,6 +83,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.sub_support_leak_count = frontend_output.sub_support_leak_count;
   output.upper_support_cell = frontend_output.upper_support_cell;
   output.obstacle_suspicious = frontend_output.obstacle_suspicious;
+  output.obstacle_candidate_cell = frontend_output.obstacle_candidate_cell;
   output.obstacle_rejected_by_neighbor_support =
       frontend_output.obstacle_rejected_by_neighbor_support;
   output.neighbor_upper_support_count = frontend_output.neighbor_upper_support_count;

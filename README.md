@@ -130,3 +130,17 @@ For industrial open stairs and other perforated structures, the frontend now app
 Relevant obstacle-point output controls:
 - `obstacle_points_min_evidence`: minimum obstacle evidence required before a cell can contribute to `/terrain_obstacle_points`
 - `obstacle_points_min_height`: minimum height relative to the cell support reference required for a sample to be published to `/terrain_obstacle_points`, not an absolute z threshold; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
+
+## Offline analysis tools
+
+`passable_area_offline_replay` currently provides three offline diagnosis modes:
+
+- `--analyze-false-obstacles`: summarize why obstacle points appeared inside a robot-centric detection box
+- `--analyze-missed-obstacles`: summarize why `/terrain_obstacle_points` did not appear inside a robot-centric ROI around a target start offset
+- `--inspect-roi`: dump low-level per-cell ROI state for manual debugging
+
+`--analyze-missed-obstacles` uses `base_gravity` ROI coordinates and only treats `/terrain_obstacle_points` as the detection signal. It does not use `terrain_state` as the primary pass/fail criterion.
+
+See:
+- `docs/false_obstacle_analysis_guide.md`
+- `docs/miss_obstacle_analysis_guide.md`

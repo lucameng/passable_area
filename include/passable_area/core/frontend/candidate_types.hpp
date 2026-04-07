@@ -32,6 +32,7 @@ struct FrontendOutput {
   std::vector<uint16_t> sub_support_leak_count;
   std::vector<uint8_t> upper_support_cell;
   std::vector<uint8_t> obstacle_suspicious;
+  std::vector<uint8_t> obstacle_candidate_cell;
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
   std::vector<int8_t> neighbor_upper_support_count;
 };

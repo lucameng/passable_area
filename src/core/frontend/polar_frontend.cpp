@@ -82,6 +82,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   output.sub_support_leak_count.assign(static_cast<size_t>(map.size()), 0U);
   output.upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
   output.obstacle_suspicious.assign(static_cast<size_t>(map.size()), 0U);
+  output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()), 0U);
   output.obstacle_rejected_by_neighbor_support.assign(static_cast<size_t>(map.size()), 0U);
   output.neighbor_upper_support_count.assign(static_cast<size_t>(map.size()), 0);
   std::vector<std::vector<size_t>> sample_indices_by_cell(static_cast<size_t>(map.size()));
@@ -350,6 +351,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
           output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
           continue;
         }
+        output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
         output.obstacle_candidates.push_back(
             ObstacleCandidate{cell, stats_it->second.max_z, std::clamp(vertical_span, 0.0f, 1.0f)});
       }

@@ -3,6 +3,7 @@
 #include "passable_area/interfaces/ros/params/ros_param_loader.hpp"
 #include "passable_area/passable_area.hpp"
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
+#include "passable_area/tools/miss_obstacle_analyzer.hpp"
 
 #include <nav_msgs/msg/odometry.hpp>
 #include <pcl/point_cloud.h>
@@ -32,6 +33,7 @@ using passable_area::core::FrameInput;
 using passable_area::core::FrameOutput;
 using passable_area::core::ObservabilityState;
 using passable_area::core::PassabilityState;
+using passable_area::core::ProcessedFrame;
 
 std::string DefaultParamsFile();
 std::optional<passable_area::core::Config> LoadConfigFromParamsFile(
@@ -313,6 +315,15 @@ struct FalseObstacleReplayArgs {
   bool use_color = true;
 };
 
+struct MissObstacleReplayArgs {
+  std::string bag_path;
+  std::string params_file;
+  passable_area::tools::MissObstacleAnalyzerConfig analyzer_config;
+  float start_offset_sec = 0.0f;
+  float time_window_sec = 0.2f;
+  bool use_color = true;
+};
+
 struct RoiInspectArgs {
   std::string bag_path;
   std::string params_file;
@@ -390,6 +401,13 @@ std::string FormatDetectionBox(const passable_area::tools::FalseObstacleDetectio
   return oss.str();
 }
 
+std::string FormatDetectionBox(const passable_area::tools::MissObstacleDetectionBox &box) {
+  std::ostringstream oss;
+  oss << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max << "] y["
+      << box.y_min << ", " << box.y_max << "]";
+  return oss.str();
+}
+
 constexpr size_t kCardColumns = 72;
 constexpr size_t kSectionHeaderColumns = kCardColumns + 2;
 
@@ -431,6 +449,11 @@ void PrintKeyValueLine(const std::string &label, const std::string &value) {
 void PrintDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box,
                        const TerminalStyle &style) {
   PrintKeyValueLine("detection_box", Colorize(FormatDetectionBox(box), "\033[36m", style));
+}
+
+void PrintDetectionBox(const passable_area::tools::MissObstacleDetectionBox &box,
+                       const TerminalStyle &style) {
+  PrintKeyValueLine("roi_box", Colorize(FormatDetectionBox(box), "\033[36m", style));
 }
 
 void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnalysis &frame,
@@ -547,6 +570,141 @@ void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSumma
   }
 }
 
+std::string MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
+  switch (cause) {
+    case passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi:
+      return "\033[34m";
+    case passable_area::tools::MissObstacleRootCause::kNoFrontendObstacleSuspicion:
+      return "\033[36m";
+    case passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport:
+      return "\033[33m";
+    case passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate:
+      return "\033[35m";
+    case passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow:
+      return "\033[31m";
+    case passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet:
+      return "\033[31m";
+    case passable_area::tools::MissObstacleRootCause::kNoObstacleSourceSamplesInRoi:
+      return "\033[33m";
+    case passable_area::tools::MissObstacleRootCause::kUnknownOrMixed:
+      return "\033[37m";
+  }
+  return "\033[37m";
+}
+
+void PrintMissObstacleFrame(const passable_area::tools::MissObstacleFrameAnalysis &frame, int rank,
+                            const TerminalStyle &style) {
+  const auto class_label = Colorize(passable_area::tools::ToString(frame.classification),
+                                    MissRootCauseColor(frame.classification).c_str(), style);
+  std::cout << '\n'
+            << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m", style)
+            << '\n';
+  std::cout << Colorize("║ frame " + std::to_string(rank), "\033[1;36m", style)
+            << "  " << class_label
+            << "  severity=" << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
+            << '\n';
+  std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m", style)
+            << '\n';
+  PrintKeyValueLine("stamp", std::to_string(frame.stamp));
+  PrintKeyValueLine("start_offset", FormatFloat(frame.start_offset_sec, 3) + " s");
+  PrintKeyValueLine("roi_sample_count", std::to_string(frame.roi_sample_count));
+  PrintKeyValueLine("roi_cells_with_any_samples", std::to_string(frame.roi_cells_with_any_samples));
+  PrintKeyValueLine("roi_obstacle_point_count", std::to_string(frame.roi_obstacle_point_count));
+  PrintKeyValueLine("obstacle_suspicious_cells",
+                    std::to_string(frame.obstacle_suspicious_cell_count));
+  PrintKeyValueLine("obstacle_candidate_cells",
+                    std::to_string(frame.obstacle_candidate_cell_count));
+  PrintKeyValueLine("rejected_suspicious_cells",
+                    std::to_string(frame.rejected_suspicious_cell_count));
+  PrintKeyValueLine("max_obstacle_evidence", FormatFloat(frame.max_obstacle_evidence));
+  PrintKeyValueLine("max_support_confidence", FormatFloat(frame.max_support_confidence));
+  PrintKeyValueLine("min_clearance", FormatFloat(frame.min_clearance));
+  PrintKeyValueLine("min_support_continuity", FormatFloat(frame.min_support_continuity));
+  PrintKeyValueLine("why", Colorize(frame.explanation, "\033[1;37m", style));
+  for (const auto &evidence : frame.evidence_lines) {
+    std::cout << "  " << Colorize("• evidence", "\033[1;35m", style) << ": " << evidence << '\n';
+  }
+  for (size_t i = 0; i < frame.representative_cells.size(); ++i) {
+    const auto &cell = frame.representative_cells[i];
+    std::cout << "  " << Colorize("• cell " + std::to_string(i + 1), "\033[1;35m", style) << '\n';
+    std::cout << "    pos: (" << FormatFloat(cell.x) << ", " << FormatFloat(cell.y)
+              << ")  sample_relative_z: [" << FormatFloat(cell.min_sample_relative_z) << ", "
+              << FormatFloat(cell.max_sample_relative_z) << "]  sample_count: " << cell.sample_count
+              << '\n';
+    std::cout << "    support_height: " << FormatFloat(cell.support_height)
+              << "  support_ref: " << FormatFloat(cell.support_ref)
+              << "  overhead_height: " << FormatFloat(cell.overhead_height) << '\n';
+    std::cout << "    obstacle_evidence: " << FormatFloat(cell.obstacle_evidence)
+              << "  support_confidence: " << FormatFloat(cell.support_confidence)
+              << "  support_anchor_used: " << FormatFloat(cell.support_anchor_used) << '\n';
+    std::cout << "    max_sample_z_minus_support_ref: "
+              << FormatFloat(cell.max_sample_z_minus_support_ref)
+              << "  sub_support_leak_count: " << std::to_string(cell.sub_support_leak_count) << '\n';
+    std::cout << "    upper_support_cell: " << (cell.upper_support_cell ? "true" : "false")
+              << "  obstacle_suspicious: " << (cell.obstacle_suspicious ? "true" : "false")
+              << "  obstacle_candidate_cell: " << (cell.obstacle_candidate_cell ? "true" : "false")
+              << '\n';
+    std::cout << "    rejected_by_neighbor_support: "
+              << (cell.obstacle_rejected_by_neighbor_support ? "true" : "false")
+              << "  neighbor_upper_support_count: "
+              << std::to_string(cell.neighbor_upper_support_count) << '\n';
+    std::cout << "    why: " << Colorize(cell.explanation, "\033[1;37m", style) << '\n';
+  }
+  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style) << '\n';
+}
+
+void PrintMissObstacleSummary(const passable_area::tools::MissObstacleBagSummary &summary,
+                              const MissObstacleReplayArgs &args, const TerminalStyle &style) {
+  PrintBanner("Miss Obstacle Offline Analysis", style);
+  PrintSectionHeader("Run", style);
+  PrintKeyValueLine("bag", args.bag_path);
+  PrintKeyValueLine("params_file", args.params_file);
+  PrintDetectionBox(summary.detection_box, style);
+  PrintKeyValueLine("start_offset", FormatFloat(args.start_offset_sec, 3) + " s");
+  PrintKeyValueLine("time_window", FormatFloat(args.time_window_sec, 3) + " s");
+  PrintKeyValueLine("top_k_cells", std::to_string(args.analyzer_config.representative_cell_limit));
+
+  const double candidate_ratio =
+      summary.total_frames > 0
+          ? static_cast<double>(summary.missed_frames) / static_cast<double>(summary.total_frames)
+          : 0.0;
+  PrintSectionHeader("Summary", style);
+  PrintKeyValueLine("total_frames", std::to_string(summary.total_frames));
+  PrintKeyValueLine("missed_frames",
+                    Colorize(std::to_string(summary.missed_frames),
+                             summary.missed_frames > 0 ? "\033[1;31m" : "\033[1;32m", style));
+  PrintKeyValueLine("missed_ratio", FormatFloat(candidate_ratio, 3));
+
+  PrintSectionHeader("Root Causes", style);
+  const auto print_root_cause = [&](passable_area::tools::MissObstacleRootCause cause) {
+    PrintKeyValueLine(
+        Colorize(passable_area::tools::ToString(cause), MissRootCauseColor(cause).c_str(), style),
+        std::to_string(summary.root_cause_counts[static_cast<int>(cause)]));
+  };
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kNoFrontendObstacleSuspicion);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kNoObstacleSourceSamplesInRoi);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::kUnknownOrMixed);
+
+  PrintSectionHeader("Ranked Frames", style);
+  if (summary.ranked_frames.empty()) {
+    std::cout << Colorize("╭" + RepeatGlyph("─", kCardColumns) + "╮", "\033[32m", style)
+              << '\n';
+    std::cout << Colorize("│ No Missed Frames", "\033[1;32m", style) << '\n';
+    std::cout << "  obstacle points were observed inside the roi for every analyzed frame\n";
+    std::cout << Colorize("╰" + RepeatGlyph("─", kCardColumns) + "╯", "\033[32m", style)
+              << '\n';
+    return;
+  }
+  for (size_t i = 0; i < summary.ranked_frames.size(); ++i) {
+    PrintMissObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1), style);
+  }
+}
+
 std::optional<float> ParseFloatFlagValue(const std::vector<std::string> &args, const std::string &flag) {
   for (size_t i = 0; i + 1 < args.size(); ++i) {
     if (args[i] == flag) {
@@ -615,6 +773,47 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   }
   if (replay_args.top_k <= 0) {
     std::cerr << "invalid --top-k: require top_k > 0\n";
+    return std::nullopt;
+  }
+  return replay_args;
+}
+
+std::optional<MissObstacleReplayArgs> ParseMissObstacleReplayArgs(
+    const std::vector<std::string> &args) {
+  const auto bag_path = ParseStringFlagValue(args, "--bag");
+  const std::string params_file =
+      ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
+  const auto start_offset_sec = ParseFloatFlagValue(args, "--start-offset-sec");
+  const auto roi_x_min = ParseFloatFlagValue(args, "--roi-x-min");
+  const auto roi_x_max = ParseFloatFlagValue(args, "--roi-x-max");
+  const auto roi_y_min = ParseFloatFlagValue(args, "--roi-y-min");
+  const auto roi_y_max = ParseFloatFlagValue(args, "--roi-y-max");
+  if (!bag_path || !start_offset_sec || !roi_x_min || !roi_x_max || !roi_y_min || !roi_y_max) {
+    std::cerr << "miss-obstacle analysis requires --bag, --start-offset-sec, --roi-x-min, "
+                 "--roi-x-max, --roi-y-min, and --roi-y-max\n";
+    return std::nullopt;
+  }
+
+  MissObstacleReplayArgs replay_args;
+  replay_args.bag_path = *bag_path;
+  replay_args.params_file = params_file;
+  replay_args.start_offset_sec = *start_offset_sec;
+  replay_args.use_color = !HasFlag(args, "--no-color");
+  replay_args.analyzer_config.detection_box = passable_area::tools::MissObstacleDetectionBox{
+      *roi_x_min, *roi_x_max, *roi_y_min, *roi_y_max};
+  if (const auto time_window_sec = ParseFloatFlagValue(args, "--time-window-sec")) {
+    replay_args.time_window_sec = *time_window_sec;
+  }
+  if (const auto top_k_cells = ParseIntFlagValue(args, "--top-k-cells")) {
+    replay_args.analyzer_config.representative_cell_limit = *top_k_cells;
+  }
+  if (!(replay_args.analyzer_config.detection_box.x_min <
+        replay_args.analyzer_config.detection_box.x_max) ||
+      !(replay_args.analyzer_config.detection_box.y_min <
+        replay_args.analyzer_config.detection_box.y_max) ||
+      replay_args.time_window_sec < 0.0f ||
+      replay_args.analyzer_config.representative_cell_limit <= 0) {
+    std::cerr << "invalid miss-obstacle analysis arguments\n";
     return std::nullopt;
   }
   return replay_args;
@@ -874,6 +1073,105 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
                                std::move(candidate_frames), args.top_k);
 }
 
+std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleReplay(
+    const MissObstacleReplayArgs &args) {
+  if (!std::filesystem::exists(args.bag_path)) {
+    std::cerr << "bag path does not exist: " << args.bag_path << '\n';
+    return std::nullopt;
+  }
+
+  const auto config = LoadConfigFromParamsFile(args.params_file);
+  if (!config) {
+    return std::nullopt;
+  }
+
+  rosbag2_cpp::Reader reader;
+  reader.open(args.bag_path);
+
+  rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
+  rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
+  std::map<int64_t, sensor_msgs::msg::PointCloud2> clouds;
+  std::map<int64_t, int64_t> cloud_bag_times;
+  std::map<int64_t, nav_msgs::msg::Odometry> odoms;
+  std::optional<int64_t> bag_start_time;
+  while (reader.has_next()) {
+    auto bag_msg = reader.read_next();
+    if (!bag_start_time.has_value()) {
+      bag_start_time = bag_msg->time_stamp;
+    } else {
+      bag_start_time = std::min(*bag_start_time, bag_msg->time_stamp);
+    }
+    rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
+    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+      sensor_msgs::msg::PointCloud2 cloud_msg;
+      cloud_ser.deserialize_message(&serialized, &cloud_msg);
+      const int64_t stamp = rclcpp::Time(cloud_msg.header.stamp).nanoseconds();
+      clouds.emplace(stamp, std::move(cloud_msg));
+      cloud_bag_times.emplace(stamp, bag_msg->time_stamp);
+    } else if (bag_msg->topic_name == "/ODOM") {
+      nav_msgs::msg::Odometry odom_msg;
+      odom_ser.deserialize_message(&serialized, &odom_msg);
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+    }
+  }
+
+  passable_area::interfaces::ros::PointCloudConverter cloud_converter;
+  passable_area::interfaces::ros::OdomConverter odom_converter;
+  passable_area::core::FramePreprocessor preprocessor(*config);
+  passable_area::core::Processor processor(*config);
+  passable_area::tools::MissObstacleAnalyzer analyzer(*config, args.analyzer_config);
+
+  int total_frames = 0;
+  std::vector<passable_area::tools::MissObstacleFrameAnalysis> candidate_frames;
+  const double half_window_sec = static_cast<double>(args.time_window_sec) * 0.5;
+
+  for (const auto &[stamp, cloud_msg] : clouds) {
+    auto odom_it = odoms.find(stamp);
+    if (odom_it == odoms.end()) {
+      continue;
+    }
+    const auto bag_time_it = cloud_bag_times.find(stamp);
+    if (!bag_start_time.has_value() || bag_time_it == cloud_bag_times.end()) {
+      continue;
+    }
+    const double start_offset_sec =
+        static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
+    if (std::abs(start_offset_sec - static_cast<double>(args.start_offset_sec)) > half_window_sec) {
+      continue;
+    }
+
+    passable_area::core::PointCloud cloud;
+    passable_area::core::Pose3D pose;
+    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+      continue;
+    }
+    FrameInput input;
+    input.stamp = stamp;
+    input.base_pose_in_odom = pose;
+    input.input_cloud_in_base = cloud;
+
+    ProcessedFrame processed_frame;
+    if (!preprocessor.process(input, processed_frame)) {
+      continue;
+    }
+    const auto output = processor.update(input);
+    if (!output.valid) {
+      continue;
+    }
+
+    ++total_frames;
+    const auto analysis = analyzer.analyzeFrame(output, processed_frame);
+    if (!analysis) {
+      continue;
+    }
+    auto frame_analysis = *analysis;
+    frame_analysis.start_offset_sec = start_offset_sec;
+    candidate_frames.push_back(std::move(frame_analysis));
+  }
+
+  return analyzer.buildSummary(total_frames, std::move(candidate_frames));
+}
+
 void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::core::Pose3D &base_pose,
                              const passable_area::core::ProcessedFrame &processed_frame,
                              double start_offset_sec, const RoiInspectArgs &args) {
@@ -1080,6 +1378,22 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   std::vector<std::string> args(argv + 1, argv + argc);
+
+  if (HasFlag(args, "--analyze-missed-obstacles")) {
+    const auto replay_args = ParseMissObstacleReplayArgs(args);
+    if (!replay_args) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    const auto summary = RunMissObstacleReplay(*replay_args);
+    if (!summary) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    PrintMissObstacleSummary(*summary, *replay_args, TerminalStyle{replay_args->use_color});
+    rclcpp::shutdown();
+    return 0;
+  }
 
   if (HasFlag(args, "--inspect-roi")) {
     const auto inspect_args = ParseRoiInspectArgs(args);
