@@ -41,6 +41,8 @@ FrameOutput MakeOutput() {
   output.clearance.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(9, 1.0f);
   output.overhead_height.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.sub_support_leak_count.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -140,8 +142,9 @@ TEST(FalseObstacleAnalyzerTest, UsesSupportingPointSourceCellForDiscreteFrontend
   output.obstacle_suspicious[0] = 1U;
   output.obstacle_rejected_by_neighbor_support[0] = 1U;
   output.neighbor_upper_support_count[0] = 1;
-
   const int center_cell = CenterCellIndex(output);
+  output.support_anchor_used[center_cell] = 0.15f;
+  output.sub_support_leak_count[center_cell] = 2U;
   output.clearance[center_cell] = 0.2f;
   output.overhead_height[center_cell] = 0.8f;
 
@@ -152,6 +155,8 @@ TEST(FalseObstacleAnalyzerTest, UsesSupportingPointSourceCellForDiscreteFrontend
   EXPECT_TRUE(analysis->hotspots.front().obstacle_suspicious);
   EXPECT_TRUE(analysis->hotspots.front().obstacle_rejected_by_neighbor_support);
   EXPECT_EQ(analysis->hotspots.front().neighbor_upper_support_count, 1);
+  EXPECT_FLOAT_EQ(analysis->hotspots.front().support_anchor_used, 0.15f);
+  EXPECT_EQ(analysis->hotspots.front().sub_support_leak_count, 2U);
   EXPECT_EQ(analysis->hotspots.front().classification, FalseObstacleRootCause::kClearanceDriven);
 }
 
@@ -168,6 +173,8 @@ TEST(FalseObstacleAnalyzerTest, InvalidSourceCellDoesNotMarkDiscreteLookupAsGrid
   output.clearance.assign(1, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(1, 1.0f);
   output.overhead_height.assign(1, std::numeric_limits<float>::quiet_NaN());
+  output.support_anchor_used.assign(1, std::numeric_limits<float>::quiet_NaN());
+  output.sub_support_leak_count.assign(1, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;

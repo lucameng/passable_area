@@ -79,6 +79,8 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.roughness = layers.roughness;
   output.clearance = layers.clearance;
   output.support_continuity = layers.support_continuity;
+  output.support_anchor_used = frontend_output.support_anchor_used;
+  output.sub_support_leak_count = frontend_output.sub_support_leak_count;
   output.upper_support_cell = frontend_output.upper_support_cell;
   output.obstacle_suspicious = frontend_output.obstacle_suspicious;
   output.obstacle_rejected_by_neighbor_support =

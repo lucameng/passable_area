@@ -28,6 +28,8 @@ struct FrontendOutput {
   std::vector<SupportCandidate> support_candidates;
   std::vector<ObstacleCandidate> obstacle_candidates;
   std::vector<AmbiguousCandidate> ambiguous_candidates;
+  std::vector<float> support_anchor_used;
+  std::vector<uint16_t> sub_support_leak_count;
   std::vector<uint8_t> upper_support_cell;
   std::vector<uint8_t> obstacle_suspicious;
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;

@@ -313,6 +313,17 @@ struct FalseObstacleReplayArgs {
   bool use_color = true;
 };
 
+struct RoiInspectArgs {
+  std::string bag_path;
+  std::string params_file;
+  float start_offset_sec = 0.0f;
+  float time_window_sec = 0.2f;
+  float roi_x_min = 0.0f;
+  float roi_x_max = 0.0f;
+  float roi_y_min = 0.0f;
+  float roi_y_max = 0.0f;
+};
+
 struct TerminalStyle {
   bool use_color = true;
 };
@@ -472,6 +483,9 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
     std::cout << "    obstacle_evidence: " << FormatFloat(hotspot.obstacle_evidence)
               << "  clearance: " << FormatFloat(hotspot.clearance)
               << "  support_continuity: " << FormatFloat(hotspot.support_continuity) << '\n';
+    std::cout << "    support_anchor_used: " << FormatFloat(hotspot.support_anchor_used)
+              << "  sub_support_leak_count: "
+              << std::to_string(hotspot.sub_support_leak_count) << '\n';
     std::cout << "    upper_support_cell: " << (hotspot.upper_support_cell ? "true" : "false")
               << "  neighbor_upper_support_count: "
               << std::to_string(hotspot.neighbor_upper_support_count)
@@ -604,6 +618,41 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
     return std::nullopt;
   }
   return replay_args;
+}
+
+std::optional<RoiInspectArgs> ParseRoiInspectArgs(const std::vector<std::string> &args) {
+  const auto bag_path = ParseStringFlagValue(args, "--bag");
+  const std::string params_file =
+      ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
+  const auto start_offset_sec = ParseFloatFlagValue(args, "--start-offset-sec");
+  const auto roi_x_min = ParseFloatFlagValue(args, "--roi-x-min");
+  const auto roi_x_max = ParseFloatFlagValue(args, "--roi-x-max");
+  const auto roi_y_min = ParseFloatFlagValue(args, "--roi-y-min");
+  const auto roi_y_max = ParseFloatFlagValue(args, "--roi-y-max");
+  if (!bag_path || !start_offset_sec || !roi_x_min || !roi_x_max || !roi_y_min || !roi_y_max) {
+    std::cerr << "roi inspection requires --bag, --start-offset-sec, --roi-x-min, --roi-x-max, "
+                 "--roi-y-min, and --roi-y-max\n";
+    return std::nullopt;
+  }
+
+  RoiInspectArgs inspect_args;
+  inspect_args.bag_path = *bag_path;
+  inspect_args.params_file = params_file;
+  inspect_args.start_offset_sec = *start_offset_sec;
+  inspect_args.roi_x_min = *roi_x_min;
+  inspect_args.roi_x_max = *roi_x_max;
+  inspect_args.roi_y_min = *roi_y_min;
+  inspect_args.roi_y_max = *roi_y_max;
+  if (const auto time_window_sec = ParseFloatFlagValue(args, "--time-window-sec")) {
+    inspect_args.time_window_sec = *time_window_sec;
+  }
+  if (!(inspect_args.roi_x_min < inspect_args.roi_x_max) ||
+      !(inspect_args.roi_y_min < inspect_args.roi_y_max) ||
+      inspect_args.time_window_sec < 0.0f) {
+    std::cerr << "invalid roi inspect arguments\n";
+    return std::nullopt;
+  }
+  return inspect_args;
 }
 
 std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
@@ -825,11 +874,228 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
                                std::move(candidate_frames), args.top_k);
 }
 
+void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::core::Pose3D &base_pose,
+                             const passable_area::core::ProcessedFrame &processed_frame,
+                             double start_offset_sec, const RoiInspectArgs &args) {
+  std::cout << std::fixed << std::setprecision(3);
+  const float yaw = std::atan2(
+      2.0f * (base_pose.orientation.w() * base_pose.orientation.z() +
+              base_pose.orientation.x() * base_pose.orientation.y()),
+      1.0f - 2.0f * (base_pose.orientation.y() * base_pose.orientation.y() +
+                     base_pose.orientation.z() * base_pose.orientation.z()));
+  const float cos_yaw = std::cos(yaw);
+  const float sin_yaw = std::sin(yaw);
+  int roi_sample_count = 0;
+  float roi_sample_min_z = std::numeric_limits<float>::infinity();
+  float roi_sample_max_z = -std::numeric_limits<float>::infinity();
+  for (const auto &sample : processed_frame.odom_samples) {
+    const float dx = sample.point_in_odom.x - base_pose.position.x();
+    const float dy = sample.point_in_odom.y - base_pose.position.y();
+    const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
+    const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
+    if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
+        base_gravity_y < args.roi_y_min || base_gravity_y > args.roi_y_max) {
+      continue;
+    }
+    ++roi_sample_count;
+    const float relative_z = sample.point_in_odom.z - base_pose.position.z();
+    roi_sample_min_z = std::min(roi_sample_min_z, relative_z);
+    roi_sample_max_z = std::max(roi_sample_max_z, relative_z);
+  }
+  std::cout << "frame_offset_sec=" << start_offset_sec << " base_pose=(" << base_pose.position.x()
+            << ", " << base_pose.position.y() << ", " << base_pose.position.z()
+            << ") roi_frame=base_gravity"
+            << " roi_samples=" << roi_sample_count;
+  if (roi_sample_count > 0) {
+    std::cout << " roi_sample_relative_z=[" << roi_sample_min_z << ", " << roi_sample_max_z
+              << "]";
+  }
+  std::cout << "\n";
+  int roi_total = 0;
+  int roi_impassable = 0;
+  int roi_passable = 0;
+  int roi_unknown = 0;
+  int roi_rejected = 0;
+  int roi_upper = 0;
+  float roi_max_obstacle_evidence = 0.0f;
+  for (int row = 0; row < output.rows; ++row) {
+    for (int col = 0; col < output.cols; ++col) {
+      const float odom_x =
+          output.origin.x() + (static_cast<float>(col) + 0.5f) * output.resolution;
+      const float odom_y =
+          output.origin.y() + (static_cast<float>(row) + 0.5f) * output.resolution;
+      const float dx = odom_x - base_pose.position.x();
+      const float dy = odom_y - base_pose.position.y();
+      const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
+      const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
+      if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
+          base_gravity_y < args.roi_y_min || base_gravity_y > args.roi_y_max) {
+        continue;
+      }
+      const int idx = row * output.cols + col;
+      ++roi_total;
+      if (output.passability[idx] == static_cast<int8_t>(PassabilityState::kImpassable)) {
+        ++roi_impassable;
+      } else if (output.passability[idx] == static_cast<int8_t>(PassabilityState::kPassable)) {
+        ++roi_passable;
+      } else {
+        ++roi_unknown;
+      }
+      if (output.obstacle_rejected_by_neighbor_support[idx] != 0U) {
+        ++roi_rejected;
+      }
+      if (output.upper_support_cell[idx] != 0U) {
+        ++roi_upper;
+      }
+      roi_max_obstacle_evidence =
+          std::max(roi_max_obstacle_evidence, output.obstacle_evidence[idx]);
+    }
+  }
+  std::cout << "roi_summary total=" << roi_total << " impassable=" << roi_impassable
+            << " passable=" << roi_passable << " unknown=" << roi_unknown
+            << " rejected=" << roi_rejected << " upper_support=" << roi_upper
+            << " max_obstacle_evidence=" << roi_max_obstacle_evidence << "\n";
+
+  for (int row = 0; row < output.rows; ++row) {
+    for (int col = 0; col < output.cols; ++col) {
+      const float odom_x =
+          output.origin.x() + (static_cast<float>(col) + 0.5f) * output.resolution;
+      const float odom_y =
+          output.origin.y() + (static_cast<float>(row) + 0.5f) * output.resolution;
+      const float dx = odom_x - base_pose.position.x();
+      const float dy = odom_y - base_pose.position.y();
+      const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
+      const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
+      if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
+          base_gravity_y < args.roi_y_min || base_gravity_y > args.roi_y_max) {
+        continue;
+      }
+      const int idx = row * output.cols + col;
+      std::cout << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
+                << " odom_x=" << odom_x << " odom_y=" << odom_y
+                << " passability=" << static_cast<int>(output.passability[idx])
+                << " support_h=" << output.support_height[idx]
+                << " overhead_h=" << output.overhead_height[idx]
+                << " obstacle_evidence=" << output.obstacle_evidence[idx]
+                << " support_anchor=" << output.support_anchor_used[idx]
+                << " leak_count=" << output.sub_support_leak_count[idx]
+                << " upper=" << static_cast<int>(output.upper_support_cell[idx])
+                << " suspicious=" << static_cast<int>(output.obstacle_suspicious[idx])
+                << " rejected=" << static_cast<int>(output.obstacle_rejected_by_neighbor_support[idx])
+                << " neighbor_upper=" << static_cast<int>(output.neighbor_upper_support_count[idx])
+                << " coverage=" << output.coverage_confidence[idx]
+                << " support_conf=" << output.support_confidence[idx]
+                << "\n";
+    }
+  }
+}
+
+std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
+  if (!std::filesystem::exists(args.bag_path)) {
+    std::cerr << "bag path does not exist: " << args.bag_path << '\n';
+    return std::nullopt;
+  }
+  const auto config = LoadConfigFromParamsFile(args.params_file);
+  if (!config) {
+    return std::nullopt;
+  }
+
+  rosbag2_cpp::Reader reader;
+  reader.open(args.bag_path);
+
+  rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
+  rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
+  std::map<int64_t, sensor_msgs::msg::PointCloud2> clouds;
+  std::map<int64_t, int64_t> cloud_bag_times;
+  std::map<int64_t, nav_msgs::msg::Odometry> odoms;
+  std::optional<int64_t> bag_start_time;
+  while (reader.has_next()) {
+    auto bag_msg = reader.read_next();
+    if (!bag_start_time.has_value()) {
+      bag_start_time = bag_msg->time_stamp;
+    } else {
+      bag_start_time = std::min(*bag_start_time, bag_msg->time_stamp);
+    }
+    rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
+    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+      sensor_msgs::msg::PointCloud2 cloud_msg;
+      cloud_ser.deserialize_message(&serialized, &cloud_msg);
+      const int64_t stamp = rclcpp::Time(cloud_msg.header.stamp).nanoseconds();
+      clouds.emplace(stamp, std::move(cloud_msg));
+      cloud_bag_times.emplace(stamp, bag_msg->time_stamp);
+    } else if (bag_msg->topic_name == "/ODOM") {
+      nav_msgs::msg::Odometry odom_msg;
+      odom_ser.deserialize_message(&serialized, &odom_msg);
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+    }
+  }
+
+  passable_area::interfaces::ros::PointCloudConverter cloud_converter;
+  passable_area::interfaces::ros::OdomConverter odom_converter;
+  passable_area::core::FramePreprocessor preprocessor(*config);
+  passable_area::core::Processor processor(*config);
+  int printed_frames = 0;
+  const double half_window_sec = static_cast<double>(args.time_window_sec) * 0.5;
+
+  for (const auto &[stamp, cloud_msg] : clouds) {
+    auto odom_it = odoms.find(stamp);
+    if (odom_it == odoms.end()) {
+      continue;
+    }
+    const auto bag_time_it = cloud_bag_times.find(stamp);
+    if (!bag_start_time.has_value() || bag_time_it == cloud_bag_times.end()) {
+      continue;
+    }
+    const double start_offset_sec =
+        static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
+
+    passable_area::core::PointCloud cloud;
+    passable_area::core::Pose3D pose;
+    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+      continue;
+    }
+    FrameInput input;
+    input.stamp = stamp;
+    input.base_pose_in_odom = pose;
+    input.input_cloud_in_base = std::move(cloud);
+    passable_area::core::ProcessedFrame processed_frame;
+    if (!preprocessor.process(input, processed_frame)) {
+      continue;
+    }
+    const auto output = processor.update(input);
+    if (!output.valid) {
+      continue;
+    }
+    if (std::abs(start_offset_sec - static_cast<double>(args.start_offset_sec)) > half_window_sec) {
+      continue;
+    }
+    PrintRoiFrameInspection(output, pose, processed_frame, start_offset_sec, args);
+    ++printed_frames;
+  }
+  return printed_frames;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   std::vector<std::string> args(argv + 1, argv + argc);
+
+  if (HasFlag(args, "--inspect-roi")) {
+    const auto inspect_args = ParseRoiInspectArgs(args);
+    if (!inspect_args) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    const auto printed_frames = RunRoiInspect(*inspect_args);
+    if (!printed_frames) {
+      rclcpp::shutdown();
+      return 1;
+    }
+    std::cout << "printed_frames=" << *printed_frames << '\n';
+    rclcpp::shutdown();
+    return 0;
+  }
 
   if (HasFlag(args, "--analyze-false-obstacles")) {
     const auto replay_args = ParseFalseObstacleReplayArgs(args);

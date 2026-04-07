@@ -544,6 +544,8 @@ TF：
 - `max_support_roughness`
 - `min_clearance`
 - `upper_min_height_above_support`
+- `sub_support_leak_tolerance`
+- `support_anchor_reobserve_tolerance`
 - `min_neighbor_upper_support_cells`
 
 ### 13.3 观测参数
@@ -560,6 +562,17 @@ TF：
 - `obstacle_clear_observed_decay`
 - `obstacle_clear_partial_decay_scale`
 - `obstacle_height_clear_threshold`
+
+### 13.4A 镂空楼梯抑制说明
+
+当前 `PolarFrontend` 在 obstacle 形成前额外做两步前端解释收敛：
+
+- 如果本 cell 历史 support 有效，优先使用该 support 作为 `support_anchor`
+- 仅当本 cell 历史 support 无效时，才使用 `3x3` 邻域内有效 support 的中位数作为 fallback anchor
+- 当样本点低于 `support_anchor - sub_support_leak_tolerance` 时，这些点会被当作下层泄漏点，不参与本帧 `support / min_z / max_z / vertical_span / upper_support / obstacle_candidate`
+- 当可疑 cell 的“上层样本”仍低于机器人、并且与邻域 support 高度对齐时，前端会把它视为楼梯相邻支撑层混叠，而不是 overhead obstacle
+
+这两步都只影响 `PolarFrontend` 的当前帧解释，不改变地图主语义，地图仍保持单层 `support_height + obstacle_evidence` 设计。
 
 ### 13.5 坐标系参数
 

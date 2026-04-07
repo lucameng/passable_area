@@ -61,6 +61,8 @@ FrameOutput MakeDebugOutput() {
   output.roughness.assign(9, 0.0f);
   output.clearance.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(9, 0.0f);
+  output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.sub_support_leak_count.assign(9, 0U);
   output.support_state.assign(9, 0U);
   output.unknown_points.push_back(passable_area::core::MakeCellDebugPointWithoutSource(
       {0.0f, 0.0f, 0.0f}));

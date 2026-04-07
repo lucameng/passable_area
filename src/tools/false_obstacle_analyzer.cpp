@@ -257,6 +257,12 @@ FalseObstacleAnalyzer::LocalCellContext FalseObstacleAnalyzer::lookupLocalContex
     context.clearance = output.clearance[static_cast<size_t>(center_cell)];
     context.support_continuity = output.support_continuity[static_cast<size_t>(center_cell)];
     context.overhead_height = output.overhead_height[static_cast<size_t>(center_cell)];
+    if (output.support_anchor_used.size() > static_cast<size_t>(center_cell)) {
+      context.support_anchor_used = output.support_anchor_used[static_cast<size_t>(center_cell)];
+    }
+    if (output.sub_support_leak_count.size() > static_cast<size_t>(center_cell)) {
+      context.sub_support_leak_count = output.sub_support_leak_count[static_cast<size_t>(center_cell)];
+    }
   }
 
   const int sector_index = SectorIndexForBaseGravityPoint(output, x, y);
@@ -283,6 +289,8 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.clearance = context.clearance;
   hotspot.support_continuity = context.support_continuity;
   hotspot.overhead_height = context.overhead_height;
+  hotspot.support_anchor_used = context.support_anchor_used;
+  hotspot.sub_support_leak_count = context.sub_support_leak_count;
   hotspot.upper_support_cell = context.upper_support_cell;
   hotspot.obstacle_suspicious = context.obstacle_suspicious;
   hotspot.obstacle_rejected_by_neighbor_support = context.obstacle_rejected_by_neighbor_support;

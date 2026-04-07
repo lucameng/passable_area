@@ -99,7 +99,7 @@ std::vector<T> ResampleLayer(const RobotCentricResamplingPlan &plan, const std::
   std::vector<T> resampled(plan.source_indices.size(), default_value);
   for (size_t target_index = 0; target_index < plan.source_indices.size(); ++target_index) {
     const int source_index = plan.source_indices[target_index];
-    if (source_index < 0) {
+    if (source_index < 0 || static_cast<size_t>(source_index) >= source_values.size()) {
       continue;
     }
     resampled[target_index] = source_values[static_cast<size_t>(source_index)];
@@ -155,7 +155,7 @@ ConvertedMapOutputs OutputConverter::toMapOutputs(const passable_area::core::Fra
   grid_map::GridMap map({"support_height", "support_confidence", "overhead_height",
                          "obstacle_evidence", "coverage_confidence", "slope", "step_up",
                          "step_down", "roughness", "clearance", "support_continuity",
-                         "passability"});
+                         "support_anchor_used", "sub_support_leak_count", "passability"});
   map.setFrameId(header.frame_id);
   map.setGeometry(plan.geometry.length, plan.geometry.resolution, plan.geometry.center);
   AddLayer(map, "support_height", plan,
@@ -172,6 +172,15 @@ ConvertedMapOutputs OutputConverter::toMapOutputs(const passable_area::core::Fra
   AddLayer(map, "clearance", plan,
            ResampleLayer(plan, output.clearance, std::numeric_limits<float>::quiet_NaN()));
   AddLayer(map, "support_continuity", plan, ResampleLayer(plan, output.support_continuity, 0.0f));
+  AddLayer(map, "support_anchor_used", plan,
+           ResampleLayer(plan, output.support_anchor_used, std::numeric_limits<float>::quiet_NaN()));
+  std::vector<float> sub_support_leak_count_float(output.sub_support_leak_count.size(), 0.0f);
+  for (size_t i = 0; i < output.sub_support_leak_count.size(); ++i) {
+    sub_support_leak_count_float[i] =
+        static_cast<float>(output.sub_support_leak_count[i]);
+  }
+  AddLayer(map, "sub_support_leak_count", plan,
+           ResampleLayer(plan, sub_support_leak_count_float, 0.0f));
 
   std::vector<float> passability_float(passability.begin(), passability.end());
   AddLayer(map, "passability", plan, passability_float);

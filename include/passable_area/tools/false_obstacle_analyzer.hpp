@@ -45,6 +45,8 @@ struct FalseObstacleHotspot {
   float clearance = 0.0f;
   float support_continuity = 0.0f;
   float overhead_height = 0.0f;
+  float support_anchor_used = 0.0f;
+  uint16_t sub_support_leak_count = 0U;
   bool upper_support_cell = false;
   bool obstacle_suspicious = false;
   bool obstacle_rejected_by_neighbor_support = false;
@@ -103,6 +105,8 @@ private:
     float clearance = 0.0f;
     float support_continuity = 0.0f;
     float overhead_height = 0.0f;
+    float support_anchor_used = 0.0f;
+    uint16_t sub_support_leak_count = 0U;
     bool upper_support_cell = false;
     bool obstacle_suspicious = false;
     bool obstacle_rejected_by_neighbor_support = false;
