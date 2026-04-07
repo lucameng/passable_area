@@ -1219,6 +1219,34 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
   int roi_rejected = 0;
   int roi_upper = 0;
   float roi_max_obstacle_evidence = 0.0f;
+  std::vector<int> roi_sample_count_by_cell(static_cast<size_t>(output.rows * output.cols), 0);
+  std::vector<float> roi_sample_min_z_by_cell(static_cast<size_t>(output.rows * output.cols),
+                                              std::numeric_limits<float>::infinity());
+  std::vector<float> roi_sample_max_z_by_cell(static_cast<size_t>(output.rows * output.cols),
+                                              -std::numeric_limits<float>::infinity());
+  for (const auto &sample : processed_frame.odom_samples) {
+    const float fx = (sample.point_in_odom.x - output.origin.x()) / output.resolution;
+    const float fy = (sample.point_in_odom.y - output.origin.y()) / output.resolution;
+    const int col = static_cast<int>(std::floor(fx));
+    const int row = static_cast<int>(std::floor(fy));
+    if (row < 0 || row >= output.rows || col < 0 || col >= output.cols) {
+      continue;
+    }
+    const int cell = row * output.cols + col;
+    const float dx = sample.point_in_odom.x - base_pose.position.x();
+    const float dy = sample.point_in_odom.y - base_pose.position.y();
+    const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
+    const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
+    if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
+        base_gravity_y < args.roi_y_min || base_gravity_y > args.roi_y_max) {
+      continue;
+    }
+    ++roi_sample_count_by_cell[static_cast<size_t>(cell)];
+    roi_sample_min_z_by_cell[static_cast<size_t>(cell)] =
+        std::min(roi_sample_min_z_by_cell[static_cast<size_t>(cell)], sample.point_in_odom.z);
+    roi_sample_max_z_by_cell[static_cast<size_t>(cell)] =
+        std::max(roi_sample_max_z_by_cell[static_cast<size_t>(cell)], sample.point_in_odom.z);
+  }
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
       const float odom_x =
@@ -1274,6 +1302,9 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
       const int idx = row * output.cols + col;
       std::cout << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
                 << " odom_x=" << odom_x << " odom_y=" << odom_y
+                << " sample_count=" << roi_sample_count_by_cell[static_cast<size_t>(idx)]
+                << " sample_min_z=" << roi_sample_min_z_by_cell[static_cast<size_t>(idx)]
+                << " sample_max_z=" << roi_sample_max_z_by_cell[static_cast<size_t>(idx)]
                 << " passability=" << static_cast<int>(output.passability[idx])
                 << " support_h=" << output.support_height[idx]
                 << " overhead_h=" << output.overhead_height[idx]

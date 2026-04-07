@@ -121,6 +121,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                                                       std::numeric_limits<float>::quiet_NaN());
   std::vector<uint8_t> local_history_anchor_valid(static_cast<size_t>(map.size()), 0U);
   std::vector<int> anchor_reobserve_count_by_cell(static_cast<size_t>(map.size()), 0);
+  std::vector<int> below_anchor_count_by_cell(static_cast<size_t>(map.size()), 0);
   std::vector<int> upper_band_count_by_cell(static_cast<size_t>(map.size()), 0);
   std::vector<float> min_upper_band_z_by_cell(static_cast<size_t>(map.size()),
                                               std::numeric_limits<float>::infinity());
@@ -160,6 +161,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       for (const size_t sample_index : sample_indices) {
         const auto &sample = frame.odom_samples[sample_index];
         if (sample.point_in_odom.z < support_anchor - config_.geometry.sub_support_leak_tolerance) {
+          ++below_anchor_count_by_cell[static_cast<size_t>(cell)];
           continue;
         }
         if (sample.point_in_odom.z <= support_anchor + support_anchor_reobserve_tolerance) {
@@ -207,7 +209,13 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
         neighborhood_anchor_reobserve_count <= 2 &&
         upper_band_count_by_cell[static_cast<size_t>(cell)] >= 1 &&
         min_upper_band_z_by_cell[static_cast<size_t>(cell)] >= support_anchor + upper_height_threshold;
-    if (reject_stale_anchor) {
+    const bool reject_wall_only_anchor =
+        has_support_anchor &&
+        upper_band_count_by_cell[static_cast<size_t>(cell)] == 0 &&
+        below_anchor_count_by_cell[static_cast<size_t>(cell)] >= 3 &&
+        below_anchor_count_by_cell[static_cast<size_t>(cell)] >
+            anchor_reobserve_count_by_cell[static_cast<size_t>(cell)] * 2;
+    if (reject_stale_anchor || reject_wall_only_anchor) {
       has_support_anchor = false;
       support_anchor = std::numeric_limits<float>::quiet_NaN();
     }
