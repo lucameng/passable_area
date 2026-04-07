@@ -915,6 +915,61 @@ TEST(ProcessorTest, PolarFrontendRejectsBelowRobotStairMixDespiteNeighborUpperSu
             0);
 }
 
+TEST(ProcessorTest, PolarFrontendDoesNotRejectBelowRobotObstacleWithoutLeakEvidence) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  config.geometry.sub_support_leak_tolerance = 0.18f;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int neighbor_cell = -1;
+  int diagonal_neighbor_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
+  map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.90f;
+  map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(primary_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(primary_cell)] = 0U;
+  map.layers().support_height[static_cast<size_t>(neighbor_cell)] = -0.55f;
+  map.layers().support_confidence[static_cast<size_t>(neighbor_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(neighbor_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(neighbor_cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.90f}, {0.25f, 0.25f, -0.90f}},
+      {{0.25f, 0.25f, -0.52f}, {0.25f, 0.25f, -0.52f}},
+      {{0.45f, 0.25f, -0.55f}, {0.45f, 0.25f, -0.55f}},
+      {{0.45f, 0.25f, -0.20f}, {0.45f, 0.25f, -0.20f}},
+      {{0.45f, 0.45f, -0.56f}, {0.45f, 0.45f, -0.56f}},
+      {{0.45f, 0.45f, -0.18f}, {0.45f, 0.45f, -0.18f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 3);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                          [primary_cell](const auto &candidate) {
+                            return candidate.cell == primary_cell;
+                          }),
+            1);
+}
+
 TEST(ProcessorTest, PolarFrontendRejectsBelowRobotMixWhenLowAnchorUpperBandDominates) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
@@ -1123,6 +1178,32 @@ TEST(ProcessorTest, ObstaclePointsExcludeWallBaseNoise) {
   }
   EXPECT_NEAR(min_z, 0.25f, 1e-5f);
   EXPECT_NEAR(max_z, 0.45f, 1e-5f);
+}
+
+TEST(ProcessorTest, WallWithBaseNoiseStillProducesImpassableCells) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  Processor processor(config);
+
+  passable_area::core::FrameOutput output;
+  for (int i = 0; i < 4; ++i) {
+    output = processor.update(MakeWallWithBaseNoiseFrame(100000000 * i + 1));
+    ASSERT_TRUE(output.valid);
+  }
+
+  const int right_wall_cell = CellIndex(output, 0.25f, 0.25f);
+  const int left_wall_cell = CellIndex(output, -0.25f, 0.25f);
+  ASSERT_GE(right_wall_cell, 0);
+  ASSERT_GE(left_wall_cell, 0);
+  EXPECT_TRUE(std::isfinite(output.overhead_height[right_wall_cell]));
+  EXPECT_TRUE(std::isfinite(output.overhead_height[left_wall_cell]));
+  EXPECT_EQ(output.passability[right_wall_cell], static_cast<int8_t>(PassabilityState::kImpassable));
+  EXPECT_EQ(output.passability[left_wall_cell], static_cast<int8_t>(PassabilityState::kImpassable));
 }
 
 TEST(ProcessorTest, DebugObstaclePointsIgnoreWeakObstacleEvidenceByDefault) {
