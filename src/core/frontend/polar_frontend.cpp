@@ -211,10 +211,12 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
         min_upper_band_z_by_cell[static_cast<size_t>(cell)] >= support_anchor + upper_height_threshold;
     const bool reject_wall_only_anchor =
         has_support_anchor &&
-        upper_band_count_by_cell[static_cast<size_t>(cell)] == 0 &&
         below_anchor_count_by_cell[static_cast<size_t>(cell)] >= 3 &&
         below_anchor_count_by_cell[static_cast<size_t>(cell)] >
-            anchor_reobserve_count_by_cell[static_cast<size_t>(cell)] * 2;
+            anchor_reobserve_count_by_cell[static_cast<size_t>(cell)] * 2 &&
+        (upper_band_count_by_cell[static_cast<size_t>(cell)] == 0 ||
+         min_upper_band_z_by_cell[static_cast<size_t>(cell)] <
+             support_anchor + upper_height_threshold + support_anchor_reobserve_tolerance);
     if (reject_stale_anchor || reject_wall_only_anchor) {
       has_support_anchor = false;
       support_anchor = std::numeric_limits<float>::quiet_NaN();

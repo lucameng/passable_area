@@ -5,7 +5,6 @@
 #include "passable_area/core/preprocess/frame_preprocessor.hpp"
 
 #include <gtest/gtest.h>
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -912,6 +911,47 @@ TEST(ProcessorTest, PolarFrontendIgnoresAnchorForWallOnlyCellsWithoutSupportBand
   EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(cell)], 1U);
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)], 1U);
+}
+
+TEST(ProcessorTest, PolarFrontendIgnoresAnchorForWallOnlyCellsWithShallowUpperBand) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 1;
+  config.geometry.sub_support_leak_tolerance = 0.18f;
+  config.geometry.support_anchor_reobserve_tolerance = 0.08f;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  map.layers().support_height[static_cast<size_t>(cell)] = 0.05f;
+  map.layers().support_confidence[static_cast<size_t>(cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -1.00f}, {0.25f, 0.25f, -1.00f}},
+      {{0.25f, 0.25f, -0.82f}, {0.25f, 0.25f, -0.82f}},
+      {{0.25f, 0.25f, -0.58f}, {0.25f, 0.25f, -0.58f}},
+      {{0.25f, 0.25f, -0.34f}, {0.25f, 0.25f, -0.34f}},
+      {{0.25f, 0.25f, 0.27f}, {0.25f, 0.25f, 0.27f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_TRUE(std::isnan(output.support_anchor_used[static_cast<size_t>(cell)]));
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
 }
 
 TEST(ProcessorTest, PolarFrontendRejectsBelowRobotStairMixDespiteNeighborUpperSupport) {
