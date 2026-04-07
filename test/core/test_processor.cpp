@@ -177,6 +177,22 @@ FrameInput MakeWallWithBaseNoiseFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeUnsupportedWallFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.input_cloud_in_base = {
+      {0.25f, 0.25f, 0.25f},
+      {0.25f, 0.25f, 0.45f},
+      {0.25f, 0.25f, 0.65f},
+      {-0.25f, 0.25f, 0.25f},
+      {-0.25f, 0.25f, 0.45f},
+      {-0.25f, 0.25f, 0.65f},
+  };
+  return input;
+}
+
 ProcessedFrame MakeProcessedFrame(const std::vector<passable_area::core::OdomPointSample> &samples) {
   ProcessedFrame frame;
   frame.base_pose_in_odom.position = Eigen::Vector3f::Zero();
@@ -1226,6 +1242,32 @@ TEST(ProcessorTest, DebugObstaclePointsIgnoreWeakObstacleEvidenceByDefault) {
   EXPECT_GT(output.obstacle_evidence[cell], 0.25f);
   EXPECT_LT(output.obstacle_evidence[cell], config.obstacle_points_min_evidence);
   EXPECT_TRUE(output.obstacle_points.empty());
+}
+
+TEST(ProcessorTest, WallWithoutGroundSupportStillPublishesObstaclePoints) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.15f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeUnsupportedWallFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeUnsupportedWallFrame(100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeUnsupportedWallFrame(200000001)).valid);
+  const auto output = processor.update(MakeUnsupportedWallFrame(300000001));
+  ASSERT_TRUE(output.valid);
+
+  ASSERT_FALSE(output.obstacle_points.empty());
+  for (const auto &point : output.obstacle_points) {
+    EXPECT_NEAR(std::abs(point.point.x), 0.25f, 0.15f);
+    EXPECT_NEAR(point.point.y, 0.25f, 0.15f);
+    EXPECT_GT(point.point.z, 0.35f);
+  }
 }
 
 TEST(ProcessorTest, DynamicObstacleClearsAfterObservedGroundReturns) {

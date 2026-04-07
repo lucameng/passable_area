@@ -1136,9 +1136,8 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
     }
     const double start_offset_sec =
         static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
-    if (std::abs(start_offset_sec - static_cast<double>(args.start_offset_sec)) > half_window_sec) {
-      continue;
-    }
+    const bool in_analysis_window =
+        std::abs(start_offset_sec - static_cast<double>(args.start_offset_sec)) <= half_window_sec;
 
     passable_area::core::PointCloud cloud;
     passable_area::core::Pose3D pose;
@@ -1156,6 +1155,10 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
     }
     const auto output = processor.update(input);
     if (!output.valid) {
+      continue;
+    }
+
+    if (!in_analysis_window) {
       continue;
     }
 
