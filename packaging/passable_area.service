@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 Environment=ROS_LOG_DIR=/root/.ros/log
-ExecStart=/bin/bash -lc 'source /opt/robot/scripts/setup_ros2.sh && exec chrt 70 taskset -c 4,5 ros2 launch passable_area nav.launch.py'
+ExecStart=/bin/bash -lc 'source /opt/robot/scripts/setup_ros2.sh && exec chrt 70 taskset -c 4,5 ros2 launch passable_area passable_area.launch.py'
 Restart=on-failure
 RestartPreventExitStatus=SIGTERM
 
