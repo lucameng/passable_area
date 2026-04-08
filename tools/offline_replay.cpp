@@ -329,6 +329,9 @@ struct FalseObstacleReplayArgs {
   std::string bag_path;
   std::string params_file;
   passable_area::tools::FalseObstacleAnalyzerConfig analyzer_config;
+  float start_offset_sec = 0.0f;
+  float time_window_sec = 0.2f;
+  bool use_analysis_window = false;
   int top_k = 10;
   bool use_color = true;
 };
@@ -539,13 +542,17 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
 
 void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSummary &summary,
                                const std::string &bag_path, const std::string &params_file,
-                               int top_k, const TerminalStyle &style) {
+                               const FalseObstacleReplayArgs &args, const TerminalStyle &style) {
   PrintBanner("False Obstacle Offline Analysis", style);
   PrintSectionHeader("Run", style);
   PrintKeyValueLine("bag", bag_path);
   PrintKeyValueLine("params_file", params_file);
   PrintDetectionBox(summary.detection_box, style);
-  PrintKeyValueLine("top_k", std::to_string(top_k));
+  if (args.use_analysis_window) {
+    PrintKeyValueLine("start_offset_sec", FormatFloat(args.start_offset_sec, 3));
+    PrintKeyValueLine("time_window_sec", FormatFloat(args.time_window_sec, 3));
+  }
+  PrintKeyValueLine("top_k", std::to_string(args.top_k));
 
   const double candidate_ratio =
       summary.total_frames > 0
@@ -760,6 +767,7 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   const auto bag_path = ParseStringFlagValue(args, "--bag");
   const std::string params_file =
       ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
+  const auto start_offset_sec = ParseFloatFlagValue(args, "--start-offset-sec");
   const auto range_x_min = ParseFloatFlagValue(args, "--range-x-min");
   const auto range_x_max = ParseFloatFlagValue(args, "--range-x-max");
   const auto range_y_min = ParseFloatFlagValue(args, "--range-y-min");
@@ -776,6 +784,13 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   replay_args.use_color = !HasFlag(args, "--no-color");
   replay_args.analyzer_config.detection_box = passable_area::tools::FalseObstacleDetectionBox{
       *range_x_min, *range_x_max, *range_y_min, *range_y_max};
+  if (start_offset_sec) {
+    replay_args.start_offset_sec = *start_offset_sec;
+    replay_args.use_analysis_window = true;
+  }
+  if (const auto time_window_sec = ParseFloatFlagValue(args, "--time-window-sec")) {
+    replay_args.time_window_sec = *time_window_sec;
+  }
   if (const auto top_k = ParseIntFlagValue(args, "--top-k")) {
     replay_args.top_k = *top_k;
   }
@@ -791,6 +806,10 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   }
   if (replay_args.top_k <= 0) {
     std::cerr << "invalid --top-k: require top_k > 0\n";
+    return std::nullopt;
+  }
+  if (replay_args.time_window_sec < 0.0f) {
+    std::cerr << "invalid --time-window-sec: require time_window_sec >= 0\n";
     return std::nullopt;
   }
   return replay_args;
@@ -1045,6 +1064,7 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
   int current_candidate_run = 0;
   int longest_candidate_run = 0;
   std::vector<passable_area::tools::FalseObstacleFrameAnalysis> candidate_frames;
+  const double half_window_sec = static_cast<double>(args.time_window_sec) * 0.5;
 
   for (const auto &[stamp, cloud_msg] : clouds) {
     auto odom_it = odoms.find(stamp);
@@ -1065,6 +1085,19 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
       continue;
     }
 
+    const auto bag_time_it = cloud_bag_times.find(stamp);
+    std::optional<double> start_offset_sec;
+    if (bag_start_time.has_value() && bag_time_it != cloud_bag_times.end()) {
+      start_offset_sec = static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
+    }
+    const bool in_analysis_window =
+        !args.use_analysis_window ||
+        (start_offset_sec.has_value() &&
+         std::abs(*start_offset_sec - static_cast<double>(args.start_offset_sec)) <= half_window_sec);
+    if (!in_analysis_window) {
+      continue;
+    }
+
     ++total_frames;
     if (output.observability.rear_dropout) {
       ++rear_dropout_frames;
@@ -1072,10 +1105,8 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     const auto analysis = analyzer.analyzeFrame(output);
     if (analysis) {
       auto frame_analysis = *analysis;
-      const auto bag_time_it = cloud_bag_times.find(stamp);
-      if (bag_start_time.has_value() && bag_time_it != cloud_bag_times.end()) {
-        frame_analysis.start_offset_sec =
-            static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
+      if (start_offset_sec.has_value()) {
+        frame_analysis.start_offset_sec = *start_offset_sec;
       }
       candidate_frames.push_back(std::move(frame_analysis));
       ++current_candidate_run;
@@ -1471,7 +1502,7 @@ int main(int argc, char **argv) {
       return 1;
     }
     PrintFalseObstacleSummary(*summary, replay_args->bag_path, replay_args->params_file,
-                              replay_args->top_k, TerminalStyle{replay_args->use_color});
+                              *replay_args, TerminalStyle{replay_args->use_color});
     rclcpp::shutdown();
     return 0;
   }
