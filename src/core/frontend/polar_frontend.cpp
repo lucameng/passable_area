@@ -10,6 +10,8 @@
 namespace passable_area::core {
 namespace {
 
+constexpr float kWallLikeObstacleEvidenceBoost = 1.8f;
+
 struct CellStats {
   float min_z = std::numeric_limits<float>::infinity();
   float max_z = -std::numeric_limits<float>::infinity();
@@ -361,9 +363,17 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
           output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
           continue;
         }
+        const bool wall_like_boost =
+            output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U &&
+            stats_it->second.count >= 10 &&
+            vertical_span >= 0.5f &&
+            relative_upper_z >= 0.0f;
         output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
         output.obstacle_candidates.push_back(
-            ObstacleCandidate{cell, stats_it->second.max_z, std::clamp(vertical_span, 0.0f, 1.0f)});
+            ObstacleCandidate{cell,
+                              stats_it->second.max_z,
+                              std::clamp(vertical_span, 0.0f, 1.0f),
+                              wall_like_boost ? kWallLikeObstacleEvidenceBoost : 1.0f});
       }
     } else {
       output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;

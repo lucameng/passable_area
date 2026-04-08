@@ -59,13 +59,15 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
 
   for (const auto &candidate : frontend_output.obstacle_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
+    const float evidence_gain =
+        config_.persistence.obstacle_evidence_gain * std::max(1.0f, candidate.gain_scale);
     layers.overhead_height[candidate.cell] = candidate.z;
     layers.overhead_confidence[candidate.cell] =
-        std::clamp(layers.overhead_confidence[candidate.cell] + config_.persistence.obstacle_evidence_gain,
+        std::clamp(layers.overhead_confidence[candidate.cell] + evidence_gain,
                    0.0f, 1.0f);
     layers.obstacle_evidence[candidate.cell] =
         std::clamp(layers.obstacle_evidence[candidate.cell] +
-                       config_.persistence.obstacle_evidence_gain * candidate.evidence,
+                       evidence_gain * candidate.evidence,
                    0.0f, 1.0f);
     layers.coverage_confidence[candidate.cell] =
         std::max(layers.coverage_confidence[candidate.cell], sector.coverage_confidence);

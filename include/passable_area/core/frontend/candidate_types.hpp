@@ -17,6 +17,7 @@ struct ObstacleCandidate {
   int cell = -1;
   float z = 0.0f;
   float evidence = 0.0f;
+  float gain_scale = 1.0f;
 };
 
 struct AmbiguousCandidate {
