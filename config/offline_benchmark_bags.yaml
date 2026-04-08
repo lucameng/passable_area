@@ -29,3 +29,12 @@ bags:
 
   - name: rosbag2_mtbf_upslope_and_downstair
     dir_name: rosbag2_mtbf_upslope_and_downstair
+
+  - name: rosbag2_mtbf_long_passage
+    dir_name: rosbag2_mtbf_long_passage
+
+  - name: rosbag2_mtbf_short_downstair_1
+    dir_name: rosbag2_mtbf_short_downstair_1
+
+  - name: rosbag2_mtbf_short_upstair_1
+    dir_name: rosbag2_mtbf_short_upstair_1
