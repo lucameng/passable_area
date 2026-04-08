@@ -13,6 +13,8 @@
   <build_depend>geometry_msgs</build_depend>
   <build_depend>message_filters</build_depend>
   <build_depend>nav_msgs</build_depend>
+  <build_depend>libpcl-all-dev</build_depend>
+  <build_export_depend>libpcl-all-dev</build_export_depend>
   <build_depend>pcl_conversions</build_depend>
   <build_depend>rclcpp</build_depend>
   <build_depend>rosbag2_cpp</build_depend>

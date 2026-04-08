@@ -15,6 +15,7 @@ find_package(grid_map_msgs REQUIRED)
 find_package(grid_map_ros REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common io)
 find_package(pcl_conversions REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -36,6 +37,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
   include
 )
 
@@ -83,7 +85,7 @@ ament_target_dependencies(passable_area_ros
   tf2_ros
   visualization_msgs
 )
-target_link_libraries(passable_area_ros passable_area_core)
+target_link_libraries(passable_area_ros passable_area_core ${PCL_LIBRARIES})
 
 if(COMMAND rosidl_get_typesupport_target)
   rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
@@ -109,7 +111,12 @@ add_executable(passable_area_offline_replay
   src/tools/miss_obstacle_analyzer.cpp
 )
 target_include_directories(passable_area_offline_replay PUBLIC include)
-target_link_libraries(passable_area_offline_replay passable_area_ros passable_area_core ${OpenCV_LIBS})
+target_link_libraries(passable_area_offline_replay
+  passable_area_ros
+  passable_area_core
+  ${OpenCV_LIBS}
+  ${PCL_LIBRARIES}
+)
 ament_target_dependencies(passable_area_offline_replay
   Eigen3
   OpenCV
@@ -125,7 +132,12 @@ ament_target_dependencies(passable_area_offline_replay
 # Manual ROS end-to-end latency benchmark. This is intentionally not part of ament gtests.
 add_executable(passable_area_e2e_benchmark benchmarks/interfaces/ros/e2e_benchmark.cpp)
 target_include_directories(passable_area_e2e_benchmark PUBLIC include)
-target_link_libraries(passable_area_e2e_benchmark passable_area_ros passable_area_core ${OpenCV_LIBS})
+target_link_libraries(passable_area_e2e_benchmark
+  passable_area_ros
+  passable_area_core
+  ${OpenCV_LIBS}
+  ${PCL_LIBRARIES}
+)
 ament_target_dependencies(passable_area_e2e_benchmark
   Eigen3
   OpenCV
