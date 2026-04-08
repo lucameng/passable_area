@@ -359,14 +359,40 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                                       ? support_ref_it->second
                                       : std::numeric_limits<float>::quiet_NaN();
         const float support_anchor = output.support_anchor_used[static_cast<size_t>(cell)];
+        const bool has_support_anchor = std::isfinite(support_anchor);
         const float relative_support_ref = support_ref - frame.base_pose_in_odom.position.z();
         const float relative_upper_z = stats_it->second.max_z - frame.base_pose_in_odom.position.z();
         const bool stale_lower_anchor_mix =
-            std::isfinite(support_anchor) &&
+            has_support_anchor &&
             upper_band_count_by_cell[static_cast<size_t>(cell)] >=
                 std::max(2, anchor_reobserve_count_by_cell[static_cast<size_t>(cell)]) &&
             min_upper_band_z_by_cell[static_cast<size_t>(cell)] >=
                 support_anchor + upper_height_threshold;
+        int ascending_stair_support_count = 0;
+        if (std::isfinite(support_ref)) {
+          for (int dr = -1; dr <= 1; ++dr) {
+            for (int dc = -1; dc <= 1; ++dc) {
+              const int nr = row + dr;
+              const int nc = col + dc;
+              if (nr < 0 || nr >= map.rows() || nc < 0 || nc >= map.cols()) {
+                continue;
+              }
+              const int neighbor = nr * map.cols() + nc;
+              const auto neighbor_support_it = support_ref_by_cell.find(neighbor);
+              if (neighbor_support_it == support_ref_by_cell.end()) {
+                continue;
+              }
+              const float neighbor_support = neighbor_support_it->second;
+              if (!std::isfinite(neighbor_support)) {
+                continue;
+              }
+              if (neighbor_support >= support_ref + 0.5f * upper_height_threshold &&
+                  neighbor_support <= support_ref + config_.geometry.max_step_up) {
+                ++ascending_stair_support_count;
+              }
+            }
+          }
+        }
         const bool below_robot_stair_mix =
             std::isfinite(relative_support_ref) &&
             relative_support_ref <= -config_.geometry.max_step_down &&
@@ -383,7 +409,17 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
             aligned_neighbor_support_count == 0 &&
             output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U &&
             !stale_lower_anchor_mix;
-        if (below_robot_stair_mix || below_robot_ground_layer_mix) {
+        const bool below_robot_upstair_ground_mix =
+            !has_support_anchor &&
+            std::isfinite(relative_support_ref) &&
+            relative_support_ref <= -0.5f * upper_height_threshold &&
+            relative_upper_z <= 0.0f &&
+            vertical_span <= config_.geometry.max_step_up + upper_height_threshold &&
+            ascending_stair_support_count >= min_neighbor_upper_support_cells &&
+            aligned_neighbor_support_count == 0 &&
+            output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U;
+        if (below_robot_stair_mix || below_robot_ground_layer_mix ||
+            below_robot_upstair_ground_mix) {
           output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
           continue;
         }

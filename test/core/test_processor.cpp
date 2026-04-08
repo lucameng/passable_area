@@ -1121,6 +1121,51 @@ TEST(ProcessorTest, PolarFrontendRejectsBelowRobotGroundLayerMixWithOnlyMinimalN
   EXPECT_EQ(primary_cell_candidate_count, 0);
 }
 
+TEST(ProcessorTest, PolarFrontendRejectsBelowRobotUpstairGroundMixWithoutSupportAnchor) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.max_step_up = 0.28f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.68f}, {0.25f, 0.25f, -0.68f}},
+      {{0.25f, 0.25f, -0.66f}, {0.25f, 0.25f, -0.66f}},
+      {{0.25f, 0.25f, -0.37f}, {0.25f, 0.25f, -0.37f}},
+      {{0.15f, 0.45f, -0.50f}, {0.15f, 0.45f, -0.50f}},
+      {{0.15f, 0.45f, -0.35f}, {0.15f, 0.45f, -0.35f}},
+      {{0.35f, 0.45f, -0.49f}, {0.35f, 0.45f, -0.49f}},
+      {{0.35f, 0.45f, -0.34f}, {0.35f, 0.45f, -0.34f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_TRUE(std::isnan(output.support_anchor_used[static_cast<size_t>(primary_cell)]));
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 1);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 1U);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 0);
+}
+
 TEST(ProcessorTest, PolarFrontendRejectsBelowRobotMixWhenLowAnchorUpperBandDominates) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
