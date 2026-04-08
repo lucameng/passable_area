@@ -32,7 +32,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
   DEPENDENCIES std_msgs
 )
-rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 include_directories(
   ${EIGEN3_INCLUDE_DIRS}
@@ -85,7 +84,14 @@ ament_target_dependencies(passable_area_ros
   visualization_msgs
 )
 target_link_libraries(passable_area_ros passable_area_core)
-target_link_libraries(passable_area_ros ${cpp_typesupport_target})
+
+if(COMMAND rosidl_get_typesupport_target)
+  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  target_link_libraries(passable_area_ros ${cpp_typesupport_target})
+else()
+  rosidl_target_interfaces(passable_area_ros
+    ${PROJECT_NAME} "rosidl_typesupport_cpp")
+endif()
 
 add_executable(passable_area_node src/main/passable_area_node_main.cpp)
 target_link_libraries(passable_area_node passable_area_ros)
@@ -134,7 +140,13 @@ ament_target_dependencies(passable_area_e2e_benchmark
   tf2_ros
   visualization_msgs
 )
-target_link_libraries(passable_area_e2e_benchmark ${cpp_typesupport_target})
+
+if(COMMAND rosidl_get_typesupport_target)
+  target_link_libraries(passable_area_e2e_benchmark ${cpp_typesupport_target})
+else()
+  rosidl_target_interfaces(passable_area_e2e_benchmark
+    ${PROJECT_NAME} "rosidl_typesupport_cpp")
+endif()
 
 install(TARGETS
   passable_area_core
@@ -181,7 +193,12 @@ if(BUILD_TESTING)
       rclcpp
       std_msgs
     )
-    target_link_libraries(test_output_converter ${cpp_typesupport_target})
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_output_converter ${cpp_typesupport_target})
+    else()
+      rosidl_target_interfaces(test_output_converter
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
   endif()
 
   ament_add_gtest(test_debug_publishers
@@ -199,7 +216,12 @@ if(BUILD_TESTING)
       sensor_msgs
       std_msgs
     )
-    target_link_libraries(test_debug_publishers ${cpp_typesupport_target})
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_debug_publishers ${cpp_typesupport_target})
+    else()
+      rosidl_target_interfaces(test_debug_publishers
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
   endif()
 
   ament_add_gtest(test_false_obstacle_analyzer
