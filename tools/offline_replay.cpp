@@ -10,7 +10,13 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rclcpp/serialized_message.hpp>
+#include <rmw/rmw.h>
+#include <rosbag2_cpp/converter_options.hpp>
 #include <rosbag2_cpp/reader.hpp>
+#include <rosbag2_cpp/readers/sequential_reader.hpp>
+#include <rosbag2_cpp/storage_options.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include <Eigen/Geometry>
@@ -38,6 +44,18 @@ using passable_area::core::ProcessedFrame;
 std::string DefaultParamsFile();
 std::optional<passable_area::core::Config> LoadConfigFromParamsFile(
     const std::string &params_file);
+
+std::unique_ptr<rosbag2_cpp::Reader> OpenBagReader(const std::string &bag_path) {
+  auto reader = std::make_unique<rosbag2_cpp::Reader>(
+      std::make_unique<rosbag2_cpp::readers::SequentialReader>());
+  rosbag2_cpp::StorageOptions storage_options;
+  storage_options.uri = bag_path;
+  storage_options.storage_id = "sqlite3";
+  rosbag2_cpp::ConverterOptions converter_options{
+      rmw_get_serialization_format(), rmw_get_serialization_format()};
+  reader->open(storage_options, converter_options);
+  return reader;
+}
 
 passable_area::core::Config MakeConfig() {
   passable_area::core::Config config;
@@ -860,8 +878,7 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
     std::cerr << "bag path does not exist: " << bag_path << '\n';
     return std::nullopt;
   }
-  rosbag2_cpp::Reader reader;
-  reader.open(bag_path);
+  auto reader = OpenBagReader(bag_path);
 
   rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
   rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
@@ -874,8 +891,8 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
   std::vector<double> processing_ms_samples;
   std::vector<double> input_point_count_samples;
 
-  while (reader.has_next()) {
-    auto bag_msg = reader.read_next();
+  while (reader->has_next()) {
+    auto bag_msg = reader->read_next();
     rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
     if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
       sensor_msgs::msg::PointCloud2 cloud_msg;
@@ -989,8 +1006,7 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     return std::nullopt;
   }
 
-  rosbag2_cpp::Reader reader;
-  reader.open(args.bag_path);
+  auto reader = OpenBagReader(args.bag_path);
 
   rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
   rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
@@ -998,8 +1014,8 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
   std::map<int64_t, int64_t> cloud_bag_times;
   std::map<int64_t, nav_msgs::msg::Odometry> odoms;
   std::optional<int64_t> bag_start_time;
-  while (reader.has_next()) {
-    auto bag_msg = reader.read_next();
+  while (reader->has_next()) {
+    auto bag_msg = reader->read_next();
     if (!bag_start_time.has_value()) {
       bag_start_time = bag_msg->time_stamp;
     } else {
@@ -1085,8 +1101,7 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
     return std::nullopt;
   }
 
-  rosbag2_cpp::Reader reader;
-  reader.open(args.bag_path);
+  auto reader = OpenBagReader(args.bag_path);
 
   rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
   rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
@@ -1094,8 +1109,8 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
   std::map<int64_t, int64_t> cloud_bag_times;
   std::map<int64_t, nav_msgs::msg::Odometry> odoms;
   std::optional<int64_t> bag_start_time;
-  while (reader.has_next()) {
-    auto bag_msg = reader.read_next();
+  while (reader->has_next()) {
+    auto bag_msg = reader->read_next();
     if (!bag_start_time.has_value()) {
       bag_start_time = bag_msg->time_stamp;
     } else {
@@ -1332,8 +1347,7 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
     return std::nullopt;
   }
 
-  rosbag2_cpp::Reader reader;
-  reader.open(args.bag_path);
+  auto reader = OpenBagReader(args.bag_path);
 
   rclcpp::Serialization<sensor_msgs::msg::PointCloud2> cloud_ser;
   rclcpp::Serialization<nav_msgs::msg::Odometry> odom_ser;
@@ -1341,8 +1355,8 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
   std::map<int64_t, int64_t> cloud_bag_times;
   std::map<int64_t, nav_msgs::msg::Odometry> odoms;
   std::optional<int64_t> bag_start_time;
-  while (reader.has_next()) {
-    auto bag_msg = reader.read_next();
+  while (reader->has_next()) {
+    auto bag_msg = reader->read_next();
     if (!bag_start_time.has_value()) {
       bag_start_time = bag_msg->time_stamp;
     } else {

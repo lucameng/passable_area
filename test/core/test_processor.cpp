@@ -1006,11 +1006,12 @@ TEST(ProcessorTest, PolarFrontendRejectsBelowRobotStairMixDespiteNeighborUpperSu
   EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 1U);
   EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 3);
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 1U);
-  EXPECT_EQ(std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
-                          [primary_cell](const auto &candidate) {
-                            return candidate.cell == primary_cell;
-                          }),
-            0);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 0);
 }
 
 TEST(ProcessorTest, PolarFrontendDoesNotRejectBelowRobotObstacleWithoutLeakEvidence) {
@@ -1061,11 +1062,12 @@ TEST(ProcessorTest, PolarFrontendDoesNotRejectBelowRobotObstacleWithoutLeakEvide
   EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 3);
   EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 0U);
-  EXPECT_EQ(std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
-                          [primary_cell](const auto &candidate) {
-                            return candidate.cell == primary_cell;
-                          }),
-            1);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 1);
 }
 
 TEST(ProcessorTest, PolarFrontendRejectsBelowRobotMixWhenLowAnchorUpperBandDominates) {
@@ -1114,11 +1116,12 @@ TEST(ProcessorTest, PolarFrontendRejectsBelowRobotMixWhenLowAnchorUpperBandDomin
   EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
   EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 3);
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 1U);
-  EXPECT_EQ(std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
-                          [primary_cell](const auto &candidate) {
-                            return candidate.cell == primary_cell;
-                          }),
-            0);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 0);
 }
 
 TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
