@@ -1121,6 +1121,195 @@ TEST(ProcessorTest, PolarFrontendRejectsBelowRobotGroundLayerMixWithOnlyMinimalN
   EXPECT_EQ(primary_cell_candidate_count, 0);
 }
 
+TEST(ProcessorTest, PolarFrontendKeepsBelowRobotGroundLayerMixWhenUpperSupportStructureIsStronger) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  config.geometry.sub_support_leak_tolerance = 0.18f;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int neighbor_cell = -1;
+  int diagonal_neighbor_cell = -1;
+  int far_diagonal_neighbor_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, neighbor_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, diagonal_neighbor_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, far_diagonal_neighbor_cell));
+  map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.68f;
+  map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(primary_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(primary_cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.68f}, {0.25f, 0.25f, -0.68f}},
+      {{0.25f, 0.25f, -0.65f}, {0.25f, 0.25f, -0.65f}},
+      {{0.25f, 0.25f, -0.46f}, {0.25f, 0.25f, -0.46f}},
+      {{0.25f, 0.45f, -0.67f}, {0.25f, 0.45f, -0.67f}},
+      {{0.25f, 0.45f, -0.45f}, {0.25f, 0.45f, -0.45f}},
+      {{0.45f, 0.25f, -0.66f}, {0.45f, 0.25f, -0.66f}},
+      {{0.45f, 0.25f, -0.44f}, {0.45f, 0.25f, -0.44f}},
+      {{0.45f, 0.45f, -0.65f}, {0.45f, 0.45f, -0.65f}},
+      {{0.45f, 0.45f, -0.43f}, {0.45f, 0.45f, -0.43f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_FLOAT_EQ(output.support_anchor_used[static_cast<size_t>(primary_cell)], -0.68f);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(neighbor_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(diagonal_neighbor_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(far_diagonal_neighbor_cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 4);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 0U);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 1);
+}
+
+TEST(ProcessorTest, PolarFrontendRejectsBelowRobotGroundLayerMixWhenUpperSupportSurplusStaysOneSided) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  config.geometry.sub_support_leak_tolerance = 0.18f;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int front_left_cell = -1;
+  int front_center_cell = -1;
+  int front_right_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.05f, 0.45f, front_left_cell));
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, front_center_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, front_right_cell));
+  ASSERT_NE(front_left_cell, front_center_cell);
+  ASSERT_NE(front_left_cell, front_right_cell);
+  ASSERT_NE(front_center_cell, front_right_cell);
+  map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.68f;
+  map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(primary_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(primary_cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.68f}, {0.25f, 0.25f, -0.68f}},
+      {{0.25f, 0.25f, -0.65f}, {0.25f, 0.25f, -0.65f}},
+      {{0.25f, 0.25f, -0.46f}, {0.25f, 0.25f, -0.46f}},
+      {{0.05f, 0.45f, -0.67f}, {0.05f, 0.45f, -0.67f}},
+      {{0.05f, 0.45f, -0.45f}, {0.05f, 0.45f, -0.45f}},
+      {{0.25f, 0.45f, -0.67f}, {0.25f, 0.45f, -0.67f}},
+      {{0.25f, 0.45f, -0.45f}, {0.25f, 0.45f, -0.45f}},
+      {{0.45f, 0.45f, -0.66f}, {0.45f, 0.45f, -0.66f}},
+      {{0.45f, 0.45f, -0.44f}, {0.45f, 0.45f, -0.44f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_FLOAT_EQ(output.support_anchor_used[static_cast<size_t>(primary_cell)], -0.68f);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(front_left_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(front_center_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(front_right_cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 4);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 1U);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 0);
+}
+
+TEST(ProcessorTest, PolarFrontendRejectsBelowRobotGroundLayerMixWhenUpperSupportLacksDiagonalPatch) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  config.geometry.sub_support_leak_tolerance = 0.18f;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int left_cell = -1;
+  int right_cell = -1;
+  int front_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_cell));
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, front_cell));
+  ASSERT_NE(left_cell, right_cell);
+  ASSERT_NE(left_cell, front_cell);
+  ASSERT_NE(right_cell, front_cell);
+  map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.68f;
+  map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(primary_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(primary_cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.68f}, {0.25f, 0.25f, -0.68f}},
+      {{0.25f, 0.25f, -0.65f}, {0.25f, 0.25f, -0.65f}},
+      {{0.25f, 0.25f, -0.46f}, {0.25f, 0.25f, -0.46f}},
+      {{0.05f, 0.25f, -0.67f}, {0.05f, 0.25f, -0.67f}},
+      {{0.05f, 0.25f, -0.45f}, {0.05f, 0.25f, -0.45f}},
+      {{0.45f, 0.25f, -0.66f}, {0.45f, 0.25f, -0.66f}},
+      {{0.45f, 0.25f, -0.44f}, {0.45f, 0.25f, -0.44f}},
+      {{0.25f, 0.45f, -0.67f}, {0.25f, 0.45f, -0.67f}},
+      {{0.25f, 0.45f, -0.45f}, {0.25f, 0.45f, -0.45f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_FLOAT_EQ(output.support_anchor_used[static_cast<size_t>(primary_cell)], -0.68f);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(left_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(right_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(front_cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 4);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 1U);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 0);
+}
+
 TEST(ProcessorTest, PolarFrontendRejectsBelowRobotUpstairGroundMixWithoutSupportAnchor) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
@@ -1164,6 +1353,57 @@ TEST(ProcessorTest, PolarFrontendRejectsBelowRobotUpstairGroundMixWithoutSupport
                       return candidate.cell == primary_cell;
                     });
   EXPECT_EQ(primary_cell_candidate_count, 0);
+}
+
+TEST(ProcessorTest, PolarFrontendKeepsBelowRobotObstacleOnUpstairSupportTrend) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.max_step_up = 0.28f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int left_up_cell = -1;
+  int right_up_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.15f, 0.45f, left_up_cell));
+  ASSERT_TRUE(map.odomToIndex(0.35f, 0.45f, right_up_cell));
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.72f}, {0.25f, 0.25f, -0.72f}},
+      {{0.25f, 0.25f, -0.69f}, {0.25f, 0.25f, -0.69f}},
+      {{0.25f, 0.25f, -0.06f}, {0.25f, 0.25f, -0.06f}},
+      {{0.15f, 0.45f, -0.52f}, {0.15f, 0.45f, -0.52f}},
+      {{0.15f, 0.45f, -0.31f}, {0.15f, 0.45f, -0.31f}},
+      {{0.35f, 0.45f, -0.50f}, {0.35f, 0.45f, -0.50f}},
+      {{0.35f, 0.45f, -0.29f}, {0.35f, 0.45f, -0.29f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_TRUE(std::isnan(output.support_anchor_used[static_cast<size_t>(primary_cell)]));
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)], 0U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(left_up_cell)], 1U);
+  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(right_up_cell)], 1U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)], 3);
+  EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(primary_cell)], 0U);
+  const auto primary_cell_candidate_count =
+      std::count_if(output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+                    [primary_cell](const auto &candidate) {
+                      return candidate.cell == primary_cell;
+                    });
+  EXPECT_EQ(primary_cell_candidate_count, 1);
 }
 
 TEST(ProcessorTest, PolarFrontendRejectsBelowRobotMixWhenLowAnchorUpperBandDominates) {

@@ -88,6 +88,106 @@ float ResolveNeighborSupportAnchor(int cell, const LocalTerrainMap &map, const T
   return *middle;
 }
 
+bool ShouldRejectBelowRobotStairMix(float relative_support_ref,
+                                    float relative_upper_z,
+                                    int support_count,
+                                    float max_step_down,
+                                    float upper_height_threshold,
+                                    uint16_t sub_support_leak_count,
+                                    bool stale_lower_anchor_mix) {
+  return std::isfinite(relative_support_ref) && relative_support_ref <= -max_step_down &&
+         relative_upper_z <= -upper_height_threshold && support_count >= 3 &&
+         (sub_support_leak_count > 0U || stale_lower_anchor_mix);
+}
+
+bool ShouldRejectBelowRobotGroundLayerMix(float relative_support_ref,
+                                          float relative_upper_z,
+                                          float vertical_span,
+                                          int support_count,
+                                          int aligned_neighbor_support_count,
+                                          bool has_non_collinear_upper_support_pattern,
+                                          int min_neighbor_upper_support_cells,
+                                          float max_step_down,
+                                          float upper_height_threshold,
+                                          uint16_t sub_support_leak_count,
+                                          bool stale_lower_anchor_mix) {
+  const int min_upper_support_gate = std::max(1, min_neighbor_upper_support_cells);
+  const int support_cells_beyond_gate = support_count - min_upper_support_gate;
+  const bool has_clear_upper_support_surplus = support_cells_beyond_gate >= 2;
+  const bool has_surplus_with_structure_pattern =
+      has_clear_upper_support_surplus && has_non_collinear_upper_support_pattern;
+  const bool has_reinforcing_support_structure =
+      aligned_neighbor_support_count > 0 || has_surplus_with_structure_pattern;
+  return std::isfinite(relative_support_ref) && relative_support_ref <= -max_step_down &&
+         relative_upper_z <= -upper_height_threshold && vertical_span <= max_step_down &&
+         !has_reinforcing_support_structure && sub_support_leak_count == 0U &&
+         !stale_lower_anchor_mix;
+}
+
+int CountAscendingNeighborSupportRefs(int cell,
+                                      const LocalTerrainMap &map,
+                                      const std::unordered_map<int, float> &support_ref_by_cell,
+                                      float support_ref,
+                                      float upper_height_threshold,
+                                      float max_step_up) {
+  if (!std::isfinite(support_ref)) {
+    return 0;
+  }
+
+  const int row = cell / map.cols();
+  const int col = cell % map.cols();
+  // Neighbor support must rise clearly above the current support before we call it an ascending stair trend.
+  const float min_ascending_support_delta = 0.5f * upper_height_threshold;
+  int ascending_stair_support_count = 0;
+  for (int dr = -1; dr <= 1; ++dr) {
+    for (int dc = -1; dc <= 1; ++dc) {
+      const int nr = row + dr;
+      const int nc = col + dc;
+      if (nr < 0 || nr >= map.rows() || nc < 0 || nc >= map.cols()) {
+        continue;
+      }
+      if (dr == 0 && dc == 0) {
+        continue;
+      }
+      const int neighbor = nr * map.cols() + nc;
+      const auto neighbor_support_it = support_ref_by_cell.find(neighbor);
+      if (neighbor_support_it == support_ref_by_cell.end()) {
+        continue;
+      }
+      const float neighbor_support = neighbor_support_it->second;
+      if (!std::isfinite(neighbor_support)) {
+        continue;
+      }
+      if (neighbor_support >= support_ref + min_ascending_support_delta &&
+          neighbor_support <= support_ref + max_step_up) {
+        ++ascending_stair_support_count;
+      }
+    }
+  }
+  return ascending_stair_support_count;
+}
+
+bool ShouldRejectBelowRobotUpstairGroundMix(bool has_support_anchor,
+                                            float relative_support_ref,
+                                            float relative_upper_z,
+                                            float vertical_span,
+                                            int ascending_stair_support_count,
+                                            int aligned_neighbor_support_count,
+                                            int min_neighbor_upper_support_cells,
+                                            float upper_height_threshold,
+                                            float max_step_up,
+                                            uint16_t sub_support_leak_count) {
+  const float min_below_robot_support_depth = -0.5f * upper_height_threshold;
+  const float max_ground_mix_span = max_step_up + upper_height_threshold;
+  const float max_below_robot_upper_z = 0.0f;
+  return !has_support_anchor && std::isfinite(relative_support_ref) &&
+         relative_support_ref <= min_below_robot_support_depth &&
+         relative_upper_z <= max_below_robot_upper_z &&
+         vertical_span <= max_ground_mix_span &&
+         ascending_stair_support_count >= std::max(1, min_neighbor_upper_support_cells) &&
+         aligned_neighbor_support_count == 0 && sub_support_leak_count == 0U;
+}
+
 } // namespace
 
 FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
@@ -330,6 +430,9 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     const int col = cell % map.cols();
     int support_count = 0;
     int aligned_neighbor_support_count = 0;
+    bool has_upper_neighbor_on_same_row = false;
+    bool has_upper_neighbor_on_same_col = false;
+    bool has_upper_neighbor_on_diagonal = false;
     for (int dr = -1; dr <= 1; ++dr) {
       for (int dc = -1; dc <= 1; ++dc) {
         const int nr = row + dr;
@@ -338,7 +441,14 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
           continue;
         }
         const int neighbor = nr * map.cols() + nc;
-        support_count += output.upper_support_cell[static_cast<size_t>(neighbor)] != 0U ? 1 : 0;
+        const bool is_upper_support = output.upper_support_cell[static_cast<size_t>(neighbor)] != 0U;
+        support_count += is_upper_support ? 1 : 0;
+        if (is_upper_support && !(dr == 0 && dc == 0)) {
+          has_upper_neighbor_on_same_row = has_upper_neighbor_on_same_row || (dr == 0 && dc != 0);
+          has_upper_neighbor_on_same_col = has_upper_neighbor_on_same_col || (dc == 0 && dr != 0);
+          has_upper_neighbor_on_diagonal =
+              has_upper_neighbor_on_diagonal || (dr != 0 && dc != 0);
+        }
         if (const auto stats_it = stats_by_cell.find(cell);
             stats_it != stats_by_cell.end() && IsValidSupportAnchorCell(layers, neighbor, config_) &&
             std::abs(layers.support_height[static_cast<size_t>(neighbor)] - stats_it->second.max_z) <=
@@ -347,6 +457,10 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
         }
       }
     }
+    // Upper support must form a corner-braced 2D patch, not just a single-sided row/column pile-up.
+    const bool has_non_collinear_upper_support_pattern =
+        has_upper_neighbor_on_diagonal && has_upper_neighbor_on_same_row &&
+        has_upper_neighbor_on_same_col;
     output.neighbor_upper_support_count[static_cast<size_t>(cell)] =
         static_cast<int8_t>(std::clamp(support_count, 0, 9));
     if (support_count >= min_neighbor_upper_support_cells &&
@@ -368,56 +482,44 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                 std::max(2, anchor_reobserve_count_by_cell[static_cast<size_t>(cell)]) &&
             min_upper_band_z_by_cell[static_cast<size_t>(cell)] >=
                 support_anchor + upper_height_threshold;
-        int ascending_stair_support_count = 0;
-        if (std::isfinite(support_ref)) {
-          for (int dr = -1; dr <= 1; ++dr) {
-            for (int dc = -1; dc <= 1; ++dc) {
-              const int nr = row + dr;
-              const int nc = col + dc;
-              if (nr < 0 || nr >= map.rows() || nc < 0 || nc >= map.cols()) {
-                continue;
-              }
-              const int neighbor = nr * map.cols() + nc;
-              const auto neighbor_support_it = support_ref_by_cell.find(neighbor);
-              if (neighbor_support_it == support_ref_by_cell.end()) {
-                continue;
-              }
-              const float neighbor_support = neighbor_support_it->second;
-              if (!std::isfinite(neighbor_support)) {
-                continue;
-              }
-              if (neighbor_support >= support_ref + 0.5f * upper_height_threshold &&
-                  neighbor_support <= support_ref + config_.geometry.max_step_up) {
-                ++ascending_stair_support_count;
-              }
-            }
-          }
-        }
-        const bool below_robot_stair_mix =
-            std::isfinite(relative_support_ref) &&
-            relative_support_ref <= -config_.geometry.max_step_down &&
-            relative_upper_z <= -config_.geometry.upper_min_height_above_support &&
-            support_count >= 3 &&
-            (output.sub_support_leak_count[static_cast<size_t>(cell)] > 0U ||
-             stale_lower_anchor_mix);
-        const bool below_robot_ground_layer_mix =
-            std::isfinite(relative_support_ref) &&
-            relative_support_ref <= -config_.geometry.max_step_down &&
-            relative_upper_z <= -config_.geometry.upper_min_height_above_support &&
-            vertical_span <= config_.geometry.max_step_down &&
-            support_count == min_neighbor_upper_support_cells &&
-            aligned_neighbor_support_count == 0 &&
-            output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U &&
-            !stale_lower_anchor_mix;
-        const bool below_robot_upstair_ground_mix =
-            !has_support_anchor &&
-            std::isfinite(relative_support_ref) &&
-            relative_support_ref <= -0.5f * upper_height_threshold &&
-            relative_upper_z <= 0.0f &&
-            vertical_span <= config_.geometry.max_step_up + upper_height_threshold &&
-            ascending_stair_support_count >= min_neighbor_upper_support_cells &&
-            aligned_neighbor_support_count == 0 &&
-            output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U;
+        const int ascending_stair_support_count = CountAscendingNeighborSupportRefs(
+            cell,
+            map,
+            support_ref_by_cell,
+            support_ref,
+            upper_height_threshold,
+            config_.geometry.max_step_up);
+        const bool below_robot_stair_mix = ShouldRejectBelowRobotStairMix(
+            relative_support_ref,
+            relative_upper_z,
+            support_count,
+            config_.geometry.max_step_down,
+            upper_height_threshold,
+            output.sub_support_leak_count[static_cast<size_t>(cell)],
+            stale_lower_anchor_mix);
+        const bool below_robot_ground_layer_mix = ShouldRejectBelowRobotGroundLayerMix(
+            relative_support_ref,
+            relative_upper_z,
+            vertical_span,
+            support_count,
+            aligned_neighbor_support_count,
+            has_non_collinear_upper_support_pattern,
+            min_neighbor_upper_support_cells,
+            config_.geometry.max_step_down,
+            upper_height_threshold,
+            output.sub_support_leak_count[static_cast<size_t>(cell)],
+            stale_lower_anchor_mix);
+        const bool below_robot_upstair_ground_mix = ShouldRejectBelowRobotUpstairGroundMix(
+            has_support_anchor,
+            relative_support_ref,
+            relative_upper_z,
+            vertical_span,
+            ascending_stair_support_count,
+            aligned_neighbor_support_count,
+            min_neighbor_upper_support_cells,
+            upper_height_threshold,
+            config_.geometry.max_step_up,
+            output.sub_support_leak_count[static_cast<size_t>(cell)]);
         if (below_robot_stair_mix || below_robot_ground_layer_mix ||
             below_robot_upstair_ground_mix) {
           output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
