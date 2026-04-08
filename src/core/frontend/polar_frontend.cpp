@@ -374,7 +374,16 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
             support_count >= 3 &&
             (output.sub_support_leak_count[static_cast<size_t>(cell)] > 0U ||
              stale_lower_anchor_mix);
-        if (below_robot_stair_mix) {
+        const bool below_robot_ground_layer_mix =
+            std::isfinite(relative_support_ref) &&
+            relative_support_ref <= -config_.geometry.max_step_down &&
+            relative_upper_z <= -config_.geometry.upper_min_height_above_support &&
+            vertical_span <= config_.geometry.max_step_down &&
+            support_count == min_neighbor_upper_support_cells &&
+            aligned_neighbor_support_count == 0 &&
+            output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U &&
+            !stale_lower_anchor_mix;
+        if (below_robot_stair_mix || below_robot_ground_layer_mix) {
           output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
           continue;
         }
