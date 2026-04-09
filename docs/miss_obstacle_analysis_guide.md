@@ -60,6 +60,11 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 - `support_ref`
 - `max_sample_z_minus_support_ref`
 
+这里的“发布高度门槛”现在包含两部分：
+
+- 样本相对 `support_ref` 的高度要达到 `obstacle_points_min_height`
+- 样本在 `base_link` 下的高度不能高于 `obstacle_points_max_height_in_base_link`
+
 ## 5. 常见 root cause
 
 - `NoSamplesInRoi`

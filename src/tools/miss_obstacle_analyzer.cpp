@@ -18,10 +18,20 @@ struct RoiSampleStats {
   float max_z = -std::numeric_limits<float>::infinity();
   float min_relative_z = std::numeric_limits<float>::infinity();
   float max_relative_z = -std::numeric_limits<float>::infinity();
+  float min_base_link_z = std::numeric_limits<float>::infinity();
+  float max_base_link_z = -std::numeric_limits<float>::infinity();
 };
 
 bool IsInsideDetectionBox(const MissObstacleDetectionBox &box, float x, float y) {
   return x >= box.x_min && x <= box.x_max && y >= box.y_min && y <= box.y_max;
+}
+
+bool PassesObstaclePointPublishHeightGates(const passable_area::core::Config &config,
+                                           float support_ref,
+                                           const RoiSampleStats &sample_stats) {
+  return std::isfinite(support_ref) &&
+         sample_stats.max_z >= support_ref + config.obstacle_points_min_height &&
+         sample_stats.min_base_link_z <= config.obstacle_points_max_height_in_base_link;
 }
 
 passable_area::core::Point3f TransformOdomPointToBaseGravity(float x, float y, float z,
@@ -84,6 +94,8 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     stats.max_z = std::max(stats.max_z, sample.point_in_odom.z);
     stats.min_relative_z = std::min(stats.min_relative_z, point_in_base_gravity.z);
     stats.max_relative_z = std::max(stats.max_relative_z, point_in_base_gravity.z);
+    stats.min_base_link_z = std::min(stats.min_base_link_z, sample.point_in_base.z);
+    stats.max_base_link_z = std::max(stats.max_base_link_z, sample.point_in_base.z);
   }
 
   for (const auto &obstacle_point : output.obstacle_points) {
@@ -167,9 +179,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
         }
       }
 
-      if (has_samples && sample_stats.sample_count > 0 && std::isfinite(support_ref) &&
+      if (has_samples && sample_stats.sample_count > 0 &&
           output.obstacle_evidence[idx] >= config_.obstacle_points_min_evidence &&
-          sample_stats.max_z >= support_ref + config_.obstacle_points_min_height) {
+          PassesObstaclePointPublishHeightGates(config_, support_ref, sample_stats)) {
         publishable_sample_count += sample_stats.sample_count;
       }
 
@@ -215,9 +227,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                  cell.obstacle_evidence < config_.obstacle_points_min_evidence) {
         cell.explanation = "frontend candidate formed but obstacle evidence is still below publish threshold";
       } else if (output.obstacle_evidence[idx] >= config_.obstacle_points_min_evidence &&
-                 (!std::isfinite(cell.max_sample_z_minus_support_ref) ||
-                  cell.max_sample_z_minus_support_ref < config_.obstacle_points_min_height)) {
-        cell.explanation = "obstacle evidence is high enough but no sample clears publish height gate";
+                 (!PassesObstaclePointPublishHeightGates(config_, support_ref, sample_stats))) {
+        cell.explanation =
+            "obstacle evidence is high enough but samples fail the obstacle-point publish height gates";
       } else if (cell.sub_support_leak_count > 0U && !cell.obstacle_candidate_cell &&
                  !cell.obstacle_rejected_by_neighbor_support) {
         cell.explanation = "support anchor filtered lower-layer leak samples before obstacle promotion";
@@ -269,11 +281,13 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     } else {
       analysis.classification = MissObstacleRootCause::kOutputHeightGateNotMet;
       analysis.explanation =
-          "roi cells have enough obstacle evidence, but no current sample is high enough above support_ref to publish obstacle points";
+          "roi cells have enough obstacle evidence, but no current sample passes the publish height gates in both base_gravity and base_link";
       analysis.evidence_lines.push_back("strong_evidence_cells=" +
                                         std::to_string(strong_evidence_cell_count));
       analysis.evidence_lines.push_back("obstacle_points_min_height=" +
                                         std::to_string(config_.obstacle_points_min_height));
+      analysis.evidence_lines.push_back("obstacle_points_max_height_in_base_link=" +
+                                        std::to_string(config_.obstacle_points_max_height_in_base_link));
     }
   } else if (analysis.obstacle_suspicious_cell_count == 0 &&
              analysis.obstacle_candidate_cell_count == 0) {

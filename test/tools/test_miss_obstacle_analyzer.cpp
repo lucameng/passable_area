@@ -23,6 +23,7 @@ Config MakeConfig() {
   config.observability.sector_count = 8;
   config.obstacle_points_min_evidence = 0.4f;
   config.obstacle_points_min_height = 0.2f;
+  config.obstacle_points_max_height_in_base_link = 0.2f;
   return config;
 }
 
@@ -148,6 +149,24 @@ TEST(MissObstacleAnalyzerTest, ReturnsOutputHeightGateNotMetWhenStrongEvidenceHa
   EXPECT_EQ(analysis->classification, MissObstacleRootCause::kOutputHeightGateNotMet);
   ASSERT_FALSE(analysis->representative_cells.empty());
   EXPECT_NEAR(analysis->representative_cells.front().max_sample_z_minus_support_ref, 0.10f, 1e-5f);
+}
+
+TEST(MissObstacleAnalyzerTest, ReturnsOutputHeightGateNotMetWhenSamplesExceedBaseLinkHeightCeiling) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 0.2f;
+  MissObstacleAnalyzer analyzer(config, MakeAnalyzerConfig());
+  auto output = MakeOutput();
+  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.25f}});
+  const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_candidate_cell[cell] = 1U;
+  output.obstacle_evidence[cell] = 0.6f;
+  output.support_height[cell] = 0.0f;
+
+  const auto analysis = analyzer.analyzeFrame(output, frame);
+  ASSERT_TRUE(analysis.has_value());
+  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kOutputHeightGateNotMet);
 }
 
 TEST(MissObstacleAnalyzerTest, ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {

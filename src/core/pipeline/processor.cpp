@@ -24,6 +24,14 @@ bool IsNear(float lhs, float rhs, float tolerance) {
   return std::isfinite(lhs) && std::isfinite(rhs) && std::abs(lhs - rhs) <= tolerance;
 }
 
+bool PassesObstaclePointPublishHeightGates(const passable_area::core::OdomPointSample &sample,
+                                           float support_ref,
+                                           const passable_area::core::Config &config) {
+  return std::isfinite(support_ref) &&
+         sample.point_in_odom.z >= support_ref + config.obstacle_points_min_height &&
+         sample.point_in_base.z <= config.obstacle_points_max_height_in_base_link;
+}
+
 } // namespace
 
 Processor::Processor(const Config &config)
@@ -143,8 +151,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
                         : std::numeric_limits<float>::infinity();
     }
     if (layers.obstacle_evidence[cell] >= config_.obstacle_points_min_evidence &&
-        std::isfinite(support_ref) &&
-        sample.point_in_odom.z >= support_ref + config_.obstacle_points_min_height) {
+        PassesObstaclePointPublishHeightGates(sample, support_ref, config_)) {
       output.obstacle_points.push_back(
           MakeCellDebugPoint(
               TransformOdomPointToBaseGravity(sample.point_in_odom, frame.base_pose_in_odom), cell));

@@ -462,6 +462,7 @@ TF：
 
 - 落在 `obstacle_evidence` 已足够高的 obstacle cell 内的真实样本点
 - 仅发布相对该 cell support 参考面高度至少为 `obstacle_points_min_height` 的上部障碍样本，不按绝对 z 阈值解释
+- 同时要求样本在 `base_link` 下的高度不高于 `obstacle_points_max_height_in_base_link`，用于过滤高于机体上方的低矮顶棚或悬空高障碍
 - 当历史 `support_height` 不可用时，使用当前帧该 cell 的 `min_z` 作为 support 参考
 - 发布在 `base_gravity`
 

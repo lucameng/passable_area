@@ -192,6 +192,41 @@ FrameInput MakeUnsupportedWallFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakePitchedObstacleColumnFrame(const Eigen::Quaternionf &orientation,
+                                          float obstacle_height_in_base,
+                                          int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = orientation.normalized();
+  input.input_cloud_in_base = {
+      {0.55f, -0.25f, 0.0f},
+      {0.55f, -0.25f, obstacle_height_in_base},
+      {0.55f, 0.25f, 0.0f},
+      {0.55f, 0.25f, obstacle_height_in_base},
+  };
+  return input;
+}
+
+FrameInput MakePitchedObstacleStackFrame(const Eigen::Quaternionf &orientation,
+                                         float lower_obstacle_height_in_base,
+                                         float upper_obstacle_height_in_base,
+                                         int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_odom.orientation = orientation.normalized();
+  input.input_cloud_in_base = {
+      {0.55f, -0.25f, 0.0f},
+      {0.55f, -0.25f, lower_obstacle_height_in_base},
+      {0.55f, -0.25f, upper_obstacle_height_in_base},
+      {0.55f, 0.25f, 0.0f},
+      {0.55f, 0.25f, lower_obstacle_height_in_base},
+      {0.55f, 0.25f, upper_obstacle_height_in_base},
+  };
+  return input;
+}
+
 ProcessedFrame MakeProcessedFrame(const std::vector<passable_area::core::OdomPointSample> &samples) {
   ProcessedFrame frame;
   frame.base_pose_in_odom.position = Eigen::Vector3f::Zero();
@@ -2006,6 +2041,7 @@ TEST(ProcessorTest, ObstaclePointsPublishUpperBandSamplesFromObstacleCells) {
   config.observability.min_points_per_sector = 1;
   config.obstacle_points_min_evidence = 0.2f;
   config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
   Processor processor(config);
 
   ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(1)).valid);
@@ -2049,6 +2085,117 @@ TEST(ProcessorTest, ObstaclePointsExcludeGroundSamplesUnderLowCeiling) {
   EXPECT_NEAR(max_z, 0.2f, 1e-5f);
 }
 
+TEST(ProcessorTest, ObstaclePointsExcludeSamplesAboveBaseLinkHeightCeiling) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 0.2f;
+  Processor processor(config);
+
+  const Eigen::Quaternionf pitched_orientation(Eigen::AngleAxisf(
+      -static_cast<float>(M_PI) / 6.0f, Eigen::Vector3f::UnitY()));
+  ASSERT_TRUE(processor.update(
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.25f, 0.35f, 1)).valid);
+  ASSERT_TRUE(processor.update(
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.25f, 0.35f, 100000001)).valid);
+  ASSERT_TRUE(processor.update(
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.25f, 0.35f, 200000001)).valid);
+  const auto output =
+      processor.update(MakePitchedObstacleStackFrame(pitched_orientation, 0.25f, 0.35f, 300000001));
+  ASSERT_TRUE(output.valid);
+
+  EXPECT_TRUE(output.obstacle_points.empty());
+}
+
+TEST(ProcessorTest, ObstaclePointsKeepSamplesAtOrBelowBaseLinkHeightCeiling) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 0.2f;
+  Processor processor(config);
+
+  const Eigen::Quaternionf pitched_orientation(Eigen::AngleAxisf(
+      -static_cast<float>(M_PI) / 6.0f, Eigen::Vector3f::UnitY()));
+  ASSERT_TRUE(processor.update(
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 1)).valid);
+  ASSERT_TRUE(processor.update(
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 100000001)).valid);
+  ASSERT_TRUE(processor.update(
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 200000001)).valid);
+  const auto output =
+      processor.update(MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 300000001));
+  ASSERT_TRUE(output.valid);
+
+  ASSERT_FALSE(output.obstacle_points.empty());
+  for (const auto &point : output.obstacle_points) {
+    EXPECT_GT(point.point.z, 0.2f);
+  }
+}
+
+TEST(ProcessorTest, ObstaclePointPublishUsesBaseLinkCeilingButPublishesInBaseGravity) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 0.2f;
+  Processor processor(config);
+  FramePreprocessor preprocessor(config);
+
+  const Eigen::Quaternionf pitched_orientation(Eigen::AngleAxisf(
+      -static_cast<float>(M_PI) / 6.0f, Eigen::Vector3f::UnitY()));
+  const FrameInput input = MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 1);
+  ProcessedFrame preprocessed;
+  ASSERT_TRUE(preprocessor.process(input, preprocessed));
+
+  bool found_publishable_source_sample = false;
+  for (const auto &sample : preprocessed.odom_samples) {
+    if (std::abs(sample.point_in_base.x - 0.55f) < 1e-5f &&
+        std::abs(sample.point_in_base.y - 0.25f) < 1e-5f &&
+        std::abs(sample.point_in_base.z - 0.18f) < 1e-5f) {
+      found_publishable_source_sample = true;
+      EXPECT_LE(sample.point_in_base.z, config.obstacle_points_max_height_in_base_link);
+    }
+  }
+  EXPECT_TRUE(found_publishable_source_sample);
+
+  ASSERT_TRUE(processor.update(input).valid);
+  ASSERT_TRUE(
+      processor.update(MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 100000001))
+          .valid);
+  ASSERT_TRUE(
+      processor.update(MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 200000001))
+          .valid);
+  const auto output =
+      processor.update(MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 300000001));
+  ASSERT_TRUE(output.valid);
+  ASSERT_FALSE(output.obstacle_points.empty());
+
+  bool found_published_point_above_base_link_ceiling = false;
+  for (const auto &point : output.obstacle_points) {
+    if (point.point.z > config.obstacle_points_max_height_in_base_link) {
+      found_published_point_above_base_link_ceiling = true;
+    }
+  }
+  EXPECT_TRUE(found_published_point_above_base_link_ceiling);
+}
+
 TEST(ProcessorTest, ObstaclePointsExcludeWallBaseNoise) {
   auto config = MakeConfig();
   config.map.length = 2.0f;
@@ -2059,6 +2206,7 @@ TEST(ProcessorTest, ObstaclePointsExcludeWallBaseNoise) {
   config.observability.min_points_per_sector = 1;
   config.obstacle_points_min_evidence = 0.2f;
   config.obstacle_points_min_height = 0.2f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
   Processor processor(config);
 
   ASSERT_TRUE(processor.update(MakeWallWithBaseNoiseFrame(1)).valid);
@@ -2136,6 +2284,7 @@ TEST(ProcessorTest, WallWithoutGroundSupportStillPublishesObstaclePoints) {
   config.observability.min_points_per_sector = 1;
   config.obstacle_points_min_evidence = 0.2f;
   config.obstacle_points_min_height = 0.15f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
   Processor processor(config);
 
   ASSERT_TRUE(processor.update(MakeUnsupportedWallFrame(1)).valid);
