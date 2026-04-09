@@ -38,3 +38,6 @@ bags:
 
   - name: rosbag2_mtbf_short_upstair_1
     dir_name: rosbag2_mtbf_short_upstair_1
+
+  - name: rosbag2_mtbf_x30_upstair_passage
+    dir_name: rosbag2_mtbf_x30_upstair_passage
