@@ -16,7 +16,13 @@
 #include <rosbag2_cpp/converter_options.hpp>
 #include <rosbag2_cpp/reader.hpp>
 #include <rosbag2_cpp/readers/sequential_reader.hpp>
+#if __has_include(<rosbag2_storage/storage_options.hpp>)
 #include <rosbag2_storage/storage_options.hpp>
+using BagStorageOptions = rosbag2_storage::StorageOptions;
+#else
+#include <rosbag2_cpp/storage_options.hpp>
+using BagStorageOptions = rosbag2_cpp::StorageOptions;
+#endif
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include <Eigen/Geometry>
@@ -48,7 +54,7 @@ std::optional<passable_area::core::Config> LoadConfigFromParamsFile(
 std::unique_ptr<rosbag2_cpp::Reader> OpenBagReader(const std::string &bag_path) {
   auto reader = std::make_unique<rosbag2_cpp::Reader>(
       std::make_unique<rosbag2_cpp::readers::SequentialReader>());
-  rosbag2_storage::StorageOptions storage_options;
+  BagStorageOptions storage_options;
   storage_options.uri = bag_path;
   storage_options.storage_id = "sqlite3";
   rosbag2_cpp::ConverterOptions converter_options{
