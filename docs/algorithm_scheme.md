@@ -346,6 +346,24 @@ TF：
 - 把“机体观测语义”和“地图投影语义”解耦
 - 避免孤立高点直接形成 obstacle candidate，要求局部最小空间支持
 
+当前前端还会维护一个 frontend-local temporary explanation ref: `effective_support_ref`。
+
+- 它只用于当前 cell 的 obstacle explanation
+- 只影响当前 cell 的 `upper_support` / candidate explanation
+- 不写回地图 `support_height`
+- 不是新的 support estimate
+- 不参与 `ascending_stair_support_count`
+
+`effective_support_ref` 仅在下面这类 case 才允许高于原始 `support_ref`：
+
+- 当前 cell 位于机器人下方
+- 当前 cell 同时存在下层 support 和上层分层样本
+- 当前 cell 有有效 `support_anchor`
+- 上层候选与邻域/历史 anchored support 一致性更强
+- 当前 case 不属于已有 stair/downstairs/upstairs ground-mix 解释
+
+这条解释链的目的不是“过滤草”或“过滤软障碍”，而是避免镂空地面把 `support_ref` 拉到过低层后，再把上层踏面和其上的弱上部结构一起误解释成 obstacle。
+
 ### 9.4 `DropoutAwareMapUpdater`
 
 职责：
@@ -571,6 +589,8 @@ TF：
 - 仅当本 cell 历史 support 无效时，才使用 `3x3` 邻域内有效 support 的中位数作为 fallback anchor
 - 当样本点低于 `support_anchor - sub_support_leak_tolerance` 时，这些点会被当作下层泄漏点，不参与本帧 `support / min_z / max_z / vertical_span / upper_support / obstacle_candidate`
 - 当可疑 cell 的“上层样本”仍低于机器人、并且与邻域 support 高度对齐时，前端会把它视为楼梯相邻支撑层混叠，而不是 overhead obstacle
+- 当本 cell 出现 below-robot 分层，且上层候选比下层 `support_ref` 更符合邻域/历史 anchored support 一致性时，前端只会在当前 cell explanation 中临时提升 `effective_support_ref`
+- 这个 `effective_support_ref` 只参与当前 cell 的 `upper_support` / obstacle explanation，不写回地图，也不参与 `ascending_stair_support_count`
 
 这两步都只影响 `PolarFrontend` 的当前帧解释，不改变地图主语义，地图仍保持单层 `support_height + obstacle_evidence` 设计。
 

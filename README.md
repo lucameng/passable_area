@@ -45,6 +45,7 @@ Rear-sector conservatism is now driven only by `rear_dropout / MissingByDropout`
 
 `PolarFrontend` keeps body-centric observability semantics separate from odom-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use odom-view samples.
 Obstacle formation is additionally guarded by local structure: a single-cell vertical span only marks the cell as suspicious, and the cell is promoted to an obstacle only when its fixed 3x3 neighborhood contains enough upper-support cells.
+For layered below-robot cells, `PolarFrontend` may temporarily lift a frontend-local `effective_support_ref` for the current cell explanation when the upper layer is better supported by neighboring anchored support than the lower layer; this does not rewrite map `support_height` and does not participate in ascending stair-trend counting.
 
 Frame semantics are intentionally split:
 - `odom_frame`: internal local mapping frame used by map indexing and all core terrain reasoning
