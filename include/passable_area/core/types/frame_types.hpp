@@ -69,6 +69,7 @@ struct FrameOutput {
   std::vector<int8_t> traversal_cost;
   std::vector<float> support_height;
   std::vector<float> overhead_height;
+  std::vector<float> overhead_confidence;
   std::vector<float> support_confidence;
   std::vector<float> obstacle_evidence;
   std::vector<float> coverage_confidence;
@@ -85,6 +86,9 @@ struct FrameOutput {
   std::vector<uint8_t> obstacle_candidate_cell;
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
   std::vector<int8_t> neighbor_upper_support_count;
+  std::vector<uint8_t> effective_support_ref_elevated;
+  std::vector<uint8_t> touched_support_cell;
+  std::vector<uint8_t> touched_obstacle_cell;
   std::vector<uint8_t> support_state;
   std::vector<CellDebugPoint> base_gravity_cloud_points;
   std::vector<CellDebugPoint> support_points;

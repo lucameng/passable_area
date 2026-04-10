@@ -77,6 +77,26 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
   }
 
   for (int cell = 0; cell < map.size(); ++cell) {
+    const bool reinterpretation_cleared_current_cell =
+        touched_support[cell] != 0U &&
+        frontend_output.effective_support_ref_elevated.size() > static_cast<size_t>(cell) &&
+        frontend_output.effective_support_ref_elevated[static_cast<size_t>(cell)] != 0U &&
+        frontend_output.obstacle_candidate_cell.size() > static_cast<size_t>(cell) &&
+        frontend_output.obstacle_candidate_cell[static_cast<size_t>(cell)] == 0U;
+    const bool rejected_current_cell_clears_stale_obstacle =
+        frontend_output.obstacle_rejected_by_neighbor_support.size() > static_cast<size_t>(cell) &&
+        frontend_output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] != 0U &&
+        frontend_output.obstacle_candidate_cell.size() > static_cast<size_t>(cell) &&
+        frontend_output.obstacle_candidate_cell[static_cast<size_t>(cell)] == 0U;
+    if (!reinterpretation_cleared_current_cell && !rejected_current_cell_clears_stale_obstacle) {
+      continue;
+    }
+    layers.obstacle_evidence[cell] = 0.0f;
+    ClearObstacleLayer(layers, cell);
+    dirty_set.insert(cell);
+  }
+
+  for (int cell = 0; cell < map.size(); ++cell) {
     const auto sector = sector_state_for_cell(cell);
     layers.coverage_confidence[cell] = std::max(layers.coverage_confidence[cell] * 0.92f,
                                                 sector.coverage_confidence * 0.85f);

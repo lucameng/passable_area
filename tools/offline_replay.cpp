@@ -527,6 +527,10 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
               << "]  obstacle_points: " << hotspot.obstacle_point_count
               << "  severity: " << Colorize(FormatFloat(hotspot.severity), "\033[1;33m", style)
               << '\n';
+    std::cout << "    source_cell: " << hotspot.source_cell
+              << "  center_cell: " << hotspot.center_cell
+              << "  source_matches_center: " << (hotspot.source_matches_center ? "true" : "false")
+              << '\n';
     std::cout << "    class: " << hotspot_class << "  observability: " << observability
               << '\n';
     std::cout << "    why: " << Colorize(hotspot.explanation, "\033[1;37m", style) << '\n';
@@ -541,6 +545,19 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
               << std::to_string(hotspot.neighbor_upper_support_count)
               << "  rejected_by_neighbor_support: "
               << (hotspot.obstacle_rejected_by_neighbor_support ? "true" : "false") << '\n';
+    std::cout << "    obstacle_candidate_cell: "
+              << (hotspot.obstacle_candidate_cell ? "true" : "false")
+              << "  effective_support_ref_elevated: "
+              << (hotspot.effective_support_ref_elevated ? "true" : "false") << '\n';
+    std::cout << "    source_support_anchor_used: " << FormatFloat(hotspot.source_support_anchor_used)
+              << "  source_obstacle_evidence: " << FormatFloat(hotspot.source_obstacle_evidence)
+              << "  source_overhead_height: " << FormatFloat(hotspot.source_overhead_height)
+              << '\n';
+    std::cout << "    source_overhead_confidence: "
+              << FormatFloat(hotspot.source_overhead_confidence)
+              << "  source_touched_support: " << (hotspot.source_touched_support ? "true" : "false")
+              << "  source_touched_obstacle: " << (hotspot.source_touched_obstacle ? "true" : "false")
+              << '\n';
   }
   std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
             << '\n';

@@ -40,17 +40,28 @@ struct FalseObstacleHotspot {
   float min_z = 0.0f;
   float max_z = 0.0f;
   int obstacle_point_count = 0;
+  int source_cell = -1;
+  int center_cell = -1;
+  bool source_matches_center = false;
   float severity = 0.0f;
   float obstacle_evidence = 0.0f;
   float clearance = 0.0f;
   float support_continuity = 0.0f;
   float overhead_height = 0.0f;
   float support_anchor_used = 0.0f;
+  float source_obstacle_evidence = 0.0f;
+  float source_overhead_height = 0.0f;
+  float source_overhead_confidence = 0.0f;
+  float source_support_anchor_used = 0.0f;
   uint16_t sub_support_leak_count = 0U;
   bool upper_support_cell = false;
   bool obstacle_suspicious = false;
+  bool obstacle_candidate_cell = false;
   bool obstacle_rejected_by_neighbor_support = false;
   int8_t neighbor_upper_support_count = 0;
+  bool effective_support_ref_elevated = false;
+  bool source_touched_support = false;
+  bool source_touched_obstacle = false;
   bool has_grid_values = false;
   bool has_observability = false;
   passable_area::core::ObservabilityState observability_state =
@@ -101,16 +112,26 @@ public:
 private:
   struct LocalCellContext {
     bool has_grid_values = false;
+    int source_cell = -1;
+    int center_cell = -1;
     float obstacle_evidence = 0.0f;
     float clearance = 0.0f;
     float support_continuity = 0.0f;
     float overhead_height = 0.0f;
     float support_anchor_used = 0.0f;
+    float source_obstacle_evidence = 0.0f;
+    float source_overhead_height = 0.0f;
+    float source_overhead_confidence = 0.0f;
+    float source_support_anchor_used = 0.0f;
     uint16_t sub_support_leak_count = 0U;
     bool upper_support_cell = false;
     bool obstacle_suspicious = false;
+    bool obstacle_candidate_cell = false;
     bool obstacle_rejected_by_neighbor_support = false;
     int8_t neighbor_upper_support_count = 0;
+    bool effective_support_ref_elevated = false;
+    bool source_touched_support = false;
+    bool source_touched_obstacle = false;
     bool has_observability = false;
     passable_area::core::ObservabilityState observability_state =
         passable_area::core::ObservabilityState::kObserved;

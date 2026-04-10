@@ -78,6 +78,7 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.traversal_cost = layers.traversal_cost;
   output.support_height = layers.support_height;
   output.overhead_height = layers.overhead_height;
+  output.overhead_confidence = layers.overhead_confidence;
   output.support_confidence = layers.support_confidence;
   output.obstacle_evidence = layers.obstacle_evidence;
   output.coverage_confidence = layers.coverage_confidence;
@@ -95,6 +96,19 @@ FrameOutput Processor::buildOutput(const ProcessedFrame &frame,
   output.obstacle_rejected_by_neighbor_support =
       frontend_output.obstacle_rejected_by_neighbor_support;
   output.neighbor_upper_support_count = frontend_output.neighbor_upper_support_count;
+  output.effective_support_ref_elevated = frontend_output.effective_support_ref_elevated;
+  output.touched_support_cell.assign(static_cast<size_t>(map_.size()), 0U);
+  output.touched_obstacle_cell.assign(static_cast<size_t>(map_.size()), 0U);
+  for (const auto &candidate : frontend_output.support_candidates) {
+    if (candidate.cell >= 0 && candidate.cell < map_.size()) {
+      output.touched_support_cell[static_cast<size_t>(candidate.cell)] = 1U;
+    }
+  }
+  for (const auto &candidate : frontend_output.obstacle_candidates) {
+    if (candidate.cell >= 0 && candidate.cell < map_.size()) {
+      output.touched_obstacle_cell[static_cast<size_t>(candidate.cell)] = 1U;
+    }
+  }
   output.support_state = layers.support_state;
 
   if (config_.debug.publish_base_gravity_cloud) {
