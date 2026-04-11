@@ -51,7 +51,6 @@ struct FalseObstacleHotspot {
   float support_anchor_used = 0.0f;
   float source_obstacle_evidence = 0.0f;
   float source_overhead_height = 0.0f;
-  float source_overhead_confidence = 0.0f;
   float source_support_anchor_used = 0.0f;
   uint16_t sub_support_leak_count = 0U;
   bool upper_support_cell = false;
@@ -59,9 +58,6 @@ struct FalseObstacleHotspot {
   bool obstacle_candidate_cell = false;
   bool obstacle_rejected_by_neighbor_support = false;
   int8_t neighbor_upper_support_count = 0;
-  bool effective_support_ref_elevated = false;
-  bool source_touched_support = false;
-  bool source_touched_obstacle = false;
   bool has_grid_values = false;
   bool has_observability = false;
   passable_area::core::ObservabilityState observability_state =
@@ -121,7 +117,6 @@ private:
     float support_anchor_used = 0.0f;
     float source_obstacle_evidence = 0.0f;
     float source_overhead_height = 0.0f;
-    float source_overhead_confidence = 0.0f;
     float source_support_anchor_used = 0.0f;
     uint16_t sub_support_leak_count = 0U;
     bool upper_support_cell = false;
@@ -129,9 +124,6 @@ private:
     bool obstacle_candidate_cell = false;
     bool obstacle_rejected_by_neighbor_support = false;
     int8_t neighbor_upper_support_count = 0;
-    bool effective_support_ref_elevated = false;
-    bool source_touched_support = false;
-    bool source_touched_obstacle = false;
     bool has_observability = false;
     passable_area::core::ObservabilityState observability_state =
         passable_area::core::ObservabilityState::kObserved;

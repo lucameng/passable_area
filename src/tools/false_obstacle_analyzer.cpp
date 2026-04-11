@@ -252,31 +252,14 @@ FalseObstacleAnalyzer::LocalCellContext FalseObstacleAnalyzer::lookupLocalContex
       context.neighbor_upper_support_count =
           output.neighbor_upper_support_count[static_cast<size_t>(source_cell)];
     }
-    if (output.effective_support_ref_elevated.size() > static_cast<size_t>(source_cell)) {
-      context.effective_support_ref_elevated =
-          output.effective_support_ref_elevated[static_cast<size_t>(source_cell)] != 0U;
-    }
-    if (output.touched_support_cell.size() > static_cast<size_t>(source_cell)) {
-      context.source_touched_support =
-          output.touched_support_cell[static_cast<size_t>(source_cell)] != 0U;
-    }
-    if (output.touched_obstacle_cell.size() > static_cast<size_t>(source_cell)) {
-      context.source_touched_obstacle =
-          output.touched_obstacle_cell[static_cast<size_t>(source_cell)] != 0U;
-    }
     if (output.obstacle_evidence.size() > static_cast<size_t>(source_cell)) {
       context.source_obstacle_evidence = output.obstacle_evidence[static_cast<size_t>(source_cell)];
     }
     if (output.overhead_height.size() > static_cast<size_t>(source_cell)) {
       context.source_overhead_height = output.overhead_height[static_cast<size_t>(source_cell)];
     }
-    if (output.overhead_confidence.size() > static_cast<size_t>(source_cell)) {
-      context.source_overhead_confidence =
-          output.overhead_confidence[static_cast<size_t>(source_cell)];
-    }
     if (output.support_anchor_used.size() > static_cast<size_t>(source_cell)) {
-      context.source_support_anchor_used =
-          output.support_anchor_used[static_cast<size_t>(source_cell)];
+      context.source_support_anchor_used = output.support_anchor_used[static_cast<size_t>(source_cell)];
     }
   }
 
@@ -327,7 +310,6 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.support_anchor_used = context.support_anchor_used;
   hotspot.source_obstacle_evidence = context.source_obstacle_evidence;
   hotspot.source_overhead_height = context.source_overhead_height;
-  hotspot.source_overhead_confidence = context.source_overhead_confidence;
   hotspot.source_support_anchor_used = context.source_support_anchor_used;
   hotspot.sub_support_leak_count = context.sub_support_leak_count;
   hotspot.upper_support_cell = context.upper_support_cell;
@@ -335,9 +317,6 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.obstacle_candidate_cell = context.obstacle_candidate_cell;
   hotspot.obstacle_rejected_by_neighbor_support = context.obstacle_rejected_by_neighbor_support;
   hotspot.neighbor_upper_support_count = context.neighbor_upper_support_count;
-  hotspot.effective_support_ref_elevated = context.effective_support_ref_elevated;
-  hotspot.source_touched_support = context.source_touched_support;
-  hotspot.source_touched_obstacle = context.source_touched_obstacle;
   hotspot.has_observability = context.has_observability;
   hotspot.observability_state = context.observability_state;
   hotspot.classification = classifyHotspot(hotspot);

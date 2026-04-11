@@ -537,27 +537,20 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
     std::cout << "    obstacle_evidence: " << FormatFloat(hotspot.obstacle_evidence)
               << "  clearance: " << FormatFloat(hotspot.clearance)
               << "  support_continuity: " << FormatFloat(hotspot.support_continuity) << '\n';
+    std::cout << "    source_obstacle_evidence: " << FormatFloat(hotspot.source_obstacle_evidence)
+              << "  source_overhead_height: " << FormatFloat(hotspot.source_overhead_height)
+              << "  source_support_anchor_used: "
+              << FormatFloat(hotspot.source_support_anchor_used) << '\n';
     std::cout << "    support_anchor_used: " << FormatFloat(hotspot.support_anchor_used)
               << "  sub_support_leak_count: "
               << std::to_string(hotspot.sub_support_leak_count) << '\n';
     std::cout << "    upper_support_cell: " << (hotspot.upper_support_cell ? "true" : "false")
+              << "  obstacle_candidate_cell: "
+              << (hotspot.obstacle_candidate_cell ? "true" : "false")
               << "  neighbor_upper_support_count: "
               << std::to_string(hotspot.neighbor_upper_support_count)
               << "  rejected_by_neighbor_support: "
               << (hotspot.obstacle_rejected_by_neighbor_support ? "true" : "false") << '\n';
-    std::cout << "    obstacle_candidate_cell: "
-              << (hotspot.obstacle_candidate_cell ? "true" : "false")
-              << "  effective_support_ref_elevated: "
-              << (hotspot.effective_support_ref_elevated ? "true" : "false") << '\n';
-    std::cout << "    source_support_anchor_used: " << FormatFloat(hotspot.source_support_anchor_used)
-              << "  source_obstacle_evidence: " << FormatFloat(hotspot.source_obstacle_evidence)
-              << "  source_overhead_height: " << FormatFloat(hotspot.source_overhead_height)
-              << '\n';
-    std::cout << "    source_overhead_confidence: "
-              << FormatFloat(hotspot.source_overhead_confidence)
-              << "  source_touched_support: " << (hotspot.source_touched_support ? "true" : "false")
-              << "  source_touched_obstacle: " << (hotspot.source_touched_obstacle ? "true" : "false")
-              << '\n';
   }
   std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
             << '\n';
