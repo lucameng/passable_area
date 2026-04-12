@@ -42,14 +42,5 @@ bags:
   - name: rosbag2_mtbf_x30_upstair_passage
     dir_name: rosbag2_mtbf_x30_upstair_passage
 
-  - name: rosbag2_mtbf_short_stair_1_error
-    dir_name: rosbag2_mtbf_short_stair_1_error
-
-  - name: rosbag2_mtbf_short_stair_1_fast
-    dir_name: rosbag2_mtbf_short_stair_1_fast
-
   - name: rosbag2_open_short_upstairs
     dir_name: rosbag2_open_short_upstairs
-
-  - name: rosbag2_open_stair_and_slope
-    dir_name: rosbag2_open_stair_and_slope
