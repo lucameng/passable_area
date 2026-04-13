@@ -46,12 +46,17 @@ FrameOutput MakeOutput() {
   output.raw_upper_support_cell.assign(9, 0U);
   output.explanation_adjusted_upper_support_cell.assign(9, 0U);
   output.upper_support_cell.assign(9, 0U);
+  output.obstacle_local_triggered.assign(9, 0U);
+  output.obstacle_upper_patch_confirmed.assign(9, 0U);
+  output.obstacle_explanation_rejected.assign(9, 0U);
   output.obstacle_suspicious.assign(9, 0U);
   output.obstacle_candidate_cell.assign(9, 0U);
   output.obstacle_rejected_by_neighbor_support.assign(9, 0U);
   output.neighbor_upper_support_count.assign(9, 0);
   output.aligned_neighbor_support_count.assign(9, 0);
   output.explanation_decision.assign(9, 0U);
+  output.facade_lower_upper_coexisting.assign(9, 0U);
+  output.facade_stable_upper_edge_without_support_lift.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;

@@ -159,6 +159,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
   int strong_evidence_cell_count = 0;
   int strong_evidence_cells_with_samples = 0;
   int publishable_sample_count = 0;
+  int upper_patch_failed_suspicious_cell_count = 0;
+  int explanation_rejected_suspicious_cell_count = 0;
+  int no_keep_explanation_suspicious_cell_count = 0;
   std::vector<std::pair<float, MissObstacleRepresentativeCell>> ranked_cells;
   ranked_cells.reserve(sample_stats_by_cell.size() + 8U);
 
@@ -189,8 +192,29 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       if (output.obstacle_candidate_cell[idx] != 0U) {
         ++analysis.obstacle_candidate_cell_count;
       }
-      if (output.obstacle_rejected_by_neighbor_support[idx] != 0U) {
+      const bool obstacle_suspicious = output.obstacle_suspicious[idx] != 0U;
+      const bool upper_patch_confirmed =
+          !output.obstacle_upper_patch_confirmed.empty() &&
+          output.obstacle_upper_patch_confirmed[idx] != 0U;
+      const bool explanation_rejected =
+          !output.obstacle_explanation_rejected.empty() &&
+          output.obstacle_explanation_rejected[idx] != 0U;
+      if (obstacle_suspicious &&
+          (!upper_patch_confirmed || explanation_rejected)) {
         ++analysis.rejected_suspicious_cell_count;
+      }
+      if (obstacle_suspicious && !upper_patch_confirmed) {
+        ++upper_patch_failed_suspicious_cell_count;
+      }
+      if (obstacle_suspicious && explanation_rejected) {
+        ++explanation_rejected_suspicious_cell_count;
+      }
+      if (obstacle_suspicious && upper_patch_confirmed && !explanation_rejected &&
+          output.obstacle_candidate_cell[idx] == 0U &&
+          output.explanation_decision[idx] ==
+              static_cast<uint8_t>(
+                  passable_area::core::FrontendExplanationDecision::kNone)) {
+        ++no_keep_explanation_suspicious_cell_count;
       }
       analysis.max_obstacle_evidence = std::max(analysis.max_obstacle_evidence,
                                                 output.obstacle_evidence[idx]);
@@ -230,6 +254,12 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       const bool interesting =
           has_samples || output.obstacle_suspicious[idx] != 0U ||
           output.obstacle_candidate_cell[idx] != 0U ||
+          (!output.obstacle_local_triggered.empty() &&
+           output.obstacle_local_triggered[idx] != 0U) ||
+          (!output.obstacle_upper_patch_confirmed.empty() &&
+           output.obstacle_upper_patch_confirmed[idx] != 0U) ||
+          (!output.obstacle_explanation_rejected.empty() &&
+           output.obstacle_explanation_rejected[idx] != 0U) ||
           output.obstacle_rejected_by_neighbor_support[idx] != 0U ||
           output.upper_support_cell[idx] != 0U ||
           output.obstacle_evidence[idx] > 0.0f ||
@@ -289,8 +319,13 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
               ? sample_stats.max_z - support_ref
               : std::numeric_limits<float>::quiet_NaN();
 
-      if (cell.obstacle_rejected_by_neighbor_support) {
-        cell.explanation = "suspicious obstacle rejected by neighborhood gate";
+      if (cell.obstacle_suspicious && !cell.obstacle_upper_patch_confirmed) {
+        cell.explanation =
+            "suspicious obstacle failed upper-patch confirmation before keep "
+            "evaluation";
+      } else if (cell.obstacle_explanation_rejected) {
+        cell.explanation =
+            "suspicious obstacle was rejected during explanation";
         if (cell.explanation_decision !=
             static_cast<uint8_t>(
                 passable_area::core::FrontendExplanationDecision::kNone)) {
@@ -300,10 +335,14 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                   cell.explanation_decision));
         }
       } else if (cell.obstacle_candidate_cell &&
+                 cell.explanation_decision ==
+                     static_cast<uint8_t>(
+                         passable_area::core::FrontendExplanationDecision::
+                             kKeepAsObstacle) &&
                  cell.obstacle_evidence <
                      config_.obstacle_points_min_evidence) {
-        cell.explanation = "frontend candidate formed but obstacle evidence is "
-                           "still below publish threshold";
+        cell.explanation = "explicit keep verdict formed a candidate, but "
+                           "obstacle evidence is still below publish threshold";
       } else if (output.obstacle_evidence[idx] >=
                      config_.obstacle_points_min_evidence &&
                  (!PassesObstaclePointPublishHeightGates(config_, support_ref,
@@ -323,12 +362,21 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                      passable_area::core::FrontendExplanationDecision::
                          kKeepAsObstacle)) {
         cell.explanation = "candidate kept as obstacle by facade evidence";
+      } else if (cell.obstacle_upper_patch_confirmed &&
+                 !cell.obstacle_candidate_cell &&
+                 !cell.obstacle_explanation_rejected) {
+        cell.explanation =
+            "confirmation passed, but no explicit keep explanation was "
+            "established";
       } else {
         cell.explanation = "mixed local evidence";
       }
 
       float score = static_cast<float>(cell.sample_count);
-      score += cell.obstacle_rejected_by_neighbor_support ? 4.0f : 0.0f;
+      score += (!cell.obstacle_upper_patch_confirmed ||
+                cell.obstacle_explanation_rejected)
+                   ? 4.0f
+                   : 0.0f;
       score += cell.obstacle_candidate_cell ? 3.0f : 0.0f;
       score += cell.obstacle_suspicious ? 2.0f : 0.0f;
       score += cell.upper_support_cell ? 1.0f : 0.0f;
@@ -353,10 +401,17 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
              analysis.obstacle_candidate_cell_count == 0) {
     analysis.classification = MissObstacleRootCause::kRejectedByNeighborSupport;
     analysis.explanation = "roi contains suspicious obstacle cells, but all "
-                           "were rejected by the neighbor-support gate";
+                           "failed upper-patch confirmation or were rejected "
+                           "during explanation";
     analysis.evidence_lines.push_back(
         "rejected_suspicious_cells=" +
         std::to_string(analysis.rejected_suspicious_cell_count));
+    analysis.evidence_lines.push_back(
+        "upper_patch_failed_suspicious_cells=" +
+        std::to_string(upper_patch_failed_suspicious_cell_count));
+    analysis.evidence_lines.push_back(
+        "explanation_rejected_suspicious_cells=" +
+        std::to_string(explanation_rejected_suspicious_cell_count));
     analysis.evidence_lines.push_back(
         "obstacle_candidate_cells=" +
         std::to_string(analysis.obstacle_candidate_cell_count));
@@ -371,6 +426,18 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.evidence_lines.push_back(
         "rejected_cells_with_explicit_explanation=" +
         std::to_string(cells_with_explicit_explanation));
+  } else if (no_keep_explanation_suspicious_cell_count > 0 &&
+             analysis.obstacle_candidate_cell_count == 0) {
+    analysis.classification = MissObstacleRootCause::kUnknownOrMixed;
+    analysis.explanation =
+        "suspicious roi cells passed confirmation, but no explicit keep "
+        "explanation was established";
+    analysis.evidence_lines.push_back(
+        "no_keep_explanation_suspicious_cells=" +
+        std::to_string(no_keep_explanation_suspicious_cell_count));
+    analysis.evidence_lines.push_back(
+        "obstacle_candidate_cells=" +
+        std::to_string(analysis.obstacle_candidate_cell_count));
   } else if (strong_evidence_cell_count > 0 && publishable_sample_count == 0) {
     if (strong_evidence_cells_with_samples == 0) {
       analysis.classification =

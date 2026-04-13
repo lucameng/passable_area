@@ -53,12 +53,17 @@ FrameOutput MakeOutput() {
   output.raw_upper_support_cell.assign(9, 0U);
   output.explanation_adjusted_upper_support_cell.assign(9, 0U);
   output.upper_support_cell.assign(9, 0U);
+  output.obstacle_local_triggered.assign(9, 0U);
+  output.obstacle_upper_patch_confirmed.assign(9, 0U);
+  output.obstacle_explanation_rejected.assign(9, 0U);
   output.obstacle_suspicious.assign(9, 0U);
   output.obstacle_candidate_cell.assign(9, 0U);
   output.obstacle_rejected_by_neighbor_support.assign(9, 0U);
   output.neighbor_upper_support_count.assign(9, 0);
   output.aligned_neighbor_support_count.assign(9, 0);
   output.explanation_decision.assign(9, 0U);
+  output.facade_lower_upper_coexisting.assign(9, 0U);
+  output.facade_stable_upper_edge_without_support_lift.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -113,6 +118,8 @@ TEST(MissObstacleAnalyzerTest,
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
   const int cell = CenterCellIndex(output);
   output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_upper_patch_confirmed[cell] = 1U;
+  output.obstacle_explanation_rejected[cell] = 1U;
   output.obstacle_rejected_by_neighbor_support[cell] = 1U;
   output.neighbor_upper_support_count[cell] = 1;
   output.aligned_neighbor_support_count[cell] = 2;
@@ -130,12 +137,35 @@ TEST(MissObstacleAnalyzerTest,
 }
 
 TEST(MissObstacleAnalyzerTest,
+     SurfacesNoExplicitKeepExplanationWhenConfirmationPassedButNoCandidateFormed) {
+  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
+  auto output = MakeOutput();
+  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
+  const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_local_triggered[cell] = 1U;
+  output.obstacle_upper_patch_confirmed[cell] = 1U;
+  output.explanation_decision[cell] = 0U;
+
+  const auto analysis = analyzer.analyzeFrame(output, frame);
+  ASSERT_TRUE(analysis.has_value());
+  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kUnknownOrMixed);
+  ASSERT_FALSE(analysis->representative_cells.empty());
+  EXPECT_EQ(analysis->representative_cells.front().explanation_decision, 0U);
+  EXPECT_NE(analysis->representative_cells.front().explanation.find(
+                "no explicit keep explanation"),
+            std::string::npos);
+}
+
+TEST(MissObstacleAnalyzerTest,
      PreservesRawAdjustedAndLegacyUpperSupportVisibility) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
   const int cell = CenterCellIndex(output);
   output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_upper_patch_confirmed[cell] = 1U;
+  output.obstacle_explanation_rejected[cell] = 1U;
   output.obstacle_rejected_by_neighbor_support[cell] = 1U;
   output.raw_upper_support_cell[cell] = 1U;
   output.explanation_adjusted_upper_support_cell[cell] = 0U;

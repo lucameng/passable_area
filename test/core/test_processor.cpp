@@ -687,6 +687,14 @@ TEST(ProcessorTest,
       output.obstacle_explanation_rejected[static_cast<size_t>(primary_cell)],
       0U);
   EXPECT_EQ(
+      output.explanation_decision[static_cast<size_t>(primary_cell)],
+      static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
+  EXPECT_TRUE(
+      output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)] !=
+          0U ||
+      output.facade_stable_upper_edge_without_support_lift
+              [static_cast<size_t>(primary_cell)] != 0U);
+  EXPECT_EQ(
       output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
       2);
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(
@@ -896,7 +904,8 @@ TEST(ProcessorTest,
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 0U);
 }
 
-TEST(ProcessorTest, PolarFrontendRejectsBorrowedAnchorForWallOnlyCell) {
+TEST(ProcessorTest,
+     PolarFrontendKeepsBorrowedAnchorWallOnlyCellWithExplicitKeepVerdict) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
   config.geometry.min_neighbor_upper_support_cells = 1;
@@ -967,7 +976,11 @@ TEST(ProcessorTest, PolarFrontendRejectsBorrowedAnchorForWallOnlyCell) {
   EXPECT_EQ(output.obstacle_explanation_rejected[static_cast<size_t>(cell)],
             0U);
   EXPECT_EQ(output.explanation_decision[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(FrontendExplanationDecision::kNone));
+            static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
+  EXPECT_TRUE(
+      output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] != 0U ||
+      output.facade_stable_upper_edge_without_support_lift
+              [static_cast<size_t>(cell)] != 0U);
   const auto cell_candidate_count = std::count_if(
       output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
       [cell](const auto &candidate) { return candidate.cell == cell; });
@@ -1105,7 +1118,7 @@ TEST(ProcessorTest,
 }
 
 TEST(ProcessorTest,
-     PolarFrontendIgnoresAnchorForWallOnlyCellsWithoutSupportBand) {
+     PolarFrontendKeepsWallOnlyCellWithoutSupportBandWithExplicitKeepVerdict) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
   config.geometry.min_neighbor_upper_support_cells = 1;
@@ -1151,11 +1164,99 @@ TEST(ProcessorTest,
   EXPECT_EQ(output.obstacle_explanation_rejected[static_cast<size_t>(cell)],
             0U);
   EXPECT_EQ(output.explanation_decision[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(FrontendExplanationDecision::kNone));
+            static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
+  EXPECT_TRUE(
+      output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] != 0U ||
+      output.facade_stable_upper_edge_without_support_lift
+              [static_cast<size_t>(cell)] != 0U);
   const auto cell_candidate_count = std::count_if(
       output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
       [cell](const auto &candidate) { return candidate.cell == cell; });
   EXPECT_EQ(cell_candidate_count, 1);
+}
+
+TEST(ProcessorTest,
+     PolarFrontendDoesNotPromoteUpperOnlyClusterWithoutExplicitKeepVerdict) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 1;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(
+      static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int left_ground_cell = -1;
+  int right_ground_cell = -1;
+  int front_ground_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_ground_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_ground_cell));
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, front_ground_cell));
+  map.layers().support_height[static_cast<size_t>(primary_cell)] = 0.0f;
+  map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(primary_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(primary_cell)] = 0U;
+  map.layers().support_height[static_cast<size_t>(left_ground_cell)] = 0.0f;
+  map.layers().support_confidence[static_cast<size_t>(left_ground_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(left_ground_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(left_ground_cell)] = 0U;
+  map.layers().support_height[static_cast<size_t>(right_ground_cell)] = 0.0f;
+  map.layers().support_confidence[static_cast<size_t>(right_ground_cell)] =
+      0.6f;
+  map.layers().support_state[static_cast<size_t>(right_ground_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(right_ground_cell)] = 0U;
+  map.layers().support_height[static_cast<size_t>(front_ground_cell)] = 0.0f;
+  map.layers().support_confidence[static_cast<size_t>(front_ground_cell)] =
+      0.6f;
+  map.layers().support_state[static_cast<size_t>(front_ground_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(front_ground_cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 0.15f}, {0.25f, 0.25f, 0.15f}},
+      {{0.25f, 0.25f, 0.40f}, {0.25f, 0.25f, 0.40f}},
+      {{0.05f, 0.25f, 0.00f}, {0.05f, 0.25f, 0.00f}},
+      {{0.45f, 0.25f, 0.00f}, {0.45f, 0.25f, 0.00f}},
+      {{0.25f, 0.45f, 0.00f}, {0.25f, 0.45f, 0.00f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_EQ(output.obstacle_local_triggered[static_cast<size_t>(primary_cell)],
+            1U);
+  EXPECT_EQ(
+      output.obstacle_upper_patch_confirmed[static_cast<size_t>(primary_cell)],
+      1U);
+  EXPECT_EQ(
+      output.obstacle_explanation_rejected[static_cast<size_t>(primary_cell)],
+      0U);
+  EXPECT_EQ(
+      output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)],
+      0U);
+  EXPECT_EQ(
+      output.facade_stable_upper_edge_without_support_lift
+          [static_cast<size_t>(primary_cell)],
+      0U);
+  EXPECT_EQ(
+      output.explanation_decision[static_cast<size_t>(primary_cell)],
+      static_cast<uint8_t>(FrontendExplanationDecision::kNone));
+  const auto primary_cell_candidate_count = std::count_if(
+      output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+      [primary_cell](const auto &candidate) {
+        return candidate.cell == primary_cell;
+      });
+  EXPECT_EQ(primary_cell_candidate_count, 0);
 }
 
 TEST(ProcessorTest,

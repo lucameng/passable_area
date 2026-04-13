@@ -42,6 +42,10 @@ struct FrontendOutput {
   std::vector<uint8_t> obstacle_explanation_rejected;
   std::vector<uint8_t> obstacle_suspicious;
   std::vector<uint8_t> obstacle_candidate_cell;
+  // Legacy compatibility flag. It is set when a locally triggered cell fails
+  // upper-patch confirmation or is explicitly rejected during explanation.
+  // Use obstacle_upper_patch_confirmed / obstacle_explanation_rejected /
+  // explanation_decision as the primary stage indicators.
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
   std::vector<int8_t> neighbor_upper_support_count;
   std::vector<int8_t> aligned_neighbor_support_count;

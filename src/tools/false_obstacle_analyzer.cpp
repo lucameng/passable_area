@@ -165,7 +165,17 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
 
   for (size_t cell = 0;
        cell < output.obstacle_rejected_by_neighbor_support.size(); ++cell) {
-    if (output.obstacle_rejected_by_neighbor_support[cell] == 0U) {
+    const bool obstacle_suspicious =
+        cell < output.obstacle_suspicious.size() &&
+        output.obstacle_suspicious[cell] != 0U;
+    const bool upper_patch_confirmed =
+        cell < output.obstacle_upper_patch_confirmed.size() &&
+        output.obstacle_upper_patch_confirmed[cell] != 0U;
+    const bool explanation_rejected =
+        cell < output.obstacle_explanation_rejected.size() &&
+        output.obstacle_explanation_rejected[cell] != 0U;
+    if (!obstacle_suspicious ||
+        (upper_patch_confirmed && !explanation_rejected)) {
       continue;
     }
     const int row = static_cast<int>(cell) / output.cols;

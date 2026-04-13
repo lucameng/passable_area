@@ -388,10 +388,10 @@ int CountAscendingNeighborSupportRefs(
 }
 
 // 解决 suspicious cell 虽有邻域 upper
-// support，但其实更像楼梯混层/脚下低层地面的 case。 做法是把 below-robot stair
-// mix、downstairs ground mix、upstairs ground mix 统一收敛成一个 explanation
-// 决策。
-FrontendExplanationDecision ClassifyExplanationDecision(
+// support，但其实更像楼梯混层/脚下低层地面的 case。 做法是把 reject 侧的
+// below-robot stair mix、downstairs ground mix、upstairs ground mix
+// 统一收敛成 explanation reject 决策。
+FrontendExplanationDecision ClassifyExplanationRejectDecision(
     bool has_support_anchor, float relative_support_anchor,
     float relative_support_ref, float relative_upper_z, float vertical_span,
     int support_count, int ascending_stair_support_count,
@@ -441,6 +441,14 @@ FrontendExplanationDecision ClassifyExplanationDecision(
   return FrontendExplanationDecision::kNone;
 }
 
+// 解决 keep-side 仍然靠“没 reject 就通过”的 case。做法是把 keep verdict
+// 单独显式化，只有 facade evidence 命中时才返回 KeepAsObstacle。
+FrontendExplanationDecision
+ClassifyExplanationKeepDecision(const FacadeEvidence &facade_evidence) {
+  return facade_evidence.any() ? FrontendExplanationDecision::kKeepAsObstacle
+                               : FrontendExplanationDecision::kNone;
+}
+
 FacadeEvidence BuildFacadeEvidence(
     int cell, const ProcessedFrame &frame, const LocalTerrainMap &map,
     const TerrainLayers &layers, const Config &config,
@@ -460,10 +468,12 @@ FacadeEvidence BuildFacadeEvidence(
                                          : workspace.support_ref +
                                                config.geometry
                                                    .support_anchor_reobserve_tolerance;
-
-  if (std::isfinite(workspace.support_ref) &&
-      std::isfinite(workspace.min_upper_band_z) && workspace.upper_band_count > 0) {
-    bool has_lower_structure_sample = false;
+  const float upper_band_floor =
+      workspace.support_ref + config.geometry.upper_min_height_above_support;
+  bool has_lower_structure_sample = false;
+  bool has_upper_return = false;
+  float min_upper_return_z = std::numeric_limits<float>::infinity();
+  if (std::isfinite(workspace.support_ref)) {
     for (const size_t sample_index :
          sample_indices_by_cell[static_cast<size_t>(cell)]) {
       const auto &sample = frame.odom_samples[sample_index];
@@ -474,20 +484,21 @@ FacadeEvidence BuildFacadeEvidence(
       }
       if (sample.point_in_odom.z <= lower_sample_ceiling) {
         has_lower_structure_sample = true;
-        break;
+      }
+      if (sample.point_in_odom.z >= upper_band_floor) {
+        has_upper_return = true;
+        min_upper_return_z =
+            std::min(min_upper_return_z, sample.point_in_odom.z);
       }
     }
     evidence.lower_upper_coexisting =
-        has_lower_structure_sample &&
-        workspace.min_upper_band_z >=
-            workspace.support_ref + config.geometry.upper_min_height_above_support;
+        has_lower_structure_sample && has_upper_return;
   }
 
-  if (std::isfinite(workspace.support_ref) &&
-      std::isfinite(workspace.min_upper_band_z)) {
+  if (std::isfinite(workspace.support_ref) && has_upper_return) {
     const int upper_layer_neighbor_match_count =
         CountNeighborUpperLayersAlignedToHeight(
-            cell, map, cell_workspaces, workspace.min_upper_band_z,
+            cell, map, cell_workspaces, min_upper_return_z,
             config.geometry.support_anchor_reobserve_tolerance,
             config.geometry.upper_min_height_above_support,
             config.geometry.max_step_up);
@@ -496,8 +507,7 @@ FacadeEvidence BuildFacadeEvidence(
             std::max(1, config.geometry.min_neighbor_upper_support_cells) &&
         aligned_neighbor_support_count >=
             std::max(1, config.geometry.min_neighbor_upper_support_cells) &&
-        workspace.min_upper_band_z >=
-            workspace.support_ref + config.geometry.upper_min_height_above_support;
+        min_upper_return_z >= upper_band_floor;
   }
   return evidence;
 }
@@ -996,11 +1006,13 @@ void FinalizeUpperSupportCells(FrontendOutput &output) {
   output.upper_support_cell = output.explanation_adjusted_upper_support_cell;
 }
 
-// 解决 confirm、explanation reject、candidate 形成混在一起的 case。做法是：
+// 解决 confirm、explanation reject、keep verdict、candidate 形成混在一起的
+// case。做法是：
 // 1. local trigger 已经单独完成；
 // 2. 这里先判断 upper patch confirmation；
-// 3. 再统一进入 explanation 决策；
-// 4. aligned neighbor support 只作为 explanation evidence，不再 pre-veto。
+// 3. 再统一进入 explanation reject；
+// 4. reject 没命中后，必须再拿到显式 keep verdict；
+// 5. aligned neighbor support 只作为 explanation evidence，不再 pre-veto。
 void EvaluateCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
                     const TerrainLayers &layers, const Config &config,
                     const std::vector<std::vector<size_t>> &sample_indices_by_cell,
@@ -1065,7 +1077,7 @@ void EvaluateCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
     const float relative_upper_z =
         workspace.stats.max_z - frame.base_pose_in_odom.position.z();
     const FrontendExplanationDecision reject_decision =
-        ClassifyExplanationDecision(
+        ClassifyExplanationRejectDecision(
             has_support_anchor,
             support_anchor - frame.base_pose_in_odom.position.z(),
             relative_support_ref, relative_upper_z, vertical_span,
@@ -1092,13 +1104,15 @@ void EvaluateCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
     output.facade_stable_upper_edge_without_support_lift
         [static_cast<size_t>(cell)] =
         facade_evidence.stable_upper_edge_without_support_lift ? 1U : 0U;
-    if (facade_evidence.any()) {
-      output.explanation_decision[static_cast<size_t>(cell)] =
-          static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle);
-    } else {
+    const FrontendExplanationDecision keep_decision =
+        ClassifyExplanationKeepDecision(facade_evidence);
+    if (keep_decision == FrontendExplanationDecision::kNone) {
       output.explanation_decision[static_cast<size_t>(cell)] =
           static_cast<uint8_t>(FrontendExplanationDecision::kNone);
+      continue;
     }
+    output.explanation_decision[static_cast<size_t>(cell)] =
+        static_cast<uint8_t>(keep_decision);
 
     const float wall_like_gain_scale =
         workspace.sub_support_leak_count == 0U

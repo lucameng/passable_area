@@ -632,7 +632,7 @@ void PrintFalseObstacleFrame(
               << std::to_string(hotspot.neighbor_upper_support_count)
               << "  aligned_neighbor_support_count: "
               << std::to_string(hotspot.aligned_neighbor_support_count)
-              << "  rejected_by_neighbor_support: "
+              << "  rejected_by_neighbor_support_compat: "
               << (hotspot.obstacle_rejected_by_neighbor_support ? "true"
                                                                 : "false")
               << "  explanation_decision: "
@@ -849,7 +849,7 @@ void PrintMissObstacleFrame(
               << (cell.obstacle_suspicious ? "true" : "false")
               << "  obstacle_candidate_cell: "
               << (cell.obstacle_candidate_cell ? "true" : "false") << '\n';
-    std::cout << "    rejected_by_neighbor_support: "
+    std::cout << "    rejected_by_neighbor_support_compat: "
               << (cell.obstacle_rejected_by_neighbor_support ? "true" : "false")
               << "  neighbor_upper_support_count: "
               << std::to_string(cell.neighbor_upper_support_count)
@@ -1647,7 +1647,7 @@ void PrintRoiFrameInspection(
                 << static_cast<int>(output.obstacle_explanation_rejected[idx])
                 << " suspicious="
                 << static_cast<int>(output.obstacle_suspicious[idx])
-                << " rejected="
+                << " rejected_compat="
                 << static_cast<int>(
                        output.obstacle_rejected_by_neighbor_support[idx])
                 << " neighbor_upper="
