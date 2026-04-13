@@ -48,10 +48,11 @@ using passable_area::core::PassabilityState;
 using passable_area::core::ProcessedFrame;
 
 std::string DefaultParamsFile();
-std::optional<passable_area::core::Config> LoadConfigFromParamsFile(
-    const std::string &params_file);
+std::optional<passable_area::core::Config>
+LoadConfigFromParamsFile(const std::string &params_file);
 
-std::unique_ptr<rosbag2_cpp::Reader> OpenBagReader(const std::string &bag_path) {
+std::unique_ptr<rosbag2_cpp::Reader>
+OpenBagReader(const std::string &bag_path) {
   auto reader = std::make_unique<rosbag2_cpp::Reader>(
       std::make_unique<rosbag2_cpp::readers::SequentialReader>());
   BagStorageOptions storage_options;
@@ -160,10 +161,11 @@ FrameInput MakeRearDropoutScene(int64_t stamp) {
 FrameInput MakeLocalHoleScene(int64_t stamp) {
   auto input = MakeFlatScene(stamp);
   input.input_cloud_in_base.erase(
-      std::remove_if(input.input_cloud_in_base.begin(), input.input_cloud_in_base.end(),
-                     [](const auto &point) {
-                       return std::abs(point.x) < 0.6f && std::abs(point.y) < 0.6f;
-                     }),
+      std::remove_if(
+          input.input_cloud_in_base.begin(), input.input_cloud_in_base.end(),
+          [](const auto &point) {
+            return std::abs(point.x) < 0.6f && std::abs(point.y) < 0.6f;
+          }),
       input.input_cloud_in_base.end());
   return input;
 }
@@ -180,14 +182,36 @@ struct ScenarioSpec {
 
 std::vector<ScenarioSpec> BuildSyntheticScenarios() {
   return {
-      {"rear_normal_open", {MakeRearNormalOpenScene(1)}, false, true, false, false, false},
-      {"rear_dropout", {MakeFlatScene(1), MakeRearDropoutScene(100000001)}, true, false, false,
-       false, true},
+      {"rear_normal_open",
+       {MakeRearNormalOpenScene(1)},
+       false,
+       true,
+       false,
+       false,
+       false},
+      {"rear_dropout",
+       {MakeFlatScene(1), MakeRearDropoutScene(100000001)},
+       true,
+       false,
+       false,
+       false,
+       true},
       {"stairs", {MakeStairScene(1)}, false, false, false, true, false},
       {"slope", {MakeSlopeScene(1)}, false, false, false, true, false},
-      {"low_ceiling", {MakeLowCeilingScene(1)}, false, false, true, false, false},
-      {"local_hole", {MakeFlatScene(1), MakeLocalHoleScene(100000001)}, false, false, false,
-       false, true},
+      {"low_ceiling",
+       {MakeLowCeilingScene(1)},
+       false,
+       false,
+       true,
+       false,
+       false},
+      {"local_hole",
+       {MakeFlatScene(1), MakeLocalHoleScene(100000001)},
+       false,
+       false,
+       false,
+       false,
+       true},
   };
 }
 
@@ -206,24 +230,30 @@ struct ScenarioResult {
 };
 
 int CellIndex(const FrameOutput &output, float x, float y) {
-  const int col = static_cast<int>(std::floor((x - output.origin.x()) / output.resolution));
-  const int row = static_cast<int>(std::floor((y - output.origin.y()) / output.resolution));
+  const int col =
+      static_cast<int>(std::floor((x - output.origin.x()) / output.resolution));
+  const int row =
+      static_cast<int>(std::floor((y - output.origin.y()) / output.resolution));
   if (row < 0 || row >= output.rows || col < 0 || col >= output.cols) {
     return -1;
   }
   return row * output.cols + col;
 }
 
-bool HasPassableCorridor(const FrameOutput &output, float min_width_m, float min_length_m) {
-  const int min_cols = std::max(1, static_cast<int>(std::ceil(min_width_m / output.resolution)));
-  const int min_rows = std::max(1, static_cast<int>(std::ceil(min_length_m / output.resolution)));
+bool HasPassableCorridor(const FrameOutput &output, float min_width_m,
+                         float min_length_m) {
+  const int min_cols =
+      std::max(1, static_cast<int>(std::ceil(min_width_m / output.resolution)));
+  const int min_rows = std::max(
+      1, static_cast<int>(std::ceil(min_length_m / output.resolution)));
   for (int row = 0; row + min_rows <= output.rows; ++row) {
     for (int col = 0; col + min_cols <= output.cols; ++col) {
       bool all_passable = true;
       for (int r = row; r < row + min_rows && all_passable; ++r) {
         for (int c = col; c < col + min_cols; ++c) {
           const int idx = r * output.cols + c;
-          if (output.passability[idx] != static_cast<int8_t>(PassabilityState::kPassable)) {
+          if (output.passability[idx] !=
+              static_cast<int8_t>(PassabilityState::kPassable)) {
             all_passable = false;
             break;
           }
@@ -271,10 +301,11 @@ ScenarioResult RunScenario(const ScenarioSpec &spec) {
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
       const int idx = row * output.cols + col;
-      const float x = output.origin.x() + (static_cast<float>(col) + 0.5f) * output.resolution;
+      const float x = output.origin.x() +
+                      (static_cast<float>(col) + 0.5f) * output.resolution;
       if (x < -0.5f) {
-        result.max_rear_support_confidence =
-            std::max(result.max_rear_support_confidence, output.support_confidence[idx]);
+        result.max_rear_support_confidence = std::max(
+            result.max_rear_support_confidence, output.support_confidence[idx]);
       }
     }
   }
@@ -292,7 +323,8 @@ ScenarioResult RunScenario(const ScenarioSpec &spec) {
   if (spec.expect_passable_corridor && !result.corridor_found) {
     result.failures.push_back("expected a passable corridor");
   }
-  if (spec.expect_support_persistence && result.max_rear_support_confidence < 0.05f) {
+  if (spec.expect_support_persistence &&
+      result.max_rear_support_confidence < 0.05f) {
     result.failures.push_back("expected persistent rear support confidence");
   }
   result.passed = result.failures.empty();
@@ -301,11 +333,14 @@ ScenarioResult RunScenario(const ScenarioSpec &spec) {
 
 void PrintScenarioResult(const ScenarioResult &result) {
   std::cout << "scenario=" << result.name << " rear_dropout=" << std::boolalpha
-            << result.rear_dropout << " missing_sectors=" << result.missing_sector_count
+            << result.rear_dropout
+            << " missing_sectors=" << result.missing_sector_count
             << " partial_sectors=" << result.partial_sector_count
-            << " passable=" << result.passable_count << " impassable=" << result.impassable_count
-            << " unknown=" << result.unknown_count << " max_rear_support_conf=" << std::fixed
-            << std::setprecision(2) << result.max_rear_support_confidence
+            << " passable=" << result.passable_count
+            << " impassable=" << result.impassable_count
+            << " unknown=" << result.unknown_count
+            << " max_rear_support_conf=" << std::fixed << std::setprecision(2)
+            << result.max_rear_support_confidence
             << " corridor=" << result.corridor_found
             << " status=" << (result.passed ? "PASS" : "FAIL") << '\n';
   for (const auto &failure : result.failures) {
@@ -366,7 +401,8 @@ struct TerminalStyle {
   bool use_color = true;
 };
 
-std::string Colorize(const std::string &text, const char *ansi_code, const TerminalStyle &style) {
+std::string Colorize(const std::string &text, const char *ansi_code,
+                     const TerminalStyle &style) {
   if (!style.use_color) {
     return text;
   }
@@ -375,34 +411,36 @@ std::string Colorize(const std::string &text, const char *ansi_code, const Termi
 
 std::string RootCauseColor(passable_area::tools::FalseObstacleRootCause cause) {
   switch (cause) {
-    case passable_area::tools::FalseObstacleRootCause::kClearanceDriven:
-      return "\033[33m";
-    case passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven:
-      return "\033[31m";
-    case passable_area::tools::FalseObstacleRootCause::kObstacleEvidencePlusLowContinuity:
-      return "\033[35m";
-    case passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced:
-      return "\033[34m";
-    case passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed:
-      return "\033[37m";
+  case passable_area::tools::FalseObstacleRootCause::kClearanceDriven:
+    return "\033[33m";
+  case passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven:
+    return "\033[31m";
+  case passable_area::tools::FalseObstacleRootCause::
+      kObstacleEvidencePlusLowContinuity:
+    return "\033[35m";
+  case passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced:
+    return "\033[34m";
+  case passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed:
+    return "\033[37m";
   }
   return "\033[37m";
 }
 
 std::string ObservabilityColor(passable_area::core::ObservabilityState state) {
   switch (state) {
-    case passable_area::core::ObservabilityState::kObserved:
-      return "\033[32m";
-    case passable_area::core::ObservabilityState::kPartiallyObserved:
-      return "\033[33m";
-    case passable_area::core::ObservabilityState::kMissingByDropout:
-      return "\033[31m";
+  case passable_area::core::ObservabilityState::kObserved:
+    return "\033[32m";
+  case passable_area::core::ObservabilityState::kPartiallyObserved:
+    return "\033[33m";
+  case passable_area::core::ObservabilityState::kMissingByDropout:
+    return "\033[31m";
   }
   return "\033[37m";
 }
 
 std::string BoolBadge(bool value, const TerminalStyle &style) {
-  return Colorize(value ? "true" : "false", value ? "\033[32m" : "\033[90m", style);
+  return Colorize(value ? "true" : "false", value ? "\033[32m" : "\033[90m",
+                  style);
 }
 
 std::string FormatFloat(double value, int precision = 2) {
@@ -416,22 +454,25 @@ double Percentile(std::vector<double> samples, double p) {
     return 0.0;
   }
   std::sort(samples.begin(), samples.end());
-  const size_t idx = std::min(samples.size() - 1,
-                              static_cast<size_t>(std::floor(p * (samples.size() - 1))));
+  const size_t idx =
+      std::min(samples.size() - 1,
+               static_cast<size_t>(std::floor(p * (samples.size() - 1))));
   return samples[idx];
 }
 
-std::string FormatDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
+std::string
+FormatDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box) {
   std::ostringstream oss;
-  oss << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max << "] y["
-      << box.y_min << ", " << box.y_max << "]";
+  oss << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", "
+      << box.x_max << "] y[" << box.y_min << ", " << box.y_max << "]";
   return oss.str();
 }
 
-std::string FormatDetectionBox(const passable_area::tools::MissObstacleDetectionBox &box) {
+std::string
+FormatDetectionBox(const passable_area::tools::MissObstacleDetectionBox &box) {
   std::ostringstream oss;
-  oss << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", " << box.x_max << "] y["
-      << box.y_min << ", " << box.y_max << "]";
+  oss << "x[" << std::fixed << std::setprecision(2) << box.x_min << ", "
+      << box.x_max << "] y[" << box.y_min << ", " << box.y_max << "]";
   return oss.str();
 }
 
@@ -448,10 +489,12 @@ std::string RepeatGlyph(const std::string &glyph, size_t count) {
 }
 
 void PrintBanner(const std::string &title, const TerminalStyle &style) {
-  std::cout << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m", style)
+  std::cout << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m",
+                        style)
             << '\n';
   std::cout << Colorize("║ " + title, "\033[1;36m", style) << '\n';
-  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
+  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m",
+                        style)
             << '\n';
 }
 
@@ -464,47 +507,57 @@ void PrintSectionHeader(const std::string &title, const TerminalStyle &style) {
       line += "─";
     }
   }
-  std::cout << '\n'
-            << Colorize(line, "\033[36m", style)
-            << '\n';
+  std::cout << '\n' << Colorize(line, "\033[36m", style) << '\n';
 }
 
 void PrintKeyValueLine(const std::string &label, const std::string &value) {
   std::cout << "  " << label << ": " << value << '\n';
 }
 
-void PrintDetectionBox(const passable_area::tools::FalseObstacleDetectionBox &box,
-                       const TerminalStyle &style) {
-  PrintKeyValueLine("detection_box", Colorize(FormatDetectionBox(box), "\033[36m", style));
+void PrintDetectionBox(
+    const passable_area::tools::FalseObstacleDetectionBox &box,
+    const TerminalStyle &style) {
+  PrintKeyValueLine("detection_box",
+                    Colorize(FormatDetectionBox(box), "\033[36m", style));
 }
 
-void PrintDetectionBox(const passable_area::tools::MissObstacleDetectionBox &box,
-                       const TerminalStyle &style) {
-  PrintKeyValueLine("roi_box", Colorize(FormatDetectionBox(box), "\033[36m", style));
+void PrintDetectionBox(
+    const passable_area::tools::MissObstacleDetectionBox &box,
+    const TerminalStyle &style) {
+  PrintKeyValueLine("roi_box",
+                    Colorize(FormatDetectionBox(box), "\033[36m", style));
 }
 
-void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnalysis &frame,
-                             int rank, const TerminalStyle &style) {
-  const auto class_label = Colorize(passable_area::tools::ToString(frame.classification),
-                                    RootCauseColor(frame.classification).c_str(), style);
+void PrintFalseObstacleFrame(
+    const passable_area::tools::FalseObstacleFrameAnalysis &frame, int rank,
+    const TerminalStyle &style) {
+  const auto class_label =
+      Colorize(passable_area::tools::ToString(frame.classification),
+               RootCauseColor(frame.classification).c_str(), style);
   std::cout << '\n'
-            << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m", style)
+            << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m",
+                        style)
             << '\n';
   std::cout << Colorize("║ frame " + std::to_string(rank), "\033[1;36m", style)
-            << "  " << class_label
-            << "  severity=" << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
+            << "  " << class_label << "  severity="
+            << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
             << '\n';
-  std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m", style)
+  std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m",
+                        style)
             << '\n';
   PrintKeyValueLine("stamp", std::to_string(frame.stamp));
-  PrintKeyValueLine("start_offset", FormatFloat(frame.start_offset_sec, 3) + " s");
-  PrintKeyValueLine("in_box_obstacle_points", std::to_string(frame.in_box_obstacle_point_count));
+  PrintKeyValueLine("start_offset",
+                    FormatFloat(frame.start_offset_sec, 3) + " s");
+  PrintKeyValueLine("in_box_obstacle_points",
+                    std::to_string(frame.in_box_obstacle_point_count));
   PrintKeyValueLine("hotspot_count", std::to_string(frame.hotspots.size()));
   PrintKeyValueLine("frame_partial", BoolBadge(frame.frame_partial, style));
   PrintKeyValueLine("rear_dropout", BoolBadge(frame.rear_dropout, style));
-  PrintKeyValueLine("max_obstacle_evidence", FormatFloat(frame.max_local_obstacle_evidence));
+  PrintKeyValueLine("max_obstacle_evidence",
+                    FormatFloat(frame.max_local_obstacle_evidence));
   PrintKeyValueLine("min_clearance", FormatFloat(frame.min_local_clearance));
-  PrintKeyValueLine("min_support_continuity", FormatFloat(frame.min_local_support_continuity));
+  PrintKeyValueLine("min_support_continuity",
+                    FormatFloat(frame.min_local_support_continuity));
   PrintKeyValueLine("rejected_suspicious_cells",
                     std::to_string(frame.rejected_suspicious_cell_count));
 
@@ -513,248 +566,326 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
     const std::string hotspot_class =
         Colorize(passable_area::tools::ToString(hotspot.classification),
                  RootCauseColor(hotspot.classification).c_str(), style);
-    const std::string observability = hotspot.has_observability
-                                          ? Colorize(passable_area::tools::ToString(
-                                                         hotspot.observability_state),
-                                                     ObservabilityColor(hotspot.observability_state)
-                                                         .c_str(),
-                                                     style)
-                                          : "Unavailable";
+    const std::string observability =
+        hotspot.has_observability
+            ? Colorize(
+                  passable_area::tools::ToString(hotspot.observability_state),
+                  ObservabilityColor(hotspot.observability_state).c_str(),
+                  style)
+            : "Unavailable";
     std::cout << "  "
-              << Colorize("• hotspot " + std::to_string(i + 1), "\033[1;35m", style) << '\n';
-    std::cout << "    pos: (" << FormatFloat(hotspot.x) << ", " << FormatFloat(hotspot.y)
-              << ")  z: [" << FormatFloat(hotspot.min_z) << ", " << FormatFloat(hotspot.max_z)
+              << Colorize("• hotspot " + std::to_string(i + 1), "\033[1;35m",
+                          style)
+              << '\n';
+    std::cout << "    pos: (" << FormatFloat(hotspot.x) << ", "
+              << FormatFloat(hotspot.y) << ")  z: ["
+              << FormatFloat(hotspot.min_z) << ", "
+              << FormatFloat(hotspot.max_z)
               << "]  obstacle_points: " << hotspot.obstacle_point_count
-              << "  severity: " << Colorize(FormatFloat(hotspot.severity), "\033[1;33m", style)
+              << "  severity: "
+              << Colorize(FormatFloat(hotspot.severity), "\033[1;33m", style)
               << '\n';
     std::cout << "    source_cell: " << hotspot.source_cell
               << "  center_cell: " << hotspot.center_cell
-              << "  source_matches_center: " << (hotspot.source_matches_center ? "true" : "false")
-              << '\n';
-    std::cout << "    class: " << hotspot_class << "  observability: " << observability
-              << '\n';
-    std::cout << "    why: " << Colorize(hotspot.explanation, "\033[1;37m", style) << '\n';
-    std::cout << "    obstacle_evidence: " << FormatFloat(hotspot.obstacle_evidence)
+              << "  source_matches_center: "
+              << (hotspot.source_matches_center ? "true" : "false") << '\n';
+    std::cout << "    class: " << hotspot_class
+              << "  observability: " << observability << '\n';
+    std::cout << "    why: "
+              << Colorize(hotspot.explanation, "\033[1;37m", style) << '\n';
+    std::cout << "    obstacle_evidence: "
+              << FormatFloat(hotspot.obstacle_evidence)
               << "  clearance: " << FormatFloat(hotspot.clearance)
-              << "  support_continuity: " << FormatFloat(hotspot.support_continuity) << '\n';
-    std::cout << "    source_obstacle_evidence: " << FormatFloat(hotspot.source_obstacle_evidence)
-              << "  source_overhead_height: " << FormatFloat(hotspot.source_overhead_height)
+              << "  support_continuity: "
+              << FormatFloat(hotspot.support_continuity) << '\n';
+    std::cout << "    source_obstacle_evidence: "
+              << FormatFloat(hotspot.source_obstacle_evidence)
+              << "  source_overhead_height: "
+              << FormatFloat(hotspot.source_overhead_height)
               << "  source_support_anchor_used: "
               << FormatFloat(hotspot.source_support_anchor_used) << '\n';
-    std::cout << "    support_anchor_used: " << FormatFloat(hotspot.support_anchor_used)
+    std::cout << "    support_anchor_used: "
+              << FormatFloat(hotspot.support_anchor_used)
               << "  sub_support_leak_count: "
               << std::to_string(hotspot.sub_support_leak_count) << '\n';
     std::cout << "    raw_upper_support_cell: "
               << (hotspot.raw_upper_support_cell ? "true" : "false")
               << "  adjusted_upper_support_cell: "
               << (hotspot.adjusted_upper_support_cell ? "true" : "false")
-              << "  upper_support_cell: " << (hotspot.upper_support_cell ? "true" : "false")
+              << "  upper_support_cell: "
+              << (hotspot.upper_support_cell ? "true" : "false")
               << "  obstacle_candidate_cell: "
               << (hotspot.obstacle_candidate_cell ? "true" : "false")
               << "  neighbor_upper_support_count: "
               << std::to_string(hotspot.neighbor_upper_support_count)
               << "  rejected_by_neighbor_support: "
-              << (hotspot.obstacle_rejected_by_neighbor_support ? "true" : "false") << '\n';
+              << (hotspot.obstacle_rejected_by_neighbor_support ? "true"
+                                                                : "false")
+              << '\n';
   }
-  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style)
+  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m",
+                        style)
             << '\n';
 }
 
-void PrintFalseObstacleSummary(const passable_area::tools::FalseObstacleBagSummary &summary,
-                               const std::string &bag_path, const std::string &params_file,
-                               const FalseObstacleReplayArgs &args, const TerminalStyle &style) {
+void PrintFalseObstacleSummary(
+    const passable_area::tools::FalseObstacleBagSummary &summary,
+    const std::string &bag_path, const std::string &params_file,
+    const FalseObstacleReplayArgs &args, const TerminalStyle &style) {
   PrintBanner("False Obstacle Offline Analysis", style);
   PrintSectionHeader("Run", style);
   PrintKeyValueLine("bag", bag_path);
   PrintKeyValueLine("params_file", params_file);
   PrintDetectionBox(summary.detection_box, style);
   if (args.use_analysis_window) {
-    PrintKeyValueLine("start_offset_sec", FormatFloat(args.start_offset_sec, 3));
+    PrintKeyValueLine("start_offset_sec",
+                      FormatFloat(args.start_offset_sec, 3));
     PrintKeyValueLine("time_window_sec", FormatFloat(args.time_window_sec, 3));
   }
   PrintKeyValueLine("top_k", std::to_string(args.top_k));
 
   const double candidate_ratio =
-      summary.total_frames > 0
-          ? static_cast<double>(summary.candidate_frames) / static_cast<double>(summary.total_frames)
-          : 0.0;
+      summary.total_frames > 0 ? static_cast<double>(summary.candidate_frames) /
+                                     static_cast<double>(summary.total_frames)
+                               : 0.0;
   PrintSectionHeader("Summary", style);
   PrintKeyValueLine("total_frames", std::to_string(summary.total_frames));
-  PrintKeyValueLine("rear_dropout_frames", std::to_string(summary.rear_dropout_frames));
-  PrintKeyValueLine("suspicious_frames",
-                    Colorize(std::to_string(summary.candidate_frames),
-                             summary.candidate_frames > 0 ? "\033[1;31m" : "\033[1;32m", style));
+  PrintKeyValueLine("rear_dropout_frames",
+                    std::to_string(summary.rear_dropout_frames));
+  PrintKeyValueLine(
+      "suspicious_frames",
+      Colorize(std::to_string(summary.candidate_frames),
+               summary.candidate_frames > 0 ? "\033[1;31m" : "\033[1;32m",
+               style));
   PrintKeyValueLine("suspicious_ratio", FormatFloat(candidate_ratio, 3));
   PrintKeyValueLine("longest_consecutive_run",
                     std::to_string(summary.longest_consecutive_candidate_run));
 
   PrintSectionHeader("Root Causes", style);
-  const auto print_root_cause = [&](passable_area::tools::FalseObstacleRootCause cause) {
-    const std::string label = passable_area::tools::ToString(cause);
-    const std::string value = std::to_string(summary.root_cause_counts[static_cast<int>(cause)]);
-    PrintKeyValueLine(Colorize(label, RootCauseColor(cause).c_str(), style), value);
-  };
-  print_root_cause(passable_area::tools::FalseObstacleRootCause::kClearanceDriven);
-  print_root_cause(passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven);
-  print_root_cause(passable_area::tools::FalseObstacleRootCause::kObstacleEvidencePlusLowContinuity);
-  print_root_cause(passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced);
-  print_root_cause(passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed);
+  const auto print_root_cause =
+      [&](passable_area::tools::FalseObstacleRootCause cause) {
+        const std::string label = passable_area::tools::ToString(cause);
+        const std::string value =
+            std::to_string(summary.root_cause_counts[static_cast<int>(cause)]);
+        PrintKeyValueLine(Colorize(label, RootCauseColor(cause).c_str(), style),
+                          value);
+      };
+  print_root_cause(
+      passable_area::tools::FalseObstacleRootCause::kClearanceDriven);
+  print_root_cause(
+      passable_area::tools::FalseObstacleRootCause::kObstacleEvidenceDriven);
+  print_root_cause(passable_area::tools::FalseObstacleRootCause::
+                       kObstacleEvidencePlusLowContinuity);
+  print_root_cause(
+      passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced);
+  print_root_cause(
+      passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed);
 
   PrintSectionHeader("Ranked Frames", style);
   if (summary.ranked_frames.empty()) {
-    std::cout << Colorize("╭" + RepeatGlyph("─", kCardColumns) + "╮", "\033[32m", style)
+    std::cout << Colorize("╭" + RepeatGlyph("─", kCardColumns) + "╮",
+                          "\033[32m", style)
               << '\n';
     std::cout << Colorize("│ No Candidate Frames", "\033[1;32m", style) << '\n';
     std::cout << "  no obstacle_points were found inside the detection box\n";
-    std::cout << Colorize("╰" + RepeatGlyph("─", kCardColumns) + "╯", "\033[32m", style)
+    std::cout << Colorize("╰" + RepeatGlyph("─", kCardColumns) + "╯",
+                          "\033[32m", style)
               << '\n';
     return;
   }
   for (size_t i = 0; i < summary.ranked_frames.size(); ++i) {
-    PrintFalseObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1), style);
+    PrintFalseObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1),
+                            style);
   }
 }
 
-std::string MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
+std::string
+MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
   switch (cause) {
-    case passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi:
-      return "\033[34m";
-    case passable_area::tools::MissObstacleRootCause::kNoFrontendObstacleSuspicion:
-      return "\033[36m";
-    case passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport:
-      return "\033[33m";
-    case passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate:
-      return "\033[35m";
-    case passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow:
-      return "\033[31m";
-    case passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet:
-      return "\033[31m";
-    case passable_area::tools::MissObstacleRootCause::kNoObstacleSourceSamplesInRoi:
-      return "\033[33m";
-    case passable_area::tools::MissObstacleRootCause::kUnknownOrMixed:
-      return "\033[37m";
+  case passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi:
+    return "\033[34m";
+  case passable_area::tools::MissObstacleRootCause::
+      kNoFrontendObstacleSuspicion:
+    return "\033[36m";
+  case passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport:
+    return "\033[33m";
+  case passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate:
+    return "\033[35m";
+  case passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow:
+    return "\033[31m";
+  case passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet:
+    return "\033[31m";
+  case passable_area::tools::MissObstacleRootCause::
+      kNoObstacleSourceSamplesInRoi:
+    return "\033[33m";
+  case passable_area::tools::MissObstacleRootCause::kUnknownOrMixed:
+    return "\033[37m";
   }
   return "\033[37m";
 }
 
-void PrintMissObstacleFrame(const passable_area::tools::MissObstacleFrameAnalysis &frame, int rank,
-                            const TerminalStyle &style) {
-  const auto class_label = Colorize(passable_area::tools::ToString(frame.classification),
-                                    MissRootCauseColor(frame.classification).c_str(), style);
+void PrintMissObstacleFrame(
+    const passable_area::tools::MissObstacleFrameAnalysis &frame, int rank,
+    const TerminalStyle &style) {
+  const auto class_label =
+      Colorize(passable_area::tools::ToString(frame.classification),
+               MissRootCauseColor(frame.classification).c_str(), style);
   std::cout << '\n'
-            << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m", style)
+            << Colorize("╔" + RepeatGlyph("═", kCardColumns) + "╗", "\033[36m",
+                        style)
             << '\n';
   std::cout << Colorize("║ frame " + std::to_string(rank), "\033[1;36m", style)
-            << "  " << class_label
-            << "  severity=" << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
+            << "  " << class_label << "  severity="
+            << Colorize(FormatFloat(frame.severity), "\033[1;33m", style)
             << '\n';
-  std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m", style)
+  std::cout << Colorize("╟" + RepeatGlyph("─", kCardColumns) + "╢", "\033[36m",
+                        style)
             << '\n';
   PrintKeyValueLine("stamp", std::to_string(frame.stamp));
-  PrintKeyValueLine("start_offset", FormatFloat(frame.start_offset_sec, 3) + " s");
+  PrintKeyValueLine("start_offset",
+                    FormatFloat(frame.start_offset_sec, 3) + " s");
   PrintKeyValueLine("roi_sample_count", std::to_string(frame.roi_sample_count));
-  PrintKeyValueLine("roi_cells_with_any_samples", std::to_string(frame.roi_cells_with_any_samples));
-  PrintKeyValueLine("roi_obstacle_point_count", std::to_string(frame.roi_obstacle_point_count));
+  PrintKeyValueLine("roi_cells_with_any_samples",
+                    std::to_string(frame.roi_cells_with_any_samples));
+  PrintKeyValueLine("roi_obstacle_point_count",
+                    std::to_string(frame.roi_obstacle_point_count));
   PrintKeyValueLine("obstacle_suspicious_cells",
                     std::to_string(frame.obstacle_suspicious_cell_count));
   PrintKeyValueLine("obstacle_candidate_cells",
                     std::to_string(frame.obstacle_candidate_cell_count));
   PrintKeyValueLine("rejected_suspicious_cells",
                     std::to_string(frame.rejected_suspicious_cell_count));
-  PrintKeyValueLine("max_obstacle_evidence", FormatFloat(frame.max_obstacle_evidence));
-  PrintKeyValueLine("max_support_confidence", FormatFloat(frame.max_support_confidence));
+  PrintKeyValueLine("max_obstacle_evidence",
+                    FormatFloat(frame.max_obstacle_evidence));
+  PrintKeyValueLine("max_support_confidence",
+                    FormatFloat(frame.max_support_confidence));
   PrintKeyValueLine("min_clearance", FormatFloat(frame.min_clearance));
-  PrintKeyValueLine("min_support_continuity", FormatFloat(frame.min_support_continuity));
+  PrintKeyValueLine("min_support_continuity",
+                    FormatFloat(frame.min_support_continuity));
   PrintKeyValueLine("why", Colorize(frame.explanation, "\033[1;37m", style));
   for (const auto &evidence : frame.evidence_lines) {
-    std::cout << "  " << Colorize("• evidence", "\033[1;35m", style) << ": " << evidence << '\n';
+    std::cout << "  " << Colorize("• evidence", "\033[1;35m", style) << ": "
+              << evidence << '\n';
   }
   for (size_t i = 0; i < frame.representative_cells.size(); ++i) {
     const auto &cell = frame.representative_cells[i];
-    std::cout << "  " << Colorize("• cell " + std::to_string(i + 1), "\033[1;35m", style) << '\n';
-    std::cout << "    pos: (" << FormatFloat(cell.x) << ", " << FormatFloat(cell.y)
-              << ")  sample_relative_z: [" << FormatFloat(cell.min_sample_relative_z) << ", "
-              << FormatFloat(cell.max_sample_relative_z) << "]  sample_count: " << cell.sample_count
+    std::cout << "  "
+              << Colorize("• cell " + std::to_string(i + 1), "\033[1;35m",
+                          style)
               << '\n';
+    std::cout << "    pos: (" << FormatFloat(cell.x) << ", "
+              << FormatFloat(cell.y) << ")  sample_relative_z: ["
+              << FormatFloat(cell.min_sample_relative_z) << ", "
+              << FormatFloat(cell.max_sample_relative_z)
+              << "]  sample_count: " << cell.sample_count << '\n';
     std::cout << "    support_height: " << FormatFloat(cell.support_height)
               << "  support_ref: " << FormatFloat(cell.support_ref)
-              << "  overhead_height: " << FormatFloat(cell.overhead_height) << '\n';
-    std::cout << "    obstacle_evidence: " << FormatFloat(cell.obstacle_evidence)
-              << "  support_confidence: " << FormatFloat(cell.support_confidence)
-              << "  support_anchor_used: " << FormatFloat(cell.support_anchor_used) << '\n';
+              << "  overhead_height: " << FormatFloat(cell.overhead_height)
+              << '\n';
+    std::cout << "    obstacle_evidence: "
+              << FormatFloat(cell.obstacle_evidence) << "  support_confidence: "
+              << FormatFloat(cell.support_confidence)
+              << "  support_anchor_used: "
+              << FormatFloat(cell.support_anchor_used) << '\n';
     std::cout << "    max_sample_z_minus_support_ref: "
               << FormatFloat(cell.max_sample_z_minus_support_ref)
-              << "  sub_support_leak_count: " << std::to_string(cell.sub_support_leak_count) << '\n';
+              << "  sub_support_leak_count: "
+              << std::to_string(cell.sub_support_leak_count) << '\n';
     std::cout << "    raw_upper_support_cell: "
               << (cell.raw_upper_support_cell ? "true" : "false")
               << "  adjusted_upper_support_cell: "
               << (cell.adjusted_upper_support_cell ? "true" : "false")
-              << "  upper_support_cell: " << (cell.upper_support_cell ? "true" : "false")
-              << "  obstacle_suspicious: " << (cell.obstacle_suspicious ? "true" : "false")
-              << "  obstacle_candidate_cell: " << (cell.obstacle_candidate_cell ? "true" : "false")
-              << '\n';
+              << "  upper_support_cell: "
+              << (cell.upper_support_cell ? "true" : "false")
+              << "  obstacle_suspicious: "
+              << (cell.obstacle_suspicious ? "true" : "false")
+              << "  obstacle_candidate_cell: "
+              << (cell.obstacle_candidate_cell ? "true" : "false") << '\n';
     std::cout << "    rejected_by_neighbor_support: "
               << (cell.obstacle_rejected_by_neighbor_support ? "true" : "false")
               << "  neighbor_upper_support_count: "
               << std::to_string(cell.neighbor_upper_support_count) << '\n';
-    std::cout << "    why: " << Colorize(cell.explanation, "\033[1;37m", style) << '\n';
+    std::cout << "    why: " << Colorize(cell.explanation, "\033[1;37m", style)
+              << '\n';
   }
-  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m", style) << '\n';
+  std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m",
+                        style)
+            << '\n';
 }
 
-void PrintMissObstacleSummary(const passable_area::tools::MissObstacleBagSummary &summary,
-                              const MissObstacleReplayArgs &args, const TerminalStyle &style) {
+void PrintMissObstacleSummary(
+    const passable_area::tools::MissObstacleBagSummary &summary,
+    const MissObstacleReplayArgs &args, const TerminalStyle &style) {
   PrintBanner("Miss Obstacle Offline Analysis", style);
   PrintSectionHeader("Run", style);
   PrintKeyValueLine("bag", args.bag_path);
   PrintKeyValueLine("params_file", args.params_file);
   PrintDetectionBox(summary.detection_box, style);
-  PrintKeyValueLine("start_offset", FormatFloat(args.start_offset_sec, 3) + " s");
+  PrintKeyValueLine("start_offset",
+                    FormatFloat(args.start_offset_sec, 3) + " s");
   PrintKeyValueLine("time_window", FormatFloat(args.time_window_sec, 3) + " s");
-  PrintKeyValueLine("top_k_cells", std::to_string(args.analyzer_config.representative_cell_limit));
+  PrintKeyValueLine(
+      "top_k_cells",
+      std::to_string(args.analyzer_config.representative_cell_limit));
 
   const double candidate_ratio =
-      summary.total_frames > 0
-          ? static_cast<double>(summary.missed_frames) / static_cast<double>(summary.total_frames)
-          : 0.0;
+      summary.total_frames > 0 ? static_cast<double>(summary.missed_frames) /
+                                     static_cast<double>(summary.total_frames)
+                               : 0.0;
   PrintSectionHeader("Summary", style);
   PrintKeyValueLine("total_frames", std::to_string(summary.total_frames));
-  PrintKeyValueLine("missed_frames",
-                    Colorize(std::to_string(summary.missed_frames),
-                             summary.missed_frames > 0 ? "\033[1;31m" : "\033[1;32m", style));
+  PrintKeyValueLine(
+      "missed_frames",
+      Colorize(std::to_string(summary.missed_frames),
+               summary.missed_frames > 0 ? "\033[1;31m" : "\033[1;32m", style));
   PrintKeyValueLine("missed_ratio", FormatFloat(candidate_ratio, 3));
 
   PrintSectionHeader("Root Causes", style);
-  const auto print_root_cause = [&](passable_area::tools::MissObstacleRootCause cause) {
-    PrintKeyValueLine(
-        Colorize(passable_area::tools::ToString(cause), MissRootCauseColor(cause).c_str(), style),
-        std::to_string(summary.root_cause_counts[static_cast<int>(cause)]));
-  };
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kNoFrontendObstacleSuspicion);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kNoObstacleSourceSamplesInRoi);
-  print_root_cause(passable_area::tools::MissObstacleRootCause::kUnknownOrMixed);
+  const auto print_root_cause =
+      [&](passable_area::tools::MissObstacleRootCause cause) {
+        PrintKeyValueLine(
+            Colorize(passable_area::tools::ToString(cause),
+                     MissRootCauseColor(cause).c_str(), style),
+            std::to_string(summary.root_cause_counts[static_cast<int>(cause)]));
+      };
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::
+                       kNoFrontendObstacleSuspicion);
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport);
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate);
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow);
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet);
+  print_root_cause(passable_area::tools::MissObstacleRootCause::
+                       kNoObstacleSourceSamplesInRoi);
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kUnknownOrMixed);
 
   PrintSectionHeader("Ranked Frames", style);
   if (summary.ranked_frames.empty()) {
-    std::cout << Colorize("╭" + RepeatGlyph("─", kCardColumns) + "╮", "\033[32m", style)
+    std::cout << Colorize("╭" + RepeatGlyph("─", kCardColumns) + "╮",
+                          "\033[32m", style)
               << '\n';
     std::cout << Colorize("│ No Missed Frames", "\033[1;32m", style) << '\n';
-    std::cout << "  obstacle points were observed inside the roi for every analyzed frame\n";
-    std::cout << Colorize("╰" + RepeatGlyph("─", kCardColumns) + "╯", "\033[32m", style)
+    std::cout << "  obstacle points were observed inside the roi for every "
+                 "analyzed frame\n";
+    std::cout << Colorize("╰" + RepeatGlyph("─", kCardColumns) + "╯",
+                          "\033[32m", style)
               << '\n';
     return;
   }
   for (size_t i = 0; i < summary.ranked_frames.size(); ++i) {
-    PrintMissObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1), style);
+    PrintMissObstacleFrame(summary.ranked_frames[i], static_cast<int>(i + 1),
+                           style);
   }
 }
 
-std::optional<float> ParseFloatFlagValue(const std::vector<std::string> &args, const std::string &flag) {
+std::optional<float> ParseFloatFlagValue(const std::vector<std::string> &args,
+                                         const std::string &flag) {
   for (size_t i = 0; i + 1 < args.size(); ++i) {
     if (args[i] == flag) {
       return std::stof(args[i + 1]);
@@ -763,7 +894,8 @@ std::optional<float> ParseFloatFlagValue(const std::vector<std::string> &args, c
   return std::nullopt;
 }
 
-std::optional<int> ParseIntFlagValue(const std::vector<std::string> &args, const std::string &flag) {
+std::optional<int> ParseIntFlagValue(const std::vector<std::string> &args,
+                                     const std::string &flag) {
   for (size_t i = 0; i + 1 < args.size(); ++i) {
     if (args[i] == flag) {
       return std::stoi(args[i + 1]);
@@ -776,8 +908,9 @@ bool HasFlag(const std::vector<std::string> &args, const std::string &flag) {
   return std::find(args.begin(), args.end(), flag) != args.end();
 }
 
-std::optional<std::string> ParseStringFlagValue(const std::vector<std::string> &args,
-                                                const std::string &flag) {
+std::optional<std::string>
+ParseStringFlagValue(const std::vector<std::string> &args,
+                     const std::string &flag) {
   for (size_t i = 0; i + 1 < args.size(); ++i) {
     if (args[i] == flag) {
       return args[i + 1];
@@ -786,8 +919,8 @@ std::optional<std::string> ParseStringFlagValue(const std::vector<std::string> &
   return std::nullopt;
 }
 
-std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
-    const std::vector<std::string> &args) {
+std::optional<FalseObstacleReplayArgs>
+ParseFalseObstacleReplayArgs(const std::vector<std::string> &args) {
   const auto bag_path = ParseStringFlagValue(args, "--bag");
   const std::string params_file =
       ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
@@ -796,8 +929,10 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   const auto range_x_max = ParseFloatFlagValue(args, "--range-x-max");
   const auto range_y_min = ParseFloatFlagValue(args, "--range-y-min");
   const auto range_y_max = ParseFloatFlagValue(args, "--range-y-max");
-  if (!bag_path || !range_x_min || !range_x_max || !range_y_min || !range_y_max) {
-    std::cerr << "false-obstacle analysis requires --bag, --range-x-min, --range-x-max, "
+  if (!bag_path || !range_x_min || !range_x_max || !range_y_min ||
+      !range_y_max) {
+    std::cerr << "false-obstacle analysis requires --bag, --range-x-min, "
+                 "--range-x-max, "
                  "--range-y-min, and --range-y-max\n";
     return std::nullopt;
   }
@@ -806,13 +941,15 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   replay_args.bag_path = *bag_path;
   replay_args.params_file = params_file;
   replay_args.use_color = !HasFlag(args, "--no-color");
-  replay_args.analyzer_config.detection_box = passable_area::tools::FalseObstacleDetectionBox{
-      *range_x_min, *range_x_max, *range_y_min, *range_y_max};
+  replay_args.analyzer_config.detection_box =
+      passable_area::tools::FalseObstacleDetectionBox{
+          *range_x_min, *range_x_max, *range_y_min, *range_y_max};
   if (start_offset_sec) {
     replay_args.start_offset_sec = *start_offset_sec;
     replay_args.use_analysis_window = true;
   }
-  if (const auto time_window_sec = ParseFloatFlagValue(args, "--time-window-sec")) {
+  if (const auto time_window_sec =
+          ParseFloatFlagValue(args, "--time-window-sec")) {
     replay_args.time_window_sec = *time_window_sec;
   }
   if (const auto top_k = ParseIntFlagValue(args, "--top-k")) {
@@ -820,12 +957,14 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   }
   if (!(replay_args.analyzer_config.detection_box.x_min <
         replay_args.analyzer_config.detection_box.x_max)) {
-    std::cerr << "invalid detection box: require --range-x-min < --range-x-max\n";
+    std::cerr
+        << "invalid detection box: require --range-x-min < --range-x-max\n";
     return std::nullopt;
   }
   if (!(replay_args.analyzer_config.detection_box.y_min <
         replay_args.analyzer_config.detection_box.y_max)) {
-    std::cerr << "invalid detection box: require --range-y-min < --range-y-max\n";
+    std::cerr
+        << "invalid detection box: require --range-y-min < --range-y-max\n";
     return std::nullopt;
   }
   if (replay_args.top_k <= 0) {
@@ -839,8 +978,8 @@ std::optional<FalseObstacleReplayArgs> ParseFalseObstacleReplayArgs(
   return replay_args;
 }
 
-std::optional<MissObstacleReplayArgs> ParseMissObstacleReplayArgs(
-    const std::vector<std::string> &args) {
+std::optional<MissObstacleReplayArgs>
+ParseMissObstacleReplayArgs(const std::vector<std::string> &args) {
   const auto bag_path = ParseStringFlagValue(args, "--bag");
   const std::string params_file =
       ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
@@ -849,8 +988,10 @@ std::optional<MissObstacleReplayArgs> ParseMissObstacleReplayArgs(
   const auto roi_x_max = ParseFloatFlagValue(args, "--roi-x-max");
   const auto roi_y_min = ParseFloatFlagValue(args, "--roi-y-min");
   const auto roi_y_max = ParseFloatFlagValue(args, "--roi-y-max");
-  if (!bag_path || !start_offset_sec || !roi_x_min || !roi_x_max || !roi_y_min || !roi_y_max) {
-    std::cerr << "miss-obstacle analysis requires --bag, --start-offset-sec, --roi-x-min, "
+  if (!bag_path || !start_offset_sec || !roi_x_min || !roi_x_max ||
+      !roi_y_min || !roi_y_max) {
+    std::cerr << "miss-obstacle analysis requires --bag, --start-offset-sec, "
+                 "--roi-x-min, "
                  "--roi-x-max, --roi-y-min, and --roi-y-max\n";
     return std::nullopt;
   }
@@ -860,9 +1001,11 @@ std::optional<MissObstacleReplayArgs> ParseMissObstacleReplayArgs(
   replay_args.params_file = params_file;
   replay_args.start_offset_sec = *start_offset_sec;
   replay_args.use_color = !HasFlag(args, "--no-color");
-  replay_args.analyzer_config.detection_box = passable_area::tools::MissObstacleDetectionBox{
-      *roi_x_min, *roi_x_max, *roi_y_min, *roi_y_max};
-  if (const auto time_window_sec = ParseFloatFlagValue(args, "--time-window-sec")) {
+  replay_args.analyzer_config.detection_box =
+      passable_area::tools::MissObstacleDetectionBox{*roi_x_min, *roi_x_max,
+                                                     *roi_y_min, *roi_y_max};
+  if (const auto time_window_sec =
+          ParseFloatFlagValue(args, "--time-window-sec")) {
     replay_args.time_window_sec = *time_window_sec;
   }
   if (const auto top_k_cells = ParseIntFlagValue(args, "--top-k-cells")) {
@@ -880,7 +1023,8 @@ std::optional<MissObstacleReplayArgs> ParseMissObstacleReplayArgs(
   return replay_args;
 }
 
-std::optional<RoiInspectArgs> ParseRoiInspectArgs(const std::vector<std::string> &args) {
+std::optional<RoiInspectArgs>
+ParseRoiInspectArgs(const std::vector<std::string> &args) {
   const auto bag_path = ParseStringFlagValue(args, "--bag");
   const std::string params_file =
       ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
@@ -889,8 +1033,10 @@ std::optional<RoiInspectArgs> ParseRoiInspectArgs(const std::vector<std::string>
   const auto roi_x_max = ParseFloatFlagValue(args, "--roi-x-max");
   const auto roi_y_min = ParseFloatFlagValue(args, "--roi-y-min");
   const auto roi_y_max = ParseFloatFlagValue(args, "--roi-y-max");
-  if (!bag_path || !start_offset_sec || !roi_x_min || !roi_x_max || !roi_y_min || !roi_y_max) {
-    std::cerr << "roi inspection requires --bag, --start-offset-sec, --roi-x-min, --roi-x-max, "
+  if (!bag_path || !start_offset_sec || !roi_x_min || !roi_x_max ||
+      !roi_y_min || !roi_y_max) {
+    std::cerr << "roi inspection requires --bag, --start-offset-sec, "
+                 "--roi-x-min, --roi-x-max, "
                  "--roi-y-min, and --roi-y-max\n";
     return std::nullopt;
   }
@@ -903,7 +1049,8 @@ std::optional<RoiInspectArgs> ParseRoiInspectArgs(const std::vector<std::string>
   inspect_args.roi_x_max = *roi_x_max;
   inspect_args.roi_y_min = *roi_y_min;
   inspect_args.roi_y_max = *roi_y_max;
-  if (const auto time_window_sec = ParseFloatFlagValue(args, "--time-window-sec")) {
+  if (const auto time_window_sec =
+          ParseFloatFlagValue(args, "--time-window-sec")) {
     inspect_args.time_window_sec = *time_window_sec;
   }
   if (!(inspect_args.roi_x_min < inspect_args.roi_x_max) ||
@@ -915,8 +1062,9 @@ std::optional<RoiInspectArgs> ParseRoiInspectArgs(const std::vector<std::string>
   return inspect_args;
 }
 
-std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
-                                             const passable_area::core::Config &config) {
+std::optional<BagReplaySummary>
+RunBagReplay(const std::string &bag_path,
+             const passable_area::core::Config &config) {
   if (!std::filesystem::exists(bag_path)) {
     std::cerr << "bag path does not exist: " << bag_path << '\n';
     return std::nullopt;
@@ -940,11 +1088,13 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
     if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
       sensor_msgs::msg::PointCloud2 cloud_msg;
       cloud_ser.deserialize_message(&serialized, &cloud_msg);
-      clouds.emplace(rclcpp::Time(cloud_msg.header.stamp).nanoseconds(), std::move(cloud_msg));
+      clouds.emplace(rclcpp::Time(cloud_msg.header.stamp).nanoseconds(),
+                     std::move(cloud_msg));
     } else if (bag_msg->topic_name == "/ODOM") {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
-      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
+                    std::move(odom_msg));
     }
   }
 
@@ -961,14 +1111,16 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
     ++paired_stamp_count;
     passable_area::core::PointCloud cloud;
     passable_area::core::Pose3D pose;
-    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+    if (!cloud_converter.fromRos(cloud_msg, cloud) ||
+        !odom_converter.fromRos(odom_it->second, pose)) {
       continue;
     }
     FrameInput input;
     input.stamp = stamp;
     input.base_pose_in_odom = pose;
     input.input_cloud_in_base = std::move(cloud);
-    input_point_count_samples.push_back(static_cast<double>(input.input_cloud_in_base.size()));
+    input_point_count_samples.push_back(
+        static_cast<double>(input.input_cloud_in_base.size()));
     const auto start = std::chrono::steady_clock::now();
     const auto output = processor.update(input);
     const double processing_ms = std::chrono::duration<double, std::milli>(
@@ -989,43 +1141,53 @@ std::optional<BagReplaySummary> RunBagReplay(const std::string &bag_path,
         ++missing;
       }
     }
-    summary.max_missing_sectors = std::max(summary.max_missing_sectors, missing);
+    summary.max_missing_sectors =
+        std::max(summary.max_missing_sectors, missing);
     const double unknown_ratio =
-        static_cast<double>(std::count(output.passability.begin(), output.passability.end(),
-                                       static_cast<int8_t>(PassabilityState::kUnknown))) /
+        static_cast<double>(
+            std::count(output.passability.begin(), output.passability.end(),
+                       static_cast<int8_t>(PassabilityState::kUnknown))) /
         std::max<size_t>(output.passability.size(), 1U);
     unknown_ratio_sum += unknown_ratio;
-    summary.max_unknown_ratio = std::max(summary.max_unknown_ratio, unknown_ratio);
+    summary.max_unknown_ratio =
+        std::max(summary.max_unknown_ratio, unknown_ratio);
   }
 
   if (summary.paired_frames > 0) {
-    summary.avg_unknown_ratio = unknown_ratio_sum / static_cast<double>(summary.paired_frames);
+    summary.avg_unknown_ratio =
+        unknown_ratio_sum / static_cast<double>(summary.paired_frames);
   }
-  summary.cloud_unpaired_frames = std::max(0, summary.cloud_total_frames - paired_stamp_count);
-  summary.odom_unpaired_frames = std::max(0, summary.odom_total_frames - paired_stamp_count);
+  summary.cloud_unpaired_frames =
+      std::max(0, summary.cloud_total_frames - paired_stamp_count);
+  summary.odom_unpaired_frames =
+      std::max(0, summary.odom_total_frames - paired_stamp_count);
   if (!input_point_count_samples.empty()) {
     summary.avg_input_point_count =
-        std::accumulate(input_point_count_samples.begin(), input_point_count_samples.end(), 0.0) /
+        std::accumulate(input_point_count_samples.begin(),
+                        input_point_count_samples.end(), 0.0) /
         static_cast<double>(input_point_count_samples.size());
-    summary.max_input_point_count =
-        *std::max_element(input_point_count_samples.begin(), input_point_count_samples.end());
+    summary.max_input_point_count = *std::max_element(
+        input_point_count_samples.begin(), input_point_count_samples.end());
   }
   if (!processing_ms_samples.empty()) {
     summary.avg_processing_ms =
-        std::accumulate(processing_ms_samples.begin(), processing_ms_samples.end(), 0.0) /
+        std::accumulate(processing_ms_samples.begin(),
+                        processing_ms_samples.end(), 0.0) /
         static_cast<double>(processing_ms_samples.size());
-    summary.max_processing_ms =
-        *std::max_element(processing_ms_samples.begin(), processing_ms_samples.end());
+    summary.max_processing_ms = *std::max_element(processing_ms_samples.begin(),
+                                                  processing_ms_samples.end());
     summary.p95_processing_ms = Percentile(processing_ms_samples, 0.95);
   }
   return summary;
 }
 
 std::string DefaultParamsFile() {
-  return "/home/deep/deeprobotics/passable_humble_ws/src/passable_area/config/passable_area.yaml";
+  return "/home/deep/deeprobotics/passable_humble_ws/src/passable_area/config/"
+         "passable_area.yaml";
 }
 
-std::optional<passable_area::core::Config> LoadConfigFromParamsFile(const std::string &params_file) {
+std::optional<passable_area::core::Config>
+LoadConfigFromParamsFile(const std::string &params_file) {
   if (!std::filesystem::exists(params_file)) {
     std::cerr << "params file does not exist: " << params_file << '\n';
     return std::nullopt;
@@ -1037,8 +1199,8 @@ std::optional<passable_area::core::Config> LoadConfigFromParamsFile(const std::s
   return passable_area::interfaces::ros::RosParamLoader{}.load(*node).config;
 }
 
-std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleReplay(
-    const FalseObstacleReplayArgs &args) {
+std::optional<passable_area::tools::FalseObstacleBagSummary>
+RunFalseObstacleReplay(const FalseObstacleReplayArgs &args) {
   if (!std::filesystem::exists(args.bag_path)) {
     std::cerr << "bag path does not exist: " << args.bag_path << '\n';
     return std::nullopt;
@@ -1074,21 +1236,25 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     } else if (bag_msg->topic_name == "/ODOM") {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
-      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
+                    std::move(odom_msg));
     }
   }
 
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
   passable_area::core::Processor processor(*config);
-  passable_area::tools::FalseObstacleAnalyzer analyzer(*config, args.analyzer_config);
+  passable_area::tools::FalseObstacleAnalyzer analyzer(*config,
+                                                       args.analyzer_config);
 
   int total_frames = 0;
   int rear_dropout_frames = 0;
   int current_candidate_run = 0;
   int longest_candidate_run = 0;
-  std::vector<passable_area::tools::FalseObstacleFrameAnalysis> candidate_frames;
-  const double half_window_sec = static_cast<double>(args.time_window_sec) * 0.5;
+  std::vector<passable_area::tools::FalseObstacleFrameAnalysis>
+      candidate_frames;
+  const double half_window_sec =
+      static_cast<double>(args.time_window_sec) * 0.5;
 
   for (const auto &[stamp, cloud_msg] : clouds) {
     auto odom_it = odoms.find(stamp);
@@ -1097,7 +1263,8 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     }
     passable_area::core::PointCloud cloud;
     passable_area::core::Pose3D pose;
-    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+    if (!cloud_converter.fromRos(cloud_msg, cloud) ||
+        !odom_converter.fromRos(odom_it->second, pose)) {
       continue;
     }
     FrameInput input;
@@ -1112,12 +1279,15 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
     const auto bag_time_it = cloud_bag_times.find(stamp);
     std::optional<double> start_offset_sec;
     if (bag_start_time.has_value() && bag_time_it != cloud_bag_times.end()) {
-      start_offset_sec = static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
+      start_offset_sec =
+          static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
     }
     const bool in_analysis_window =
         !args.use_analysis_window ||
         (start_offset_sec.has_value() &&
-         std::abs(*start_offset_sec - static_cast<double>(args.start_offset_sec)) <= half_window_sec);
+         std::abs(*start_offset_sec -
+                  static_cast<double>(args.start_offset_sec)) <=
+             half_window_sec);
     if (!in_analysis_window) {
       continue;
     }
@@ -1134,18 +1304,20 @@ std::optional<passable_area::tools::FalseObstacleBagSummary> RunFalseObstacleRep
       }
       candidate_frames.push_back(std::move(frame_analysis));
       ++current_candidate_run;
-      longest_candidate_run = std::max(longest_candidate_run, current_candidate_run);
+      longest_candidate_run =
+          std::max(longest_candidate_run, current_candidate_run);
     } else {
       current_candidate_run = 0;
     }
   }
 
-  return analyzer.buildSummary(total_frames, rear_dropout_frames, longest_candidate_run,
+  return analyzer.buildSummary(total_frames, rear_dropout_frames,
+                               longest_candidate_run,
                                std::move(candidate_frames), args.top_k);
 }
 
-std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleReplay(
-    const MissObstacleReplayArgs &args) {
+std::optional<passable_area::tools::MissObstacleBagSummary>
+RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
   if (!std::filesystem::exists(args.bag_path)) {
     std::cerr << "bag path does not exist: " << args.bag_path << '\n';
     return std::nullopt;
@@ -1181,7 +1353,8 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
     } else if (bag_msg->topic_name == "/ODOM") {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
-      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
+                    std::move(odom_msg));
     }
   }
 
@@ -1189,11 +1362,13 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
   passable_area::interfaces::ros::OdomConverter odom_converter;
   passable_area::core::FramePreprocessor preprocessor(*config);
   passable_area::core::Processor processor(*config);
-  passable_area::tools::MissObstacleAnalyzer analyzer(*config, args.analyzer_config);
+  passable_area::tools::MissObstacleAnalyzer analyzer(*config,
+                                                      args.analyzer_config);
 
   int total_frames = 0;
   std::vector<passable_area::tools::MissObstacleFrameAnalysis> candidate_frames;
-  const double half_window_sec = static_cast<double>(args.time_window_sec) * 0.5;
+  const double half_window_sec =
+      static_cast<double>(args.time_window_sec) * 0.5;
 
   for (const auto &[stamp, cloud_msg] : clouds) {
     auto odom_it = odoms.find(stamp);
@@ -1207,11 +1382,13 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
     const double start_offset_sec =
         static_cast<double>(bag_time_it->second - *bag_start_time) * 1e-9;
     const bool in_analysis_window =
-        std::abs(start_offset_sec - static_cast<double>(args.start_offset_sec)) <= half_window_sec;
+        std::abs(start_offset_sec -
+                 static_cast<double>(args.start_offset_sec)) <= half_window_sec;
 
     passable_area::core::PointCloud cloud;
     passable_area::core::Pose3D pose;
-    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+    if (!cloud_converter.fromRos(cloud_msg, cloud) ||
+        !odom_converter.fromRos(odom_it->second, pose)) {
       continue;
     }
     FrameInput input;
@@ -1245,9 +1422,10 @@ std::optional<passable_area::tools::MissObstacleBagSummary> RunMissObstacleRepla
   return analyzer.buildSummary(total_frames, std::move(candidate_frames));
 }
 
-void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::core::Pose3D &base_pose,
-                             const passable_area::core::ProcessedFrame &processed_frame,
-                             double start_offset_sec, const RoiInspectArgs &args) {
+void PrintRoiFrameInspection(
+    const FrameOutput &output, const passable_area::core::Pose3D &base_pose,
+    const passable_area::core::ProcessedFrame &processed_frame,
+    double start_offset_sec, const RoiInspectArgs &args) {
   std::cout << std::fixed << std::setprecision(3);
   const float yaw = std::atan2(
       2.0f * (base_pose.orientation.w() * base_pose.orientation.z() +
@@ -1273,13 +1451,13 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
     roi_sample_min_z = std::min(roi_sample_min_z, relative_z);
     roi_sample_max_z = std::max(roi_sample_max_z, relative_z);
   }
-  std::cout << "frame_offset_sec=" << start_offset_sec << " base_pose=(" << base_pose.position.x()
-            << ", " << base_pose.position.y() << ", " << base_pose.position.z()
-            << ") roi_frame=base_gravity"
+  std::cout << "frame_offset_sec=" << start_offset_sec << " base_pose=("
+            << base_pose.position.x() << ", " << base_pose.position.y() << ", "
+            << base_pose.position.z() << ") roi_frame=base_gravity"
             << " roi_samples=" << roi_sample_count;
   if (roi_sample_count > 0) {
-    std::cout << " roi_sample_relative_z=[" << roi_sample_min_z << ", " << roi_sample_max_z
-              << "]";
+    std::cout << " roi_sample_relative_z=[" << roi_sample_min_z << ", "
+              << roi_sample_max_z << "]";
   }
   std::cout << "\n";
   int roi_total = 0;
@@ -1289,14 +1467,19 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
   int roi_rejected = 0;
   int roi_upper = 0;
   float roi_max_obstacle_evidence = 0.0f;
-  std::vector<int> roi_sample_count_by_cell(static_cast<size_t>(output.rows * output.cols), 0);
-  std::vector<float> roi_sample_min_z_by_cell(static_cast<size_t>(output.rows * output.cols),
-                                              std::numeric_limits<float>::infinity());
-  std::vector<float> roi_sample_max_z_by_cell(static_cast<size_t>(output.rows * output.cols),
-                                              -std::numeric_limits<float>::infinity());
+  std::vector<int> roi_sample_count_by_cell(
+      static_cast<size_t>(output.rows * output.cols), 0);
+  std::vector<float> roi_sample_min_z_by_cell(
+      static_cast<size_t>(output.rows * output.cols),
+      std::numeric_limits<float>::infinity());
+  std::vector<float> roi_sample_max_z_by_cell(
+      static_cast<size_t>(output.rows * output.cols),
+      -std::numeric_limits<float>::infinity());
   for (const auto &sample : processed_frame.odom_samples) {
-    const float fx = (sample.point_in_odom.x - output.origin.x()) / output.resolution;
-    const float fy = (sample.point_in_odom.y - output.origin.y()) / output.resolution;
+    const float fx =
+        (sample.point_in_odom.x - output.origin.x()) / output.resolution;
+    const float fy =
+        (sample.point_in_odom.y - output.origin.y()) / output.resolution;
     const int col = static_cast<int>(std::floor(fx));
     const int row = static_cast<int>(std::floor(fy));
     if (row < 0 || row >= output.rows || col < 0 || col >= output.cols) {
@@ -1313,16 +1496,18 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
     }
     ++roi_sample_count_by_cell[static_cast<size_t>(cell)];
     roi_sample_min_z_by_cell[static_cast<size_t>(cell)] =
-        std::min(roi_sample_min_z_by_cell[static_cast<size_t>(cell)], sample.point_in_odom.z);
+        std::min(roi_sample_min_z_by_cell[static_cast<size_t>(cell)],
+                 sample.point_in_odom.z);
     roi_sample_max_z_by_cell[static_cast<size_t>(cell)] =
-        std::max(roi_sample_max_z_by_cell[static_cast<size_t>(cell)], sample.point_in_odom.z);
+        std::max(roi_sample_max_z_by_cell[static_cast<size_t>(cell)],
+                 sample.point_in_odom.z);
   }
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
-      const float odom_x =
-          output.origin.x() + (static_cast<float>(col) + 0.5f) * output.resolution;
-      const float odom_y =
-          output.origin.y() + (static_cast<float>(row) + 0.5f) * output.resolution;
+      const float odom_x = output.origin.x() +
+                           (static_cast<float>(col) + 0.5f) * output.resolution;
+      const float odom_y = output.origin.y() +
+                           (static_cast<float>(row) + 0.5f) * output.resolution;
       const float dx = odom_x - base_pose.position.x();
       const float dy = odom_y - base_pose.position.y();
       const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
@@ -1333,9 +1518,11 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
       }
       const int idx = row * output.cols + col;
       ++roi_total;
-      if (output.passability[idx] == static_cast<int8_t>(PassabilityState::kImpassable)) {
+      if (output.passability[idx] ==
+          static_cast<int8_t>(PassabilityState::kImpassable)) {
         ++roi_impassable;
-      } else if (output.passability[idx] == static_cast<int8_t>(PassabilityState::kPassable)) {
+      } else if (output.passability[idx] ==
+                 static_cast<int8_t>(PassabilityState::kPassable)) {
         ++roi_passable;
       } else {
         ++roi_unknown;
@@ -1350,17 +1537,18 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
           std::max(roi_max_obstacle_evidence, output.obstacle_evidence[idx]);
     }
   }
-  std::cout << "roi_summary total=" << roi_total << " impassable=" << roi_impassable
-            << " passable=" << roi_passable << " unknown=" << roi_unknown
-            << " rejected=" << roi_rejected << " upper_support=" << roi_upper
+  std::cout << "roi_summary total=" << roi_total
+            << " impassable=" << roi_impassable << " passable=" << roi_passable
+            << " unknown=" << roi_unknown << " rejected=" << roi_rejected
+            << " upper_support=" << roi_upper
             << " max_obstacle_evidence=" << roi_max_obstacle_evidence << "\n";
 
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
-      const float odom_x =
-          output.origin.x() + (static_cast<float>(col) + 0.5f) * output.resolution;
-      const float odom_y =
-          output.origin.y() + (static_cast<float>(row) + 0.5f) * output.resolution;
+      const float odom_x = output.origin.x() +
+                           (static_cast<float>(col) + 0.5f) * output.resolution;
+      const float odom_y = output.origin.y() +
+                           (static_cast<float>(row) + 0.5f) * output.resolution;
       const float dx = odom_x - base_pose.position.x();
       const float dy = odom_y - base_pose.position.y();
       const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
@@ -1370,27 +1558,35 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
         continue;
       }
       const int idx = row * output.cols + col;
-      std::cout << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
-                << " odom_x=" << odom_x << " odom_y=" << odom_y
-                << " sample_count=" << roi_sample_count_by_cell[static_cast<size_t>(idx)]
-                << " sample_min_z=" << roi_sample_min_z_by_cell[static_cast<size_t>(idx)]
-                << " sample_max_z=" << roi_sample_max_z_by_cell[static_cast<size_t>(idx)]
+      std::cout << "  cell base_x=" << base_gravity_x
+                << " base_y=" << base_gravity_y << " odom_x=" << odom_x
+                << " odom_y=" << odom_y << " sample_count="
+                << roi_sample_count_by_cell[static_cast<size_t>(idx)]
+                << " sample_min_z="
+                << roi_sample_min_z_by_cell[static_cast<size_t>(idx)]
+                << " sample_max_z="
+                << roi_sample_max_z_by_cell[static_cast<size_t>(idx)]
                 << " passability=" << static_cast<int>(output.passability[idx])
                 << " support_h=" << output.support_height[idx]
                 << " overhead_h=" << output.overhead_height[idx]
                 << " obstacle_evidence=" << output.obstacle_evidence[idx]
                 << " support_anchor=" << output.support_anchor_used[idx]
                 << " leak_count=" << output.sub_support_leak_count[idx]
-                << " raw_upper=" << static_cast<int>(output.raw_upper_support_cell[idx])
+                << " raw_upper="
+                << static_cast<int>(output.raw_upper_support_cell[idx])
                 << " adjusted_upper="
-                << static_cast<int>(output.explanation_adjusted_upper_support_cell[idx])
+                << static_cast<int>(
+                       output.explanation_adjusted_upper_support_cell[idx])
                 << " upper=" << static_cast<int>(output.upper_support_cell[idx])
-                << " suspicious=" << static_cast<int>(output.obstacle_suspicious[idx])
-                << " rejected=" << static_cast<int>(output.obstacle_rejected_by_neighbor_support[idx])
-                << " neighbor_upper=" << static_cast<int>(output.neighbor_upper_support_count[idx])
+                << " suspicious="
+                << static_cast<int>(output.obstacle_suspicious[idx])
+                << " rejected="
+                << static_cast<int>(
+                       output.obstacle_rejected_by_neighbor_support[idx])
+                << " neighbor_upper="
+                << static_cast<int>(output.neighbor_upper_support_count[idx])
                 << " coverage=" << output.coverage_confidence[idx]
-                << " support_conf=" << output.support_confidence[idx]
-                << "\n";
+                << " support_conf=" << output.support_confidence[idx] << "\n";
     }
   }
 }
@@ -1430,7 +1626,8 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
     } else if (bag_msg->topic_name == "/ODOM") {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
-      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(), std::move(odom_msg));
+      odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
+                    std::move(odom_msg));
     }
   }
 
@@ -1439,7 +1636,8 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
   passable_area::core::FramePreprocessor preprocessor(*config);
   passable_area::core::Processor processor(*config);
   int printed_frames = 0;
-  const double half_window_sec = static_cast<double>(args.time_window_sec) * 0.5;
+  const double half_window_sec =
+      static_cast<double>(args.time_window_sec) * 0.5;
 
   for (const auto &[stamp, cloud_msg] : clouds) {
     auto odom_it = odoms.find(stamp);
@@ -1455,7 +1653,8 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
 
     passable_area::core::PointCloud cloud;
     passable_area::core::Pose3D pose;
-    if (!cloud_converter.fromRos(cloud_msg, cloud) || !odom_converter.fromRos(odom_it->second, pose)) {
+    if (!cloud_converter.fromRos(cloud_msg, cloud) ||
+        !odom_converter.fromRos(odom_it->second, pose)) {
       continue;
     }
     FrameInput input;
@@ -1470,10 +1669,13 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
     if (!output.valid) {
       continue;
     }
-    if (std::abs(start_offset_sec - static_cast<double>(args.start_offset_sec)) > half_window_sec) {
+    if (std::abs(start_offset_sec -
+                 static_cast<double>(args.start_offset_sec)) >
+        half_window_sec) {
       continue;
     }
-    PrintRoiFrameInspection(output, pose, processed_frame, start_offset_sec, args);
+    PrintRoiFrameInspection(output, pose, processed_frame, start_offset_sec,
+                            args);
     ++printed_frames;
   }
   return printed_frames;
@@ -1496,7 +1698,8 @@ int main(int argc, char **argv) {
       rclcpp::shutdown();
       return 1;
     }
-    PrintMissObstacleSummary(*summary, *replay_args, TerminalStyle{replay_args->use_color});
+    PrintMissObstacleSummary(*summary, *replay_args,
+                             TerminalStyle{replay_args->use_color});
     rclcpp::shutdown();
     return 0;
   }
@@ -1528,21 +1731,23 @@ int main(int argc, char **argv) {
       rclcpp::shutdown();
       return 1;
     }
-    PrintFalseObstacleSummary(*summary, replay_args->bag_path, replay_args->params_file,
-                              *replay_args, TerminalStyle{replay_args->use_color});
+    PrintFalseObstacleSummary(*summary, replay_args->bag_path,
+                              replay_args->params_file, *replay_args,
+                              TerminalStyle{replay_args->use_color});
     rclcpp::shutdown();
     return 0;
   }
 
-  if (HasFlag(args, "--benchmark-timing") || (args.size() >= 2 && args[0] == "--bag")) {
+  if (HasFlag(args, "--benchmark-timing") ||
+      (args.size() >= 2 && args[0] == "--bag")) {
     const auto bag_path = ParseStringFlagValue(args, "--bag");
     if (!bag_path) {
       std::cerr << "timing benchmark requires --bag <path>\n";
       rclcpp::shutdown();
       return 1;
     }
-    const std::string params_file =
-        ParseStringFlagValue(args, "--params-file").value_or(DefaultParamsFile());
+    const std::string params_file = ParseStringFlagValue(args, "--params-file")
+                                        .value_or(DefaultParamsFile());
     const auto config = LoadConfigFromParamsFile(params_file);
     if (!config) {
       rclcpp::shutdown();
@@ -1565,12 +1770,14 @@ int main(int argc, char **argv) {
               << " avg_unknown_ratio=" << std::fixed << std::setprecision(3)
               << summary->avg_unknown_ratio
               << " max_unknown_ratio=" << summary->max_unknown_ratio
-              << " avg_input_points=" << std::setprecision(1) << summary->avg_input_point_count
-              << " max_input_points=" << std::setprecision(0) << summary->max_input_point_count
-              << " avg_processing_ms=" << std::setprecision(3) << summary->avg_processing_ms
+              << " avg_input_points=" << std::setprecision(1)
+              << summary->avg_input_point_count
+              << " max_input_points=" << std::setprecision(0)
+              << summary->max_input_point_count
+              << " avg_processing_ms=" << std::setprecision(3)
+              << summary->avg_processing_ms
               << " max_processing_ms=" << summary->max_processing_ms
-              << " p95_processing_ms=" << summary->p95_processing_ms
-              << '\n';
+              << " p95_processing_ms=" << summary->p95_processing_ms << '\n';
     rclcpp::shutdown();
     return 0;
   }

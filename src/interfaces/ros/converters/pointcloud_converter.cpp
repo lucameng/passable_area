@@ -8,8 +8,9 @@
 
 namespace passable_area::interfaces::ros {
 
-bool PointCloudConverter::fromRos(const sensor_msgs::msg::PointCloud2 &msg,
-                                  passable_area::core::PointCloud &cloud) const {
+bool PointCloudConverter::fromRos(
+    const sensor_msgs::msg::PointCloud2 &msg,
+    passable_area::core::PointCloud &cloud) const {
   pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
   try {
     pcl::fromROSMsg(msg, pcl_cloud);

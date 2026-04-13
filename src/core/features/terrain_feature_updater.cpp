@@ -7,7 +7,8 @@
 
 namespace passable_area::core {
 
-void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells, LocalTerrainMap &map) const {
+void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells,
+                                   LocalTerrainMap &map) const {
   auto &layers = map.layers();
   std::unordered_set<int> expanded;
   for (const int cell : dirty_cells) {
@@ -69,14 +70,16 @@ void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells, LocalTer
     layers.step_up[cell] = max_up;
     layers.step_down[cell] = max_down;
     layers.roughness[cell] =
-        valid_neighbors > 0 ? std::sqrt(rough / static_cast<float>(valid_neighbors)) : 0.0f;
-    layers.slope[cell] = std::atan(max_up / std::max(map.resolution(), 1e-3f)) * 180.0f /
-                         static_cast<float>(M_PI);
+        valid_neighbors > 0
+            ? std::sqrt(rough / static_cast<float>(valid_neighbors))
+            : 0.0f;
+    layers.slope[cell] = std::atan(max_up / std::max(map.resolution(), 1e-3f)) *
+                         180.0f / static_cast<float>(M_PI);
     layers.clearance[cell] = std::isfinite(layers.overhead_height[cell])
                                  ? layers.overhead_height[cell] - h
                                  : std::numeric_limits<float>::infinity();
-    layers.support_continuity[cell] =
-        static_cast<float>(valid_neighbors) / 8.0f * layers.support_confidence[cell];
+    layers.support_continuity[cell] = static_cast<float>(valid_neighbors) /
+                                      8.0f * layers.support_confidence[cell];
   }
 }
 

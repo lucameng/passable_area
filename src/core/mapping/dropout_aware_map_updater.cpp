@@ -15,9 +15,10 @@ void ClearObstacleLayer(TerrainLayers &layers, int cell) {
 
 } // namespace
 
-std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
-                                                const FrameObservability &observability,
-                                                LocalTerrainMap &map) const {
+std::vector<int>
+DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
+                               const FrameObservability &observability,
+                               LocalTerrainMap &map) const {
   map.ageCells();
   auto &layers = map.layers();
   std::unordered_set<int> dirty_set;
@@ -28,12 +29,13 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
 
   const auto sector_state_for_cell = [&](int cell) {
     const auto cell_center = map.indexToOdom(cell);
-    const float angle = std::atan2(cell_center.y() - map.center().y(), cell_center.x() - map.center().x());
+    const float angle = std::atan2(cell_center.y() - map.center().y(),
+                                   cell_center.x() - map.center().x());
     const float normalized = angle + static_cast<float>(M_PI);
     const int sector = std::clamp(
-        static_cast<int>(std::floor(normalized /
-                                    (2.0f * static_cast<float>(M_PI) /
-                                     static_cast<float>(observability.sectors.size())))),
+        static_cast<int>(std::floor(
+            normalized / (2.0f * static_cast<float>(M_PI) /
+                          static_cast<float>(observability.sectors.size())))),
         0, static_cast<int>(observability.sectors.size()) - 1);
     return observability.sectors[sector];
   };
@@ -41,45 +43,48 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
   for (const auto &candidate : frontend_output.support_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
     layers.support_height[candidate.cell] = candidate.z;
-    layers.support_confidence[candidate.cell] =
-        std::clamp(layers.support_confidence[candidate.cell] +
-                       config_.persistence.support_confidence_gain * candidate.confidence,
-                   0.0f, 1.0f);
-    layers.coverage_confidence[candidate.cell] =
-        std::max(layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
-    layers.support_state[candidate.cell] = static_cast<uint8_t>(SupportState::kObserved);
+    layers.support_confidence[candidate.cell] = std::clamp(
+        layers.support_confidence[candidate.cell] +
+            config_.persistence.support_confidence_gain * candidate.confidence,
+        0.0f, 1.0f);
+    layers.coverage_confidence[candidate.cell] = std::max(
+        layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
+    layers.support_state[candidate.cell] =
+        static_cast<uint8_t>(SupportState::kObserved);
     layers.last_observed_age[candidate.cell] = 0;
     if (sector.state == ObservabilityState::kObserved) {
       layers.last_reliable_age[candidate.cell] = 0;
     }
-    layers.last_sector_state[candidate.cell] = static_cast<uint8_t>(sector.state);
+    layers.last_sector_state[candidate.cell] =
+        static_cast<uint8_t>(sector.state);
     touched_support[candidate.cell] = 1U;
     dirty_set.insert(candidate.cell);
   }
 
   for (const auto &candidate : frontend_output.obstacle_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
-    const float evidence_gain =
-        config_.persistence.obstacle_evidence_gain * std::max(1.0f, candidate.gain_scale);
+    const float evidence_gain = config_.persistence.obstacle_evidence_gain *
+                                std::max(1.0f, candidate.gain_scale);
     layers.overhead_height[candidate.cell] = candidate.z;
-    layers.overhead_confidence[candidate.cell] =
-        std::clamp(layers.overhead_confidence[candidate.cell] + evidence_gain,
-                   0.0f, 1.0f);
+    layers.overhead_confidence[candidate.cell] = std::clamp(
+        layers.overhead_confidence[candidate.cell] + evidence_gain, 0.0f, 1.0f);
     layers.obstacle_evidence[candidate.cell] =
         std::clamp(layers.obstacle_evidence[candidate.cell] +
                        evidence_gain * candidate.evidence,
                    0.0f, 1.0f);
-    layers.coverage_confidence[candidate.cell] =
-        std::max(layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
-    layers.last_sector_state[candidate.cell] = static_cast<uint8_t>(sector.state);
+    layers.coverage_confidence[candidate.cell] = std::max(
+        layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
+    layers.last_sector_state[candidate.cell] =
+        static_cast<uint8_t>(sector.state);
     touched_obstacle[candidate.cell] = 1U;
     dirty_set.insert(candidate.cell);
   }
 
   for (int cell = 0; cell < map.size(); ++cell) {
     const auto sector = sector_state_for_cell(cell);
-    layers.coverage_confidence[cell] = std::max(layers.coverage_confidence[cell] * 0.92f,
-                                                sector.coverage_confidence * 0.85f);
+    layers.coverage_confidence[cell] =
+        std::max(layers.coverage_confidence[cell] * 0.92f,
+                 sector.coverage_confidence * 0.85f);
     if (!touched_support[cell]) {
       float support_decay = 0.0f;
       if (sector.state == ObservabilityState::kObserved) {
@@ -97,7 +102,8 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
       const bool support_reobserved = touched_support[cell] != 0U;
       if (support_reobserved && sector.state == ObservabilityState::kObserved) {
         obstacle_decay = config_.persistence.obstacle_clear_observed_decay;
-      } else if (support_reobserved && sector.state == ObservabilityState::kPartiallyObserved) {
+      } else if (support_reobserved &&
+                 sector.state == ObservabilityState::kPartiallyObserved) {
         obstacle_decay = config_.persistence.obstacle_clear_observed_decay *
                          config_.persistence.obstacle_clear_partial_decay_scale;
       } else if (sector.state == ObservabilityState::kObserved) {
@@ -117,7 +123,8 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
 
     if (touched_support[cell]) {
       if (!touched_obstacle[cell] &&
-          layers.obstacle_evidence[cell] <= config_.persistence.obstacle_height_clear_threshold) {
+          layers.obstacle_evidence[cell] <=
+              config_.persistence.obstacle_height_clear_threshold) {
         ClearObstacleLayer(layers, cell);
       }
       continue;
@@ -125,16 +132,20 @@ std::vector<int> DropoutAwareMapUpdater::update(const FrontendOutput &frontend_o
 
     const bool persistent_allowed =
         layers.last_reliable_age[cell] <=
-        static_cast<uint16_t>(std::max(1, config_.persistence.support_persistence_frames));
-    if (layers.support_confidence[cell] >= config_.observability.min_support_confidence &&
+        static_cast<uint16_t>(
+            std::max(1, config_.persistence.support_persistence_frames));
+    if (layers.support_confidence[cell] >=
+            config_.observability.min_support_confidence &&
         persistent_allowed) {
-      layers.support_state[cell] = static_cast<uint8_t>(SupportState::kPersistent);
+      layers.support_state[cell] =
+          static_cast<uint8_t>(SupportState::kPersistent);
     } else if (layers.support_confidence[cell] <=
                    config_.observability.min_support_confidence * 0.5f ||
                !persistent_allowed) {
       layers.support_state[cell] = static_cast<uint8_t>(SupportState::kNone);
       layers.support_height[cell] = std::numeric_limits<float>::quiet_NaN();
-      if (layers.obstacle_evidence[cell] <= config_.persistence.obstacle_height_clear_threshold) {
+      if (layers.obstacle_evidence[cell] <=
+          config_.persistence.obstacle_height_clear_threshold) {
         ClearObstacleLayer(layers, cell);
       }
     }

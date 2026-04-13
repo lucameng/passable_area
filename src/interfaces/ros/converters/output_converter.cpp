@@ -27,49 +27,63 @@ struct RobotCentricResamplingPlan {
   std::vector<grid_map::Index> grid_map_indices;
 };
 
-RobotCentricGeometry MakeRobotCentricGeometry(const passable_area::core::FrameOutput &output) {
+RobotCentricGeometry
+MakeRobotCentricGeometry(const passable_area::core::FrameOutput &output) {
   RobotCentricGeometry geometry;
   geometry.rows = output.rows;
   geometry.cols = output.cols;
   geometry.resolution = output.resolution;
-  geometry.length = grid_map::Length(output.cols * output.resolution, output.rows * output.resolution);
+  geometry.length = grid_map::Length(output.cols * output.resolution,
+                                     output.rows * output.resolution);
   geometry.center = grid_map::Position(0.0, 0.0);
   geometry.origin = Eigen::Vector2f(-0.5f * output.cols * output.resolution,
                                     -0.5f * output.rows * output.resolution);
   return geometry;
 }
 
-Eigen::Vector2f CellCenter(const RobotCentricGeometry &geometry, int row, int col) {
-  return Eigen::Vector2f(geometry.origin.x() + (static_cast<float>(col) + 0.5f) * geometry.resolution,
-                         geometry.origin.y() + (static_cast<float>(row) + 0.5f) * geometry.resolution);
+Eigen::Vector2f CellCenter(const RobotCentricGeometry &geometry, int row,
+                           int col) {
+  return Eigen::Vector2f(
+      geometry.origin.x() +
+          (static_cast<float>(col) + 0.5f) * geometry.resolution,
+      geometry.origin.y() +
+          (static_cast<float>(row) + 0.5f) * geometry.resolution);
 }
 
-bool OdomCellIndexForBaseGravityCell(const passable_area::core::FrameOutput &output,
-                                     const RobotCentricGeometry &geometry, int row, int col,
-                                     int &source_index) {
+bool OdomCellIndexForBaseGravityCell(
+    const passable_area::core::FrameOutput &output,
+    const RobotCentricGeometry &geometry, int row, int col, int &source_index) {
   const Eigen::Vector2f point_in_base_gravity = CellCenter(geometry, row, col);
-  const float yaw = passable_area::core::YawFromQuaternion(output.base_pose_in_odom.orientation);
+  const float yaw = passable_area::core::YawFromQuaternion(
+      output.base_pose_in_odom.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
-  const float odom_x = output.base_pose_in_odom.position.x() + cos_yaw * point_in_base_gravity.x() -
+  const float odom_x = output.base_pose_in_odom.position.x() +
+                       cos_yaw * point_in_base_gravity.x() -
                        sin_yaw * point_in_base_gravity.y();
-  const float odom_y = output.base_pose_in_odom.position.y() + sin_yaw * point_in_base_gravity.x() +
+  const float odom_y = output.base_pose_in_odom.position.y() +
+                       sin_yaw * point_in_base_gravity.x() +
                        cos_yaw * point_in_base_gravity.y();
-  const int source_col = static_cast<int>(std::floor((odom_x - output.origin.x()) / output.resolution));
-  const int source_row = static_cast<int>(std::floor((odom_y - output.origin.y()) / output.resolution));
-  if (source_row < 0 || source_row >= output.rows || source_col < 0 || source_col >= output.cols) {
+  const int source_col = static_cast<int>(
+      std::floor((odom_x - output.origin.x()) / output.resolution));
+  const int source_row = static_cast<int>(
+      std::floor((odom_y - output.origin.y()) / output.resolution));
+  if (source_row < 0 || source_row >= output.rows || source_col < 0 ||
+      source_col >= output.cols) {
     return false;
   }
   source_index = source_row * output.cols + source_col;
   return true;
 }
 
-RobotCentricResamplingPlan MakeResamplingPlan(const passable_area::core::FrameOutput &output) {
+RobotCentricResamplingPlan
+MakeResamplingPlan(const passable_area::core::FrameOutput &output) {
   RobotCentricResamplingPlan plan;
   plan.geometry = MakeRobotCentricGeometry(output);
   const int cell_count = plan.geometry.rows * plan.geometry.cols;
   plan.source_indices.assign(static_cast<size_t>(cell_count), -1);
-  plan.grid_map_indices.resize(static_cast<size_t>(cell_count), grid_map::Index::Zero());
+  plan.grid_map_indices.resize(static_cast<size_t>(cell_count),
+                               grid_map::Index::Zero());
   const grid_map::Size buffer_size(plan.geometry.rows, plan.geometry.cols);
 
   for (int row = 0; row < plan.geometry.rows; ++row) {
@@ -81,10 +95,12 @@ RobotCentricResamplingPlan MakeResamplingPlan(const passable_area::core::FrameOu
       const auto position = CellCenter(plan.geometry, row, col);
       grid_map::Index index;
       const bool inside = grid_map::getIndexFromPosition(
-          index, grid_map::Position(position.x(), position.y()), plan.geometry.length,
-          plan.geometry.center, plan.geometry.resolution, buffer_size);
+          index, grid_map::Position(position.x(), position.y()),
+          plan.geometry.length, plan.geometry.center, plan.geometry.resolution,
+          buffer_size);
       if (!inside) {
-        throw std::runtime_error("Robot-centric grid_map geometry lookup failed");
+        throw std::runtime_error(
+            "Robot-centric grid_map geometry lookup failed");
       }
       plan.grid_map_indices[target_index] = index;
     }
@@ -94,12 +110,15 @@ RobotCentricResamplingPlan MakeResamplingPlan(const passable_area::core::FrameOu
 }
 
 template <typename T>
-std::vector<T> ResampleLayer(const RobotCentricResamplingPlan &plan, const std::vector<T> &source_values,
+std::vector<T> ResampleLayer(const RobotCentricResamplingPlan &plan,
+                             const std::vector<T> &source_values,
                              const T &default_value) {
   std::vector<T> resampled(plan.source_indices.size(), default_value);
-  for (size_t target_index = 0; target_index < plan.source_indices.size(); ++target_index) {
+  for (size_t target_index = 0; target_index < plan.source_indices.size();
+       ++target_index) {
     const int source_index = plan.source_indices[target_index];
-    if (source_index < 0 || static_cast<size_t>(source_index) >= source_values.size()) {
+    if (source_index < 0 ||
+        static_cast<size_t>(source_index) >= source_values.size()) {
       continue;
     }
     resampled[target_index] = source_values[static_cast<size_t>(source_index)];
@@ -122,7 +141,8 @@ nav_msgs::msg::OccupancyGrid CreateGrid(const RobotCentricResamplingPlan &plan,
   return msg;
 }
 
-void AddLayer(grid_map::GridMap &map, const std::string &name, const RobotCentricResamplingPlan &plan,
+void AddLayer(grid_map::GridMap &map, const std::string &name,
+              const RobotCentricResamplingPlan &plan,
               const std::vector<float> &values) {
   grid_map::Matrix matrix(plan.geometry.rows, plan.geometry.cols);
   matrix.setConstant(std::numeric_limits<float>::quiet_NaN());
@@ -147,34 +167,48 @@ OutputConverter::toTerrainCost(const passable_area::core::FrameOutput &output,
   return toMapOutputs(output, header).terrain_cost;
 }
 
-ConvertedMapOutputs OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
-                                                  const std_msgs::msg::Header &header) const {
+ConvertedMapOutputs
+OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
+                              const std_msgs::msg::Header &header) const {
   const auto plan = MakeResamplingPlan(output);
-  const auto passability = ResampleLayer(plan, output.passability, static_cast<int8_t>(-1));
-  const auto traversal_cost = ResampleLayer(plan, output.traversal_cost, static_cast<int8_t>(-1));
-  grid_map::GridMap map({"support_height", "support_confidence", "overhead_height",
-                         "obstacle_evidence", "coverage_confidence", "slope", "step_up",
-                         "step_down", "roughness", "clearance", "support_continuity",
-                         "support_anchor_used", "sub_support_leak_count", "passability"});
+  const auto passability =
+      ResampleLayer(plan, output.passability, static_cast<int8_t>(-1));
+  const auto traversal_cost =
+      ResampleLayer(plan, output.traversal_cost, static_cast<int8_t>(-1));
+  grid_map::GridMap map(
+      {"support_height", "support_confidence", "overhead_height",
+       "obstacle_evidence", "coverage_confidence", "slope", "step_up",
+       "step_down", "roughness", "clearance", "support_continuity",
+       "support_anchor_used", "sub_support_leak_count", "passability"});
   map.setFrameId(header.frame_id);
-  map.setGeometry(plan.geometry.length, plan.geometry.resolution, plan.geometry.center);
+  map.setGeometry(plan.geometry.length, plan.geometry.resolution,
+                  plan.geometry.center);
   AddLayer(map, "support_height", plan,
-           ResampleLayer(plan, output.support_height, std::numeric_limits<float>::quiet_NaN()));
-  AddLayer(map, "support_confidence", plan, ResampleLayer(plan, output.support_confidence, 0.0f));
+           ResampleLayer(plan, output.support_height,
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "support_confidence", plan,
+           ResampleLayer(plan, output.support_confidence, 0.0f));
   AddLayer(map, "overhead_height", plan,
-           ResampleLayer(plan, output.overhead_height, std::numeric_limits<float>::quiet_NaN()));
-  AddLayer(map, "obstacle_evidence", plan, ResampleLayer(plan, output.obstacle_evidence, 0.0f));
-  AddLayer(map, "coverage_confidence", plan, ResampleLayer(plan, output.coverage_confidence, 0.0f));
+           ResampleLayer(plan, output.overhead_height,
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "obstacle_evidence", plan,
+           ResampleLayer(plan, output.obstacle_evidence, 0.0f));
+  AddLayer(map, "coverage_confidence", plan,
+           ResampleLayer(plan, output.coverage_confidence, 0.0f));
   AddLayer(map, "slope", plan, ResampleLayer(plan, output.slope, 0.0f));
   AddLayer(map, "step_up", plan, ResampleLayer(plan, output.step_up, 0.0f));
   AddLayer(map, "step_down", plan, ResampleLayer(plan, output.step_down, 0.0f));
   AddLayer(map, "roughness", plan, ResampleLayer(plan, output.roughness, 0.0f));
   AddLayer(map, "clearance", plan,
-           ResampleLayer(plan, output.clearance, std::numeric_limits<float>::quiet_NaN()));
-  AddLayer(map, "support_continuity", plan, ResampleLayer(plan, output.support_continuity, 0.0f));
+           ResampleLayer(plan, output.clearance,
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "support_continuity", plan,
+           ResampleLayer(plan, output.support_continuity, 0.0f));
   AddLayer(map, "support_anchor_used", plan,
-           ResampleLayer(plan, output.support_anchor_used, std::numeric_limits<float>::quiet_NaN()));
-  std::vector<float> sub_support_leak_count_float(output.sub_support_leak_count.size(), 0.0f);
+           ResampleLayer(plan, output.support_anchor_used,
+                         std::numeric_limits<float>::quiet_NaN()));
+  std::vector<float> sub_support_leak_count_float(
+      output.sub_support_leak_count.size(), 0.0f);
   for (size_t i = 0; i < output.sub_support_leak_count.size(); ++i) {
     sub_support_leak_count_float[i] =
         static_cast<float>(output.sub_support_leak_count[i]);
@@ -193,8 +227,9 @@ ConvertedMapOutputs OutputConverter::toMapOutputs(const passable_area::core::Fra
   return outputs;
 }
 
-grid_map_msgs::msg::GridMap OutputConverter::toGridMap(
-    const passable_area::core::FrameOutput &output, const std_msgs::msg::Header &header) const {
+grid_map_msgs::msg::GridMap
+OutputConverter::toGridMap(const passable_area::core::FrameOutput &output,
+                           const std_msgs::msg::Header &header) const {
   return toMapOutputs(output, header).grid_map;
 }
 

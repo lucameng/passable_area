@@ -21,7 +21,8 @@ float NormalizeAngle(float angle) {
 
 } // namespace
 
-FrameObservability FrameObservabilityEstimator::estimate(const ProcessedFrame &frame) const {
+FrameObservability
+FrameObservabilityEstimator::estimate(const ProcessedFrame &frame) const {
   FrameObservability result;
   result.sectors.resize(config_.observability.sector_count);
   result.base_point_count = static_cast<uint32_t>(frame.cloud_in_base.size());
@@ -36,12 +37,14 @@ FrameObservability FrameObservabilityEstimator::estimate(const ProcessedFrame &f
   }
 
   std::vector<int> counts(config_.observability.sector_count, 0);
-  const float angle_per_sector = 2.0f * kPi / static_cast<float>(config_.observability.sector_count);
+  const float angle_per_sector =
+      2.0f * kPi / static_cast<float>(config_.observability.sector_count);
   for (const auto &point : frame.cloud_in_base) {
     const float angle = std::atan2(point.y, point.x);
-    const int sector = std::clamp(
-        static_cast<int>(std::floor((NormalizeAngle(angle) + kPi) / angle_per_sector)), 0,
-        config_.observability.sector_count - 1);
+    const int sector =
+        std::clamp(static_cast<int>(std::floor((NormalizeAngle(angle) + kPi) /
+                                               angle_per_sector)),
+                   0, config_.observability.sector_count - 1);
     ++counts[sector];
   }
 
@@ -53,12 +56,14 @@ FrameObservability FrameObservabilityEstimator::estimate(const ProcessedFrame &f
   std::vector<int> current_gap_indices;
 
   for (int sector = 0; sector < config_.observability.sector_count; ++sector) {
-    const float angle = -kPi + (static_cast<float>(sector) + 0.5f) * angle_per_sector;
+    const float angle =
+        -kPi + (static_cast<float>(sector) + 0.5f) * angle_per_sector;
     auto &state = result.sectors[sector];
     const bool rear = std::abs(angle) > kPi / 2.0f;
     const float coverage = std::min(
         1.0f, static_cast<float>(counts[sector]) /
-                  static_cast<float>(std::max(config_.observability.min_points_per_sector, 1)));
+                  static_cast<float>(std::max(
+                      config_.observability.min_points_per_sector, 1)));
     state.coverage_confidence = coverage;
     if (rear) {
       rear_points += counts[sector];
@@ -90,7 +95,8 @@ FrameObservability FrameObservabilityEstimator::estimate(const ProcessedFrame &f
   }
 
   const bool rear_starved = rear_points * 2 < std::max(front_points, 1);
-  if (rear_starved && max_rear_gap >= config_.observability.dropout_sector_gap_threshold) {
+  if (rear_starved &&
+      max_rear_gap >= config_.observability.dropout_sector_gap_threshold) {
     result.rear_dropout = true;
     result.frame_partial = true;
     for (const int sector : rear_gap_sectors) {

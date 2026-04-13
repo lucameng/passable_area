@@ -8,8 +8,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <memory>
 
@@ -64,19 +64,22 @@ FrameOutput MakeDebugOutput() {
   output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.sub_support_leak_count.assign(9, 0U);
   output.support_state.assign(9, 0U);
-  output.unknown_points.push_back(passable_area::core::MakeCellDebugPointWithoutSource(
-      {0.0f, 0.0f, 0.0f}));
+  output.unknown_points.push_back(
+      passable_area::core::MakeCellDebugPointWithoutSource({0.0f, 0.0f, 0.0f}));
   output.observability.sectors.resize(1);
   output.observability.sectors.front().state = ObservabilityState::kObserved;
   output.observability.sectors.front().coverage_confidence = 1.0f;
   return output;
 }
 
-int IndexForCellCenter(const nav_msgs::msg::OccupancyGrid &grid, float x, float y) {
+int IndexForCellCenter(const nav_msgs::msg::OccupancyGrid &grid, float x,
+                       float y) {
   const int col = static_cast<int>(
-      std::floor((x - static_cast<float>(grid.info.origin.position.x)) / grid.info.resolution));
+      std::floor((x - static_cast<float>(grid.info.origin.position.x)) /
+                 grid.info.resolution));
   const int row = static_cast<int>(
-      std::floor((y - static_cast<float>(grid.info.origin.position.y)) / grid.info.resolution));
+      std::floor((y - static_cast<float>(grid.info.origin.position.y)) /
+                 grid.info.resolution));
   return row * static_cast<int>(grid.info.width) + col;
 }
 
@@ -101,11 +104,15 @@ TEST_F(RosFixture, UnknownMaskAndObservabilityStayInBaseGravityContext) {
   passable_area::msg::TerrainObservability::SharedPtr received_observability;
   auto unknown_sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
       topics.unknown_mask_topic, 10,
-      [&](sensor_msgs::msg::PointCloud2::SharedPtr msg) { received_unknown = std::move(msg); });
-  auto observability_sub = node->create_subscription<passable_area::msg::TerrainObservability>(
-      topics.observability_topic, 10, [&](passable_area::msg::TerrainObservability::SharedPtr msg) {
-        received_observability = std::move(msg);
+      [&](sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+        received_unknown = std::move(msg);
       });
+  auto observability_sub =
+      node->create_subscription<passable_area::msg::TerrainObservability>(
+          topics.observability_topic, 10,
+          [&](passable_area::msg::TerrainObservability::SharedPtr msg) {
+            received_observability = std::move(msg);
+          });
 
   OutputConverter converter;
   const auto output = MakeDebugOutput();
@@ -115,7 +122,8 @@ TEST_F(RosFixture, UnknownMaskAndObservabilityStayInBaseGravityContext) {
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(1);
   while (std::chrono::steady_clock::now() < deadline &&
          (!received_unknown || !received_observability)) {
     executor.spin_some();
@@ -136,5 +144,6 @@ TEST_F(RosFixture, UnknownMaskAndObservabilityStayInBaseGravityContext) {
   const int center_index = IndexForCellCenter(terrain_state, 0.0f, 0.0f);
   ASSERT_GE(center_index, 0);
   ASSERT_LT(center_index, static_cast<int>(terrain_state.data.size()));
-  EXPECT_EQ(terrain_state.data[center_index], static_cast<int8_t>(PassabilityState::kUnknown));
+  EXPECT_EQ(terrain_state.data[center_index],
+            static_cast<int8_t>(PassabilityState::kUnknown));
 }

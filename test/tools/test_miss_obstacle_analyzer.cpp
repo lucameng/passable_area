@@ -10,8 +10,8 @@ using passable_area::core::Config;
 using passable_area::core::FrameOutput;
 using passable_area::core::MakeCellDebugPointWithoutSource;
 using passable_area::core::ObservabilityState;
-using passable_area::core::ProcessedFrame;
 using passable_area::core::Point3f;
+using passable_area::core::ProcessedFrame;
 using passable_area::tools::MissObstacleAnalyzer;
 using passable_area::tools::MissObstacleAnalyzerConfig;
 using passable_area::tools::MissObstacleDetectionBox;
@@ -75,9 +75,7 @@ ProcessedFrame MakeProcessedFrame(std::initializer_list<Point3f> points) {
   return frame;
 }
 
-int CenterCellIndex(const FrameOutput &output) {
-  return output.cols + 1;
-}
+int CenterCellIndex(const FrameOutput &output) { return output.cols + 1; }
 
 } // namespace
 
@@ -101,11 +99,13 @@ TEST(MissObstacleAnalyzerTest, ReturnsNoFrontendSuspicionWhenSamplesStayFlat) {
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kNoFrontendObstacleSuspicion);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kNoFrontendObstacleSuspicion);
   EXPECT_EQ(analysis->obstacle_suspicious_cell_count, 0);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsRejectedByNeighborSupportWhenSuspiciousCellsAreRejected) {
+TEST(MissObstacleAnalyzerTest,
+     ReturnsRejectedByNeighborSupportWhenSuspiciousCellsAreRejected) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
@@ -116,11 +116,13 @@ TEST(MissObstacleAnalyzerTest, ReturnsRejectedByNeighborSupportWhenSuspiciousCel
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kRejectedByNeighborSupport);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kRejectedByNeighborSupport);
   EXPECT_EQ(analysis->rejected_suspicious_cell_count, 1);
 }
 
-TEST(MissObstacleAnalyzerTest, PreservesRawAdjustedAndLegacyUpperSupportVisibility) {
+TEST(MissObstacleAnalyzerTest,
+     PreservesRawAdjustedAndLegacyUpperSupportVisibility) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
@@ -135,11 +137,14 @@ TEST(MissObstacleAnalyzerTest, PreservesRawAdjustedAndLegacyUpperSupportVisibili
   ASSERT_TRUE(analysis.has_value());
   ASSERT_FALSE(analysis->representative_cells.empty());
   EXPECT_TRUE(analysis->representative_cells.front().raw_upper_support_cell);
-  EXPECT_FALSE(analysis->representative_cells.front().adjusted_upper_support_cell);
+  EXPECT_FALSE(
+      analysis->representative_cells.front().adjusted_upper_support_cell);
   EXPECT_FALSE(analysis->representative_cells.front().upper_support_cell);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsObstacleEvidenceTooLowWhenCandidateDoesNotAccumulateEnoughEvidence) {
+TEST(
+    MissObstacleAnalyzerTest,
+    ReturnsObstacleEvidenceTooLowWhenCandidateDoesNotAccumulateEnoughEvidence) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.35f}});
@@ -151,11 +156,13 @@ TEST(MissObstacleAnalyzerTest, ReturnsObstacleEvidenceTooLowWhenCandidateDoesNot
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kObstacleEvidenceTooLow);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kObstacleEvidenceTooLow);
   EXPECT_FLOAT_EQ(analysis->max_obstacle_evidence, 0.25f);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsOutputHeightGateNotMetWhenStrongEvidenceHasNoHighEnoughSamples) {
+TEST(MissObstacleAnalyzerTest,
+     ReturnsOutputHeightGateNotMetWhenStrongEvidenceHasNoHighEnoughSamples) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.10f}});
@@ -167,12 +174,16 @@ TEST(MissObstacleAnalyzerTest, ReturnsOutputHeightGateNotMetWhenStrongEvidenceHa
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kOutputHeightGateNotMet);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kOutputHeightGateNotMet);
   ASSERT_FALSE(analysis->representative_cells.empty());
-  EXPECT_NEAR(analysis->representative_cells.front().max_sample_z_minus_support_ref, 0.10f, 1e-5f);
+  EXPECT_NEAR(
+      analysis->representative_cells.front().max_sample_z_minus_support_ref,
+      0.10f, 1e-5f);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsOutputHeightGateNotMetWhenSamplesExceedBaseLinkHeightCeiling) {
+TEST(MissObstacleAnalyzerTest,
+     ReturnsOutputHeightGateNotMetWhenSamplesExceedBaseLinkHeightCeiling) {
   auto config = MakeConfig();
   config.obstacle_points_min_height = 0.1f;
   config.obstacle_points_max_height_in_base_link = 0.2f;
@@ -187,10 +198,13 @@ TEST(MissObstacleAnalyzerTest, ReturnsOutputHeightGateNotMetWhenSamplesExceedBas
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kOutputHeightGateNotMet);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kOutputHeightGateNotMet);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {
+TEST(
+    MissObstacleAnalyzerTest,
+    ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   output.resolution = 0.5f;
@@ -202,10 +216,12 @@ TEST(MissObstacleAnalyzerTest, ReturnsNoObstacleSourceSamplesWhenStrongEvidenceC
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kNoObstacleSourceSamplesInRoi);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kNoObstacleSourceSamplesInRoi);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsLeakFilteredRootCauseWhenOnlyLeakEvidenceRemains) {
+TEST(MissObstacleAnalyzerTest,
+     ReturnsLeakFilteredRootCauseWhenOnlyLeakEvidenceRemains) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, -0.30f}});
@@ -215,14 +231,17 @@ TEST(MissObstacleAnalyzerTest, ReturnsLeakFilteredRootCauseWhenOnlyLeakEvidenceR
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kLeakFilteredToNoCandidate);
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kLeakFilteredToNoCandidate);
 }
 
-TEST(MissObstacleAnalyzerTest, ReturnsNulloptWhenObstaclePointsAlreadyExistInsideRoi) {
+TEST(MissObstacleAnalyzerTest,
+     ReturnsNulloptWhenObstaclePointsAlreadyExistInsideRoi) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.30f}});
-  output.obstacle_points.push_back(MakeCellDebugPointWithoutSource({0.0f, 0.0f, 0.30f}));
+  output.obstacle_points.push_back(
+      MakeCellDebugPointWithoutSource({0.0f, 0.0f, 0.30f}));
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   EXPECT_FALSE(analysis.has_value());
