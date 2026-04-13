@@ -283,7 +283,42 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.obstacle_evidence = output.obstacle_evidence[idx];
       cell.support_confidence = output.support_confidence[idx];
       cell.support_anchor_used = output.support_anchor_used[idx];
+      cell.support_anchor_origin = output.support_anchor_origin.empty()
+                                       ? 0U
+                                       : output.support_anchor_origin[idx];
+      cell.support_anchor_authority =
+          output.support_anchor_authority.empty()
+              ? 0U
+              : output.support_anchor_authority[idx];
+      cell.anchor_leak_suppression_enabled =
+          !output.anchor_leak_suppression_enabled.empty() &&
+          output.anchor_leak_suppression_enabled[idx] != 0U;
       cell.sub_support_leak_count = output.sub_support_leak_count[idx];
+      cell.anchor_below_observation_count =
+          output.anchor_below_observation_count.empty()
+              ? 0U
+              : output.anchor_below_observation_count[idx];
+      cell.stale_anchor_residual_filtered_count =
+          output.stale_anchor_residual_filtered_count.empty()
+              ? 0U
+              : output.stale_anchor_residual_filtered_count[idx];
+      cell.raw_sample_min_z = output.raw_sample_min_z.empty()
+                                  ? std::numeric_limits<float>::quiet_NaN()
+                                  : output.raw_sample_min_z[idx];
+      cell.raw_sample_max_z = output.raw_sample_max_z.empty()
+                                  ? std::numeric_limits<float>::quiet_NaN()
+                                  : output.raw_sample_max_z[idx];
+      cell.raw_sample_count =
+          output.raw_sample_count.empty() ? 0U : output.raw_sample_count[idx];
+      cell.filtered_sample_min_z = output.filtered_sample_min_z.empty()
+                                       ? std::numeric_limits<float>::quiet_NaN()
+                                       : output.filtered_sample_min_z[idx];
+      cell.filtered_sample_max_z = output.filtered_sample_max_z.empty()
+                                       ? std::numeric_limits<float>::quiet_NaN()
+                                       : output.filtered_sample_max_z[idx];
+      cell.filtered_sample_count = output.filtered_sample_count.empty()
+                                       ? 0U
+                                       : output.filtered_sample_count[idx];
       cell.raw_upper_support_cell = output.raw_upper_support_cell[idx] != 0U;
       cell.adjusted_upper_support_cell =
           output.explanation_adjusted_upper_support_cell[idx] != 0U;

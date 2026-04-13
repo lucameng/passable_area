@@ -49,7 +49,20 @@ FrameOutput MakeOutput() {
   output.support_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_confidence.assign(9, 0.0f);
   output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.support_anchor_origin.assign(9, 0U);
+  output.support_anchor_authority.assign(9, 0U);
+  output.anchor_leak_suppression_enabled.assign(9, 0U);
   output.sub_support_leak_count.assign(9, 0U);
+  output.anchor_below_observation_count.assign(9, 0U);
+  output.stale_anchor_residual_filtered_count.assign(9, 0U);
+  output.raw_sample_min_z.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.raw_sample_max_z.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.raw_sample_count.assign(9, 0U);
+  output.filtered_sample_min_z.assign(9,
+                                      std::numeric_limits<float>::quiet_NaN());
+  output.filtered_sample_max_z.assign(9,
+                                      std::numeric_limits<float>::quiet_NaN());
+  output.filtered_sample_count.assign(9, 0U);
   output.raw_upper_support_cell.assign(9, 0U);
   output.explanation_adjusted_upper_support_cell.assign(9, 0U);
   output.upper_support_cell.assign(9, 0U);
@@ -271,13 +284,39 @@ TEST(MissObstacleAnalyzerTest,
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, -0.30f}});
   const int cell = CenterCellIndex(output);
+  output.support_anchor_origin[cell] = static_cast<uint8_t>(
+      passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor);
+  output.support_anchor_authority[cell] = static_cast<uint8_t>(
+      passable_area::core::SupportAnchorAuthority::kExplanationOnly);
+  output.anchor_leak_suppression_enabled[cell] = 0U;
   output.sub_support_leak_count[cell] = 2U;
+  output.anchor_below_observation_count[cell] = 2U;
+  output.raw_sample_min_z[cell] = -0.30f;
+  output.raw_sample_max_z[cell] = 0.00f;
+  output.raw_sample_count[cell] = 2U;
+  output.filtered_sample_min_z[cell] = 0.00f;
+  output.filtered_sample_max_z[cell] = 0.00f;
+  output.filtered_sample_count[cell] = 1U;
   output.support_anchor_used[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
   EXPECT_EQ(analysis->classification,
             MissObstacleRootCause::kLeakFilteredToNoCandidate);
+  ASSERT_FALSE(analysis->representative_cells.empty());
+  EXPECT_EQ(analysis->representative_cells.front().support_anchor_origin,
+            static_cast<uint8_t>(
+                passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor));
+  EXPECT_EQ(analysis->representative_cells.front().support_anchor_authority,
+            static_cast<uint8_t>(
+                passable_area::core::SupportAnchorAuthority::kExplanationOnly));
+  EXPECT_FALSE(
+      analysis->representative_cells.front().anchor_leak_suppression_enabled);
+  EXPECT_EQ(
+      analysis->representative_cells.front().anchor_below_observation_count,
+      2U);
+  EXPECT_EQ(analysis->representative_cells.front().raw_sample_count, 2U);
+  EXPECT_EQ(analysis->representative_cells.front().filtered_sample_count, 1U);
 }
 
 TEST(MissObstacleAnalyzerTest,

@@ -42,7 +42,20 @@ FrameOutput MakeOutput() {
   output.support_continuity.assign(9, 1.0f);
   output.overhead_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.support_anchor_origin.assign(9, 0U);
+  output.support_anchor_authority.assign(9, 0U);
+  output.anchor_leak_suppression_enabled.assign(9, 0U);
   output.sub_support_leak_count.assign(9, 0U);
+  output.anchor_below_observation_count.assign(9, 0U);
+  output.stale_anchor_residual_filtered_count.assign(9, 0U);
+  output.raw_sample_min_z.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.raw_sample_max_z.assign(9, std::numeric_limits<float>::quiet_NaN());
+  output.raw_sample_count.assign(9, 0U);
+  output.filtered_sample_min_z.assign(9,
+                                      std::numeric_limits<float>::quiet_NaN());
+  output.filtered_sample_max_z.assign(9,
+                                      std::numeric_limits<float>::quiet_NaN());
+  output.filtered_sample_count.assign(9, 0U);
   output.raw_upper_support_cell.assign(9, 0U);
   output.explanation_adjusted_upper_support_cell.assign(9, 0U);
   output.upper_support_cell.assign(9, 0U);
@@ -160,6 +173,10 @@ TEST(FalseObstacleAnalyzerTest,
   output.obstacle_evidence[0] = 0.7f;
   output.overhead_height[0] = 0.9f;
   output.support_anchor_used[0] = 0.25f;
+  output.support_anchor_origin[0] = static_cast<uint8_t>(
+      passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor);
+  output.support_anchor_authority[0] = static_cast<uint8_t>(
+      passable_area::core::SupportAnchorAuthority::kExplanationOnly);
   output.raw_upper_support_cell[0] = 1U;
   output.explanation_adjusted_upper_support_cell[0] = 0U;
   output.upper_support_cell[0] = 1U;
@@ -175,7 +192,19 @@ TEST(FalseObstacleAnalyzerTest,
   ASSERT_NE(center_cell, 0);
   output.obstacle_evidence[center_cell] = 0.3f;
   output.support_anchor_used[center_cell] = 0.15f;
+  output.support_anchor_origin[center_cell] = static_cast<uint8_t>(
+      passable_area::core::SupportAnchorOrigin::kLocalSupport);
+  output.support_anchor_authority[center_cell] = static_cast<uint8_t>(
+      passable_area::core::SupportAnchorAuthority::kLeakEligible);
+  output.anchor_leak_suppression_enabled[center_cell] = 1U;
   output.sub_support_leak_count[center_cell] = 2U;
+  output.anchor_below_observation_count[center_cell] = 2U;
+  output.raw_sample_min_z[center_cell] = -0.20f;
+  output.raw_sample_max_z[center_cell] = 0.30f;
+  output.raw_sample_count[center_cell] = 4U;
+  output.filtered_sample_min_z[center_cell] = 0.05f;
+  output.filtered_sample_max_z[center_cell] = 0.30f;
+  output.filtered_sample_count[center_cell] = 3U;
   output.clearance[center_cell] = 0.2f;
   output.overhead_height[center_cell] = 0.8f;
 
@@ -201,7 +230,17 @@ TEST(FalseObstacleAnalyzerTest,
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_overhead_height, 0.9f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_support_anchor_used, 0.25f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().support_anchor_used, 0.15f);
+  EXPECT_EQ(analysis->hotspots.front().support_anchor_origin,
+            static_cast<uint8_t>(
+                passable_area::core::SupportAnchorOrigin::kLocalSupport));
+  EXPECT_EQ(analysis->hotspots.front().support_anchor_authority,
+            static_cast<uint8_t>(
+                passable_area::core::SupportAnchorAuthority::kLeakEligible));
+  EXPECT_TRUE(analysis->hotspots.front().anchor_leak_suppression_enabled);
   EXPECT_EQ(analysis->hotspots.front().sub_support_leak_count, 2U);
+  EXPECT_EQ(analysis->hotspots.front().anchor_below_observation_count, 2U);
+  EXPECT_EQ(analysis->hotspots.front().raw_sample_count, 4U);
+  EXPECT_EQ(analysis->hotspots.front().filtered_sample_count, 3U);
   EXPECT_EQ(analysis->hotspots.front().classification,
             FalseObstacleRootCause::kClearanceDriven);
 }

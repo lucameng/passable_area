@@ -2,6 +2,7 @@
 #define PASSABLE_AREA_CORE_CANDIDATE_TYPES_HPP_
 
 #include "passable_area/core/types/basic_types.hpp"
+#include "passable_area/core/types/frame_types.hpp"
 
 #include <vector>
 
@@ -30,7 +31,18 @@ struct FrontendOutput {
   std::vector<ObstacleCandidate> obstacle_candidates;
   std::vector<AmbiguousCandidate> ambiguous_candidates;
   std::vector<float> support_anchor_used;
+  std::vector<uint8_t> support_anchor_origin;
+  std::vector<uint8_t> support_anchor_authority;
+  std::vector<uint8_t> anchor_leak_suppression_enabled;
   std::vector<uint16_t> sub_support_leak_count;
+  std::vector<uint16_t> anchor_below_observation_count;
+  std::vector<uint16_t> stale_anchor_residual_filtered_count;
+  std::vector<float> raw_sample_min_z;
+  std::vector<float> raw_sample_max_z;
+  std::vector<uint16_t> raw_sample_count;
+  std::vector<float> filtered_sample_min_z;
+  std::vector<float> filtered_sample_max_z;
+  std::vector<uint16_t> filtered_sample_count;
   // Raw local upper-band fact relative to the current cell support_ref.
   std::vector<uint8_t> raw_upper_support_cell;
   // Explanation-adjusted upper-support mask used by neighborhood confirmation.

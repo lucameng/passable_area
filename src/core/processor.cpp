@@ -97,7 +97,21 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.clearance = layers.clearance;
   output.support_continuity = layers.support_continuity;
   output.support_anchor_used = frontend_output.support_anchor_used;
+  output.support_anchor_origin = frontend_output.support_anchor_origin;
+  output.support_anchor_authority = frontend_output.support_anchor_authority;
+  output.anchor_leak_suppression_enabled =
+      frontend_output.anchor_leak_suppression_enabled;
   output.sub_support_leak_count = frontend_output.sub_support_leak_count;
+  output.anchor_below_observation_count =
+      frontend_output.anchor_below_observation_count;
+  output.stale_anchor_residual_filtered_count =
+      frontend_output.stale_anchor_residual_filtered_count;
+  output.raw_sample_min_z = frontend_output.raw_sample_min_z;
+  output.raw_sample_max_z = frontend_output.raw_sample_max_z;
+  output.raw_sample_count = frontend_output.raw_sample_count;
+  output.filtered_sample_min_z = frontend_output.filtered_sample_min_z;
+  output.filtered_sample_max_z = frontend_output.filtered_sample_max_z;
+  output.filtered_sample_count = frontend_output.filtered_sample_count;
   output.raw_upper_support_cell = frontend_output.raw_upper_support_cell;
   output.explanation_adjusted_upper_support_cell =
       frontend_output.explanation_adjusted_upper_support_cell;

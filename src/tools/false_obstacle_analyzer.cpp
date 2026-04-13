@@ -379,6 +379,22 @@ FalseObstacleAnalyzer::lookupLocalContext(
       context.source_support_anchor_used =
           output.support_anchor_used[static_cast<size_t>(source_cell)];
     }
+    if (output.support_anchor_origin.size() >
+        static_cast<size_t>(source_cell)) {
+      context.support_anchor_origin =
+          output.support_anchor_origin[static_cast<size_t>(source_cell)];
+    }
+    if (output.support_anchor_authority.size() >
+        static_cast<size_t>(source_cell)) {
+      context.support_anchor_authority =
+          output.support_anchor_authority[static_cast<size_t>(source_cell)];
+    }
+    if (output.anchor_leak_suppression_enabled.size() >
+        static_cast<size_t>(source_cell)) {
+      context.anchor_leak_suppression_enabled =
+          output.anchor_leak_suppression_enabled[static_cast<size_t>(
+              source_cell)] != 0U;
+    }
   }
 
   const auto point_in_odom =
@@ -398,10 +414,65 @@ FalseObstacleAnalyzer::lookupLocalContext(
       context.support_anchor_used =
           output.support_anchor_used[static_cast<size_t>(center_cell)];
     }
+    if (output.support_anchor_origin.size() >
+        static_cast<size_t>(center_cell)) {
+      context.support_anchor_origin =
+          output.support_anchor_origin[static_cast<size_t>(center_cell)];
+    }
+    if (output.support_anchor_authority.size() >
+        static_cast<size_t>(center_cell)) {
+      context.support_anchor_authority =
+          output.support_anchor_authority[static_cast<size_t>(center_cell)];
+    }
+    if (output.anchor_leak_suppression_enabled.size() >
+        static_cast<size_t>(center_cell)) {
+      context.anchor_leak_suppression_enabled =
+          output.anchor_leak_suppression_enabled[static_cast<size_t>(
+              center_cell)] != 0U;
+    }
     if (output.sub_support_leak_count.size() >
         static_cast<size_t>(center_cell)) {
       context.sub_support_leak_count =
           output.sub_support_leak_count[static_cast<size_t>(center_cell)];
+    }
+    if (output.anchor_below_observation_count.size() >
+        static_cast<size_t>(center_cell)) {
+      context.anchor_below_observation_count =
+          output
+              .anchor_below_observation_count[static_cast<size_t>(center_cell)];
+    }
+    if (output.stale_anchor_residual_filtered_count.size() >
+        static_cast<size_t>(center_cell)) {
+      context.stale_anchor_residual_filtered_count =
+          output.stale_anchor_residual_filtered_count[static_cast<size_t>(
+              center_cell)];
+    }
+    if (output.raw_sample_min_z.size() > static_cast<size_t>(center_cell)) {
+      context.raw_sample_min_z =
+          output.raw_sample_min_z[static_cast<size_t>(center_cell)];
+    }
+    if (output.raw_sample_max_z.size() > static_cast<size_t>(center_cell)) {
+      context.raw_sample_max_z =
+          output.raw_sample_max_z[static_cast<size_t>(center_cell)];
+    }
+    if (output.raw_sample_count.size() > static_cast<size_t>(center_cell)) {
+      context.raw_sample_count =
+          output.raw_sample_count[static_cast<size_t>(center_cell)];
+    }
+    if (output.filtered_sample_min_z.size() >
+        static_cast<size_t>(center_cell)) {
+      context.filtered_sample_min_z =
+          output.filtered_sample_min_z[static_cast<size_t>(center_cell)];
+    }
+    if (output.filtered_sample_max_z.size() >
+        static_cast<size_t>(center_cell)) {
+      context.filtered_sample_max_z =
+          output.filtered_sample_max_z[static_cast<size_t>(center_cell)];
+    }
+    if (output.filtered_sample_count.size() >
+        static_cast<size_t>(center_cell)) {
+      context.filtered_sample_count =
+          output.filtered_sample_count[static_cast<size_t>(center_cell)];
     }
   }
 
@@ -435,10 +506,24 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.support_continuity = context.support_continuity;
   hotspot.overhead_height = context.overhead_height;
   hotspot.support_anchor_used = context.support_anchor_used;
+  hotspot.support_anchor_origin = context.support_anchor_origin;
+  hotspot.support_anchor_authority = context.support_anchor_authority;
+  hotspot.anchor_leak_suppression_enabled =
+      context.anchor_leak_suppression_enabled;
   hotspot.source_obstacle_evidence = context.source_obstacle_evidence;
   hotspot.source_overhead_height = context.source_overhead_height;
   hotspot.source_support_anchor_used = context.source_support_anchor_used;
   hotspot.sub_support_leak_count = context.sub_support_leak_count;
+  hotspot.anchor_below_observation_count =
+      context.anchor_below_observation_count;
+  hotspot.stale_anchor_residual_filtered_count =
+      context.stale_anchor_residual_filtered_count;
+  hotspot.raw_sample_min_z = context.raw_sample_min_z;
+  hotspot.raw_sample_max_z = context.raw_sample_max_z;
+  hotspot.raw_sample_count = context.raw_sample_count;
+  hotspot.filtered_sample_min_z = context.filtered_sample_min_z;
+  hotspot.filtered_sample_max_z = context.filtered_sample_max_z;
+  hotspot.filtered_sample_count = context.filtered_sample_count;
   hotspot.raw_upper_support_cell = context.raw_upper_support_cell;
   hotspot.adjusted_upper_support_cell = context.adjusted_upper_support_cell;
   hotspot.upper_support_cell = context.upper_support_cell;

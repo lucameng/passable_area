@@ -23,6 +23,8 @@ using passable_area::core::PassabilityState;
 using passable_area::core::PolarFrontend;
 using passable_area::core::ProcessedFrame;
 using passable_area::core::Processor;
+using passable_area::core::SupportAnchorAuthority;
+using passable_area::core::SupportAnchorOrigin;
 using passable_area::core::SupportCandidate;
 using passable_area::core::SupportState;
 
@@ -814,7 +816,26 @@ TEST(ProcessorTest,
   EXPECT_EQ(output.support_candidates.front().cell, cell);
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, 0.0f);
   EXPECT_FLOAT_EQ(output.support_anchor_used[static_cast<size_t>(cell)], 0.0f);
+  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorOrigin::kLocalSupport));
+  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorAuthority::kLeakEligible));
+  EXPECT_EQ(output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)],
+            1U);
   EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 1U);
+  EXPECT_EQ(output.anchor_below_observation_count[static_cast<size_t>(cell)],
+            1U);
+  EXPECT_EQ(
+      output.stale_anchor_residual_filtered_count[static_cast<size_t>(cell)],
+      0U);
+  EXPECT_FLOAT_EQ(output.raw_sample_min_z[static_cast<size_t>(cell)], -0.30f);
+  EXPECT_FLOAT_EQ(output.raw_sample_max_z[static_cast<size_t>(cell)], 0.00f);
+  EXPECT_EQ(output.raw_sample_count[static_cast<size_t>(cell)], 2U);
+  EXPECT_FLOAT_EQ(output.filtered_sample_min_z[static_cast<size_t>(cell)],
+                  0.00f);
+  EXPECT_FLOAT_EQ(output.filtered_sample_max_z[static_cast<size_t>(cell)],
+                  0.00f);
+  EXPECT_EQ(output.filtered_sample_count[static_cast<size_t>(cell)], 1U);
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 0U);
   EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(cell)], 0U);
   EXPECT_TRUE(output.obstacle_candidates.empty());
@@ -856,6 +877,10 @@ TEST(ProcessorTest,
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, -0.30f);
   EXPECT_TRUE(
       std::isnan(output.support_anchor_used[static_cast<size_t>(cell)]));
+  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorOrigin::kNone));
+  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorAuthority::kInvalid));
   EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
 }
@@ -899,8 +924,104 @@ TEST(ProcessorTest,
   const auto output = frontend.run(frame, observability, map);
 
   EXPECT_FLOAT_EQ(output.support_anchor_used[static_cast<size_t>(cell)], 0.0f);
-  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 1U);
-  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 0U);
+  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorOrigin::kBorrowedNeighbor));
+  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorAuthority::kExplanationOnly));
+  EXPECT_EQ(output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)],
+            0U);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
+  EXPECT_EQ(output.anchor_below_observation_count[static_cast<size_t>(cell)],
+            1U);
+  EXPECT_FLOAT_EQ(output.raw_sample_min_z[static_cast<size_t>(cell)], -0.30f);
+  EXPECT_FLOAT_EQ(output.filtered_sample_min_z[static_cast<size_t>(cell)],
+                  -0.30f);
+  EXPECT_EQ(output.raw_sample_count[static_cast<size_t>(cell)], 2U);
+  EXPECT_EQ(output.filtered_sample_count[static_cast<size_t>(cell)], 2U);
+  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
+}
+
+TEST(
+    ProcessorTest,
+    PolarFrontendKeepsFacadeLowerStructureWhenLeakEligibleAnchorIsExactlyReobservedTwice) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 1;
+  config.geometry.sub_support_leak_tolerance = 0.18f;
+  config.geometry.support_anchor_reobserve_tolerance = 0.08f;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(
+      static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  int primary_cell = -1;
+  int neighbor_cell = -1;
+  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
+  map.layers().support_height[static_cast<size_t>(primary_cell)] = 0.0f;
+  map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(primary_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(primary_cell)] = 0U;
+  map.layers().support_height[static_cast<size_t>(neighbor_cell)] = 0.0f;
+  map.layers().support_confidence[static_cast<size_t>(neighbor_cell)] = 0.6f;
+  map.layers().support_state[static_cast<size_t>(neighbor_cell)] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().last_reliable_age[static_cast<size_t>(neighbor_cell)] = 0U;
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, -0.25f}, {0.25f, 0.25f, -0.25f}},
+      {{0.25f, 0.25f, 0.00f}, {0.25f, 0.25f, 0.00f}},
+      {{0.25f, 0.25f, 0.05f}, {0.25f, 0.25f, 0.05f}},
+      {{0.25f, 0.25f, 0.24f}, {0.25f, 0.25f, 0.24f}},
+      {{0.45f, 0.25f, 0.00f}, {0.45f, 0.25f, 0.00f}},
+      {{0.45f, 0.25f, 0.24f}, {0.45f, 0.25f, 0.24f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  EXPECT_FLOAT_EQ(output.support_anchor_used[static_cast<size_t>(primary_cell)],
+                  0.0f);
+  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(primary_cell)],
+            static_cast<uint8_t>(SupportAnchorOrigin::kLocalSupport));
+  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(primary_cell)],
+            static_cast<uint8_t>(SupportAnchorAuthority::kLeakEligible));
+  EXPECT_EQ(
+      output.anchor_leak_suppression_enabled[static_cast<size_t>(primary_cell)],
+      1U);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(primary_cell)],
+            1U);
+  EXPECT_EQ(
+      output.anchor_below_observation_count[static_cast<size_t>(primary_cell)],
+      1U);
+  EXPECT_EQ(output.raw_sample_count[static_cast<size_t>(primary_cell)], 4U);
+  EXPECT_EQ(output.filtered_sample_count[static_cast<size_t>(primary_cell)],
+            3U);
+  EXPECT_FLOAT_EQ(
+      output.filtered_sample_min_z[static_cast<size_t>(primary_cell)], 0.0f);
+  EXPECT_EQ(output.obstacle_local_triggered[static_cast<size_t>(primary_cell)],
+            1U);
+  EXPECT_EQ(
+      output.obstacle_upper_patch_confirmed[static_cast<size_t>(primary_cell)],
+      1U);
+  EXPECT_EQ(output.explanation_decision[static_cast<size_t>(primary_cell)],
+            static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
+  EXPECT_EQ(
+      output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)],
+      1U);
+  const auto primary_cell_candidate_count = std::count_if(
+      output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+      [primary_cell](const auto &candidate) {
+        return candidate.cell == primary_cell;
+      });
+  EXPECT_EQ(primary_cell_candidate_count, 1);
 }
 
 TEST(ProcessorTest,
@@ -1063,7 +1184,16 @@ TEST(ProcessorTest,
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, -0.62f);
   EXPECT_TRUE(
       std::isnan(output.support_anchor_used[static_cast<size_t>(cell)]));
+  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorOrigin::kLocalSupport));
+  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorAuthority::kInvalid));
+  EXPECT_EQ(output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)],
+            0U);
   EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
+  EXPECT_EQ(
+      output.stale_anchor_residual_filtered_count[static_cast<size_t>(cell)],
+      0U);
   EXPECT_EQ(output.raw_upper_support_cell[static_cast<size_t>(cell)], 0U);
   EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(cell)], 0U);
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 0U);
@@ -1108,6 +1238,20 @@ TEST(ProcessorTest,
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, 0.28f);
   EXPECT_TRUE(
       std::isnan(output.support_anchor_used[static_cast<size_t>(cell)]));
+  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorOrigin::kLocalSupport));
+  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
+            static_cast<uint8_t>(SupportAnchorAuthority::kInvalid));
+  EXPECT_EQ(output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)],
+            0U);
+  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
+  EXPECT_EQ(output.anchor_below_observation_count[static_cast<size_t>(cell)],
+            0U);
+  EXPECT_EQ(
+      output.stale_anchor_residual_filtered_count[static_cast<size_t>(cell)],
+      1U);
+  EXPECT_EQ(output.raw_sample_count[static_cast<size_t>(cell)], 3U);
+  EXPECT_EQ(output.filtered_sample_count[static_cast<size_t>(cell)], 2U);
   EXPECT_EQ(
       output.explanation_adjusted_upper_support_cell[static_cast<size_t>(cell)],
       0U);

@@ -16,6 +16,11 @@ struct CellStats {
   int count = 0;
 };
 
+struct ResolvedSupportAnchor {
+  float z = std::numeric_limits<float>::quiet_NaN();
+  SupportAnchorOrigin origin = SupportAnchorOrigin::kNone;
+};
+
 enum class AnchorValidityDecision : uint8_t {
   kInvalidInsufficientSupport = 0U,
   kValid = 1U,
@@ -24,19 +29,25 @@ enum class AnchorValidityDecision : uint8_t {
 };
 
 struct CellWorkspace {
-  float raw_min_z = std::numeric_limits<float>::infinity();
+  CellStats raw_stats;
+  CellStats filtered_stats;
   float support_anchor_candidate = std::numeric_limits<float>::quiet_NaN();
   float support_ref = std::numeric_limits<float>::quiet_NaN();
   float min_upper_band_z = std::numeric_limits<float>::infinity();
-  CellStats stats;
+  SupportAnchorOrigin support_anchor_origin = SupportAnchorOrigin::kNone;
+  SupportAnchorAuthority support_anchor_authority =
+      SupportAnchorAuthority::kInvalid;
   int anchor_reobserve_count = 0;
   int below_anchor_count = 0;
   int upper_band_count = 0;
   int ascending_stair_support_count = 0;
+  uint16_t anchor_below_observation_count = 0U;
   uint16_t sub_support_leak_count = 0U;
+  uint16_t stale_anchor_residual_filtered_count = 0U;
   uint8_t local_history_anchor_valid = 0U;
   AnchorValidityDecision anchor_validity =
       AnchorValidityDecision::kInvalidInsufficientSupport;
+  bool anchor_leak_suppression_enabled = false;
   bool has_stats = false;
   bool stale_lower_anchor_mix = false;
 };
@@ -76,6 +87,18 @@ float ComputeWallLikeObstacleGainScale(const CellStats &stats,
 // 做法是把角度统一规约到 [-pi, pi]，避免 observability 分桶不稳定。
 float NormalizeAngle(float angle) {
   return std::atan2(std::sin(angle), std::cos(angle));
+}
+
+void AccumulateCellStats(CellStats &stats, float z) {
+  stats.min_z = std::min(stats.min_z, z);
+  stats.max_z = std::max(stats.max_z, z);
+  ++stats.count;
+}
+
+void SaturatingIncrement(uint16_t &value) {
+  if (value < std::numeric_limits<uint16_t>::max()) {
+    ++value;
+  }
 }
 
 // 解决“地图里有 support_height，但这格当前并不该再被当可靠锚点”的 case。
@@ -139,6 +162,34 @@ float ResolveNeighborSupportAnchor(int cell, const LocalTerrainMap &map,
                       static_cast<std::ptrdiff_t>(neighbor_heights.size() / 2U);
   std::nth_element(neighbor_heights.begin(), middle, neighbor_heights.end());
   return *middle;
+}
+
+ResolvedSupportAnchor ResolveSupportAnchorCandidate(int cell,
+                                                    const LocalTerrainMap &map,
+                                                    const TerrainLayers &layers,
+                                                    const Config &config,
+                                                    float raw_min_z) {
+  if (!std::isfinite(raw_min_z)) {
+    return {};
+  }
+
+  if (IsValidSupportAnchorCell(layers, cell, config)) {
+    const float local_anchor = layers.support_height[static_cast<size_t>(cell)];
+    if (local_anchor >=
+        raw_min_z - config.geometry.sub_support_leak_tolerance) {
+      return {local_anchor, SupportAnchorOrigin::kLocalSupport};
+    }
+  }
+
+  const float neighbor_anchor =
+      ResolveNeighborSupportAnchor(cell, map, layers, config);
+  if (std::isfinite(neighbor_anchor) &&
+      neighbor_anchor >=
+          raw_min_z - config.geometry.sub_support_leak_tolerance) {
+    return {neighbor_anchor, SupportAnchorOrigin::kBorrowedNeighbor};
+  }
+
+  return {};
 }
 
 // 解决 explanation 需要一个“邻域稳定支撑共识高度”来判断 layered-ground 的
@@ -594,57 +645,40 @@ void ResolveAnchors(
 
     auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
     for (const size_t sample_index : sample_indices) {
-      workspace.raw_min_z =
-          std::min(workspace.raw_min_z,
-                   frame.odom_samples[sample_index].point_in_odom.z);
+      AccumulateCellStats(workspace.raw_stats,
+                          frame.odom_samples[sample_index].point_in_odom.z);
     }
 
     const bool has_local_history_anchor =
         IsValidSupportAnchorCell(layers, cell, config);
     workspace.local_history_anchor_valid = has_local_history_anchor ? 1U : 0U;
 
-    float support_anchor = std::numeric_limits<float>::quiet_NaN();
-    bool has_support_anchor = false;
-    if (has_local_history_anchor) {
-      const float local_anchor =
-          layers.support_height[static_cast<size_t>(cell)];
-      if (local_anchor >=
-          workspace.raw_min_z - config.geometry.sub_support_leak_tolerance) {
-        support_anchor = local_anchor;
-        has_support_anchor = true;
-      }
-    }
-    if (!has_support_anchor) {
-      const float neighbor_anchor =
-          ResolveNeighborSupportAnchor(cell, map, layers, config);
-      if (std::isfinite(neighbor_anchor) &&
-          neighbor_anchor >= workspace.raw_min_z -
-                                 config.geometry.sub_support_leak_tolerance) {
-        support_anchor = neighbor_anchor;
-        has_support_anchor = true;
-      }
-    }
-    if (!has_support_anchor) {
+    const ResolvedSupportAnchor resolved_anchor = ResolveSupportAnchorCandidate(
+        cell, map, layers, config, workspace.raw_stats.min_z);
+    if (!std::isfinite(resolved_anchor.z)) {
       workspace.anchor_validity =
           AnchorValidityDecision::kInvalidInsufficientSupport;
       continue;
     }
 
-    workspace.support_anchor_candidate = support_anchor;
+    workspace.support_anchor_candidate = resolved_anchor.z;
+    workspace.support_anchor_origin = resolved_anchor.origin;
     workspace.anchor_validity = AnchorValidityDecision::kValid;
     for (const size_t sample_index : sample_indices) {
       const auto &sample = frame.odom_samples[sample_index];
       if (sample.point_in_odom.z <
-          support_anchor - config.geometry.sub_support_leak_tolerance) {
+          resolved_anchor.z - config.geometry.sub_support_leak_tolerance) {
         ++workspace.below_anchor_count;
+        SaturatingIncrement(workspace.anchor_below_observation_count);
         continue;
       }
       if (sample.point_in_odom.z <=
-          support_anchor + config.geometry.support_anchor_reobserve_tolerance) {
+          resolved_anchor.z +
+              config.geometry.support_anchor_reobserve_tolerance) {
         ++workspace.anchor_reobserve_count;
       }
       if (sample.point_in_odom.z >=
-          support_anchor + config.geometry.upper_min_height_above_support) {
+          resolved_anchor.z + config.geometry.upper_min_height_above_support) {
         ++workspace.upper_band_count;
         workspace.min_upper_band_z =
             std::min(workspace.min_upper_band_z, sample.point_in_odom.z);
@@ -714,6 +748,21 @@ ClassifyAnchorValidity(const CellWorkspace &workspace,
   return AnchorValidityDecision::kValid;
 }
 
+SupportAnchorAuthority ClassifyAnchorAuthority(const CellWorkspace &workspace) {
+  if (workspace.anchor_validity != AnchorValidityDecision::kValid) {
+    return SupportAnchorAuthority::kInvalid;
+  }
+  if (workspace.support_anchor_origin != SupportAnchorOrigin::kLocalSupport) {
+    return SupportAnchorAuthority::kExplanationOnly;
+  }
+  // First-pass conservative admission rule: only locally reobserved anchors
+  // get pre-trigger destructive leak suppression authority.
+  if (workspace.anchor_reobserve_count >= 2) {
+    return SupportAnchorAuthority::kLeakEligible;
+  }
+  return SupportAnchorAuthority::kExplanationOnly;
+}
+
 // 解决 local trigger、support candidate 和 leak 过滤各自重复扫样本的 case。
 // 做法是基于统一 anchor 过滤后的样本一次性建立 local profile，再用
 // vertical_span 标记 local trigger。 这里不做连续支撑解释，也不做 candidate
@@ -753,46 +802,71 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
           workspace, neighborhood_anchor_reobserve_count, support_anchor,
           config.geometry.upper_min_height_above_support,
           config.geometry.support_anchor_reobserve_tolerance);
-      if (workspace.anchor_validity != AnchorValidityDecision::kValid) {
-        output.support_anchor_used[static_cast<size_t>(cell)] =
-            std::numeric_limits<float>::quiet_NaN();
-      }
     }
     const bool has_support_anchor =
         workspace.anchor_validity == AnchorValidityDecision::kValid;
+    workspace.support_anchor_authority = ClassifyAnchorAuthority(workspace);
+    workspace.anchor_leak_suppression_enabled =
+        workspace.support_anchor_authority ==
+        SupportAnchorAuthority::kLeakEligible;
 
     if (has_support_anchor) {
       output.support_anchor_used[static_cast<size_t>(cell)] = support_anchor;
     }
+    output.support_anchor_origin[static_cast<size_t>(cell)] =
+        static_cast<uint8_t>(workspace.support_anchor_origin);
+    output.support_anchor_authority[static_cast<size_t>(cell)] =
+        static_cast<uint8_t>(workspace.support_anchor_authority);
+    output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)] =
+        workspace.anchor_leak_suppression_enabled ? 1U : 0U;
+    output.raw_sample_min_z[static_cast<size_t>(cell)] =
+        workspace.raw_stats.count > 0 ? workspace.raw_stats.min_z
+                                      : std::numeric_limits<float>::quiet_NaN();
+    output.raw_sample_max_z[static_cast<size_t>(cell)] =
+        workspace.raw_stats.count > 0 ? workspace.raw_stats.max_z
+                                      : std::numeric_limits<float>::quiet_NaN();
+    output.raw_sample_count[static_cast<size_t>(cell)] = static_cast<uint16_t>(
+        std::clamp(workspace.raw_stats.count, 0,
+                   static_cast<int>(std::numeric_limits<uint16_t>::max())));
 
     for (const size_t sample_index : sample_indices) {
       const auto &sample = frame.odom_samples[sample_index];
       const bool is_leak =
-          has_support_anchor &&
+          workspace.anchor_leak_suppression_enabled &&
           sample.point_in_odom.z <
               support_anchor - config.geometry.sub_support_leak_tolerance;
       if (is_leak) {
-        if (workspace.sub_support_leak_count <
-            std::numeric_limits<uint16_t>::max()) {
-          ++workspace.sub_support_leak_count;
-        }
+        SaturatingIncrement(workspace.sub_support_leak_count);
         continue;
       }
       if (workspace.anchor_validity == AnchorValidityDecision::kInvalidStale &&
           sample.point_in_odom.z <=
               support_anchor +
                   config.geometry.support_anchor_reobserve_tolerance) {
+        SaturatingIncrement(workspace.stale_anchor_residual_filtered_count);
         continue;
       }
-      workspace.stats.min_z =
-          std::min(workspace.stats.min_z, sample.point_in_odom.z);
-      workspace.stats.max_z =
-          std::max(workspace.stats.max_z, sample.point_in_odom.z);
-      ++workspace.stats.count;
+      AccumulateCellStats(workspace.filtered_stats, sample.point_in_odom.z);
     }
     output.sub_support_leak_count[static_cast<size_t>(cell)] =
         workspace.sub_support_leak_count;
-    if (workspace.stats.count == 0) {
+    output.anchor_below_observation_count[static_cast<size_t>(cell)] =
+        workspace.anchor_below_observation_count;
+    output.stale_anchor_residual_filtered_count[static_cast<size_t>(cell)] =
+        workspace.stale_anchor_residual_filtered_count;
+    output.filtered_sample_min_z[static_cast<size_t>(cell)] =
+        workspace.filtered_stats.count > 0
+            ? workspace.filtered_stats.min_z
+            : std::numeric_limits<float>::quiet_NaN();
+    output.filtered_sample_max_z[static_cast<size_t>(cell)] =
+        workspace.filtered_stats.count > 0
+            ? workspace.filtered_stats.max_z
+            : std::numeric_limits<float>::quiet_NaN();
+    output.filtered_sample_count[static_cast<size_t>(cell)] =
+        static_cast<uint16_t>(
+            std::clamp(workspace.filtered_stats.count, 0,
+                       static_cast<int>(std::numeric_limits<uint16_t>::max())));
+    if (workspace.filtered_stats.count == 0) {
       continue;
     }
     workspace.has_stats = true;
@@ -808,13 +882,14 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
                        sector_size)),
                    0, static_cast<int>(observability.sectors.size()) - 1);
     const auto sector_state = observability.sectors[sector].state;
-    const float vertical_span = workspace.stats.max_z - workspace.stats.min_z;
+    const CellStats &trigger_stats = workspace.filtered_stats;
+    const float vertical_span = trigger_stats.max_z - trigger_stats.min_z;
     const float coverage = observability.sectors[sector].coverage_confidence;
 
     workspace.support_ref =
         has_local_history_anchor && has_support_anchor
             ? layers.support_height[static_cast<size_t>(cell)]
-            : workspace.stats.min_z;
+            : trigger_stats.min_z;
     workspace.stale_lower_anchor_mix =
         has_support_anchor &&
         workspace.upper_band_count >=
@@ -824,7 +899,7 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
 
     if (sector_state != ObservabilityState::kMissingByDropout) {
       output.support_candidates.push_back(SupportCandidate{
-          cell, workspace.stats.min_z, std::clamp(coverage, 0.0f, 1.0f)});
+          cell, trigger_stats.min_z, std::clamp(coverage, 0.0f, 1.0f)});
     }
     if (vertical_span > suspicious_vertical_span) {
       output.obstacle_local_triggered[static_cast<size_t>(cell)] = 1U;
@@ -832,7 +907,7 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
       locally_triggered_cells.push_back(cell);
     } else if (sector_state == ObservabilityState::kPartiallyObserved) {
       output.ambiguous_candidates.push_back(
-          AmbiguousCandidate{cell, workspace.stats.min_z});
+          AmbiguousCandidate{cell, trigger_stats.min_z});
     }
   }
 
@@ -1045,7 +1120,7 @@ void EvaluateCandidates(
         support_count += is_upper_support ? 1 : 0;
         if (IsValidSupportAnchorCell(layers, neighbor, config) &&
             std::abs(layers.support_height[static_cast<size_t>(neighbor)] -
-                     workspace.stats.max_z) <=
+                     workspace.filtered_stats.max_z) <=
                 config.geometry.support_anchor_reobserve_tolerance) {
           ++aligned_neighbor_support_count;
         }
@@ -1071,11 +1146,12 @@ void EvaluateCandidates(
     const float support_anchor =
         output.support_anchor_used[static_cast<size_t>(cell)];
     const bool has_support_anchor = std::isfinite(support_anchor);
-    const float vertical_span = workspace.stats.max_z - workspace.stats.min_z;
+    const float vertical_span =
+        workspace.filtered_stats.max_z - workspace.filtered_stats.min_z;
     const float relative_support_ref =
         workspace.support_ref - frame.base_pose_in_odom.position.z();
     const float relative_upper_z =
-        workspace.stats.max_z - frame.base_pose_in_odom.position.z();
+        workspace.filtered_stats.max_z - frame.base_pose_in_odom.position.z();
     const FrontendExplanationDecision reject_decision =
         ClassifyExplanationRejectDecision(
             has_support_anchor,
@@ -1117,13 +1193,14 @@ void EvaluateCandidates(
 
     const float wall_like_gain_scale =
         workspace.sub_support_leak_count == 0U
-            ? ComputeWallLikeObstacleGainScale(workspace.stats, vertical_span,
-                                               relative_upper_z, support_count)
+            ? ComputeWallLikeObstacleGainScale(workspace.filtered_stats,
+                                               vertical_span, relative_upper_z,
+                                               support_count)
             : 1.0f;
     output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
     output.obstacle_candidates.push_back(ObstacleCandidate{
-        cell, workspace.stats.max_z, std::clamp(vertical_span, 0.0f, 1.0f),
-        wall_like_gain_scale});
+        cell, workspace.filtered_stats.max_z,
+        std::clamp(vertical_span, 0.0f, 1.0f), wall_like_gain_scale});
   }
 }
 
@@ -1135,7 +1212,25 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   FrontendOutput output;
   output.support_anchor_used.assign(static_cast<size_t>(map.size()),
                                     std::numeric_limits<float>::quiet_NaN());
+  output.support_anchor_origin.assign(static_cast<size_t>(map.size()), 0U);
+  output.support_anchor_authority.assign(static_cast<size_t>(map.size()), 0U);
+  output.anchor_leak_suppression_enabled.assign(static_cast<size_t>(map.size()),
+                                                0U);
   output.sub_support_leak_count.assign(static_cast<size_t>(map.size()), 0U);
+  output.anchor_below_observation_count.assign(static_cast<size_t>(map.size()),
+                                               0U);
+  output.stale_anchor_residual_filtered_count.assign(
+      static_cast<size_t>(map.size()), 0U);
+  output.raw_sample_min_z.assign(static_cast<size_t>(map.size()),
+                                 std::numeric_limits<float>::quiet_NaN());
+  output.raw_sample_max_z.assign(static_cast<size_t>(map.size()),
+                                 std::numeric_limits<float>::quiet_NaN());
+  output.raw_sample_count.assign(static_cast<size_t>(map.size()), 0U);
+  output.filtered_sample_min_z.assign(static_cast<size_t>(map.size()),
+                                      std::numeric_limits<float>::quiet_NaN());
+  output.filtered_sample_max_z.assign(static_cast<size_t>(map.size()),
+                                      std::numeric_limits<float>::quiet_NaN());
+  output.filtered_sample_count.assign(static_cast<size_t>(map.size()), 0U);
   output.raw_upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
   output.explanation_adjusted_upper_support_cell.assign(
       static_cast<size_t>(map.size()), 0U);

@@ -49,6 +49,10 @@ using passable_area::core::ProcessedFrame;
 
 const char *ToExplanationDecisionString(
     passable_area::core::FrontendExplanationDecision decision);
+const char *ToSupportAnchorOriginString(
+    passable_area::core::SupportAnchorOrigin origin);
+const char *ToSupportAnchorAuthorityString(
+    passable_area::core::SupportAnchorAuthority authority);
 
 std::string DefaultParamsFile();
 std::optional<passable_area::core::Config>
@@ -609,8 +613,34 @@ void PrintFalseObstacleFrame(
               << FormatFloat(hotspot.source_support_anchor_used) << '\n';
     std::cout << "    support_anchor_used: "
               << FormatFloat(hotspot.support_anchor_used)
+              << "  support_anchor_origin: "
+              << ToSupportAnchorOriginString(
+                     static_cast<passable_area::core::SupportAnchorOrigin>(
+                         hotspot.support_anchor_origin))
+              << "  support_anchor_authority: "
+              << ToSupportAnchorAuthorityString(
+                     static_cast<passable_area::core::SupportAnchorAuthority>(
+                         hotspot.support_anchor_authority))
+              << '\n';
+    std::cout << "    anchor_leak_suppression_enabled: "
+              << (hotspot.anchor_leak_suppression_enabled ? "true" : "false")
               << "  sub_support_leak_count: "
-              << std::to_string(hotspot.sub_support_leak_count) << '\n';
+              << std::to_string(hotspot.sub_support_leak_count)
+              << "  anchor_below_observation_count: "
+              << std::to_string(hotspot.anchor_below_observation_count)
+              << "  stale_anchor_residual_filtered_count: "
+              << std::to_string(
+                     hotspot.stale_anchor_residual_filtered_count)
+              << '\n';
+    std::cout << "    raw_sample_z: [" << FormatFloat(hotspot.raw_sample_min_z)
+              << ", " << FormatFloat(hotspot.raw_sample_max_z)
+              << "]  raw_sample_count: "
+              << std::to_string(hotspot.raw_sample_count)
+              << "  filtered_sample_z: ["
+              << FormatFloat(hotspot.filtered_sample_min_z) << ", "
+              << FormatFloat(hotspot.filtered_sample_max_z)
+              << "]  filtered_sample_count: "
+              << std::to_string(hotspot.filtered_sample_count) << '\n';
     std::cout << "    raw_upper_support_cell: "
               << (hotspot.raw_upper_support_cell ? "true" : "false")
               << "  adjusted_upper_support_cell: "
@@ -768,6 +798,32 @@ const char *ToExplanationDecisionString(
   return "Unknown";
 }
 
+const char *ToSupportAnchorOriginString(
+    passable_area::core::SupportAnchorOrigin origin) {
+  switch (origin) {
+  case passable_area::core::SupportAnchorOrigin::kNone:
+    return "None";
+  case passable_area::core::SupportAnchorOrigin::kLocalSupport:
+    return "LocalSupport";
+  case passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor:
+    return "BorrowedNeighbor";
+  }
+  return "Unknown";
+}
+
+const char *ToSupportAnchorAuthorityString(
+    passable_area::core::SupportAnchorAuthority authority) {
+  switch (authority) {
+  case passable_area::core::SupportAnchorAuthority::kInvalid:
+    return "Invalid";
+  case passable_area::core::SupportAnchorAuthority::kExplanationOnly:
+    return "ExplanationOnly";
+  case passable_area::core::SupportAnchorAuthority::kLeakEligible:
+    return "LeakEligible";
+  }
+  return "Unknown";
+}
+
 void PrintMissObstacleFrame(
     const passable_area::tools::MissObstacleFrameAnalysis &frame, int rank,
     const TerminalStyle &style) {
@@ -831,10 +887,35 @@ void PrintMissObstacleFrame(
               << FormatFloat(cell.support_confidence)
               << "  support_anchor_used: "
               << FormatFloat(cell.support_anchor_used) << '\n';
+    std::cout << "    support_anchor_origin: "
+              << ToSupportAnchorOriginString(
+                     static_cast<passable_area::core::SupportAnchorOrigin>(
+                         cell.support_anchor_origin))
+              << "  support_anchor_authority: "
+              << ToSupportAnchorAuthorityString(
+                     static_cast<passable_area::core::SupportAnchorAuthority>(
+                         cell.support_anchor_authority))
+              << "  anchor_leak_suppression_enabled: "
+              << (cell.anchor_leak_suppression_enabled ? "true" : "false")
+              << '\n';
     std::cout << "    max_sample_z_minus_support_ref: "
               << FormatFloat(cell.max_sample_z_minus_support_ref)
               << "  sub_support_leak_count: "
-              << std::to_string(cell.sub_support_leak_count) << '\n';
+              << std::to_string(cell.sub_support_leak_count)
+              << "  anchor_below_observation_count: "
+              << std::to_string(cell.anchor_below_observation_count)
+              << "  stale_anchor_residual_filtered_count: "
+              << std::to_string(cell.stale_anchor_residual_filtered_count)
+              << '\n';
+    std::cout << "    raw_sample_z: [" << FormatFloat(cell.raw_sample_min_z)
+              << ", " << FormatFloat(cell.raw_sample_max_z)
+              << "]  raw_sample_count: "
+              << std::to_string(cell.raw_sample_count)
+              << "  filtered_sample_z: ["
+              << FormatFloat(cell.filtered_sample_min_z) << ", "
+              << FormatFloat(cell.filtered_sample_max_z)
+              << "]  filtered_sample_count: "
+              << std::to_string(cell.filtered_sample_count) << '\n';
     std::cout << "    raw_upper_support_cell: "
               << (cell.raw_upper_support_cell ? "true" : "false")
               << "  adjusted_upper_support_cell: "
@@ -1643,7 +1724,27 @@ void PrintRoiFrameInspection(
           << " overhead_h=" << output.overhead_height[idx]
           << " obstacle_evidence=" << output.obstacle_evidence[idx]
           << " support_anchor=" << output.support_anchor_used[idx]
+          << " support_anchor_origin="
+          << ToSupportAnchorOriginString(
+                 static_cast<passable_area::core::SupportAnchorOrigin>(
+                     output.support_anchor_origin[idx]))
+          << " support_anchor_authority="
+          << ToSupportAnchorAuthorityString(
+                 static_cast<passable_area::core::SupportAnchorAuthority>(
+                     output.support_anchor_authority[idx]))
+          << " leak_enabled="
+          << static_cast<int>(output.anchor_leak_suppression_enabled[idx])
           << " leak_count=" << output.sub_support_leak_count[idx]
+          << " below_anchor_observed="
+          << output.anchor_below_observation_count[idx]
+          << " stale_residual_filtered="
+          << output.stale_anchor_residual_filtered_count[idx]
+          << " raw_min_z=" << output.raw_sample_min_z[idx]
+          << " raw_max_z=" << output.raw_sample_max_z[idx]
+          << " raw_count=" << output.raw_sample_count[idx]
+          << " filtered_min_z=" << output.filtered_sample_min_z[idx]
+          << " filtered_max_z=" << output.filtered_sample_max_z[idx]
+          << " filtered_count=" << output.filtered_sample_count[idx]
           << " raw_upper="
           << static_cast<int>(output.raw_upper_support_cell[idx])
           << " adjusted_upper="
