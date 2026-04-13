@@ -23,7 +23,7 @@
 - `test_false_obstacle_analyzer`
 - `test_miss_obstacle_analyzer`
 
-截至本轮整理，自动测试总共有 5 个 target、58 个 gtest case。
+截至当前版本，自动测试总共有 5 个 target、84 个 gtest case。
 
 ### 1.2 手工 benchmark / harness
 
@@ -147,6 +147,8 @@
 - `ClearanceDriven`
 - `ObstacleEvidencePlusLowContinuity`
 - source cell 到离散前端状态查找
+- `aligned_neighbor_support_count`
+- `explanation_decision`
 - invalid source cell 时不误标为 grid-backed
 
 结论：
@@ -166,6 +168,8 @@
 - ROI 没有样本
 - 有样本但没有前端 suspicious
 - suspicious 被 neighbor-support gate 拒绝
+- rejected cell 会保留 `aligned_neighbor_support_count`
+- rejected cell 会保留 `explanation_decision`
 - 有 candidate 但 `obstacle_evidence` 不足
 - 有强 evidence 但没过 obstacle point 高度门槛
 - 有强 evidence cell 但当前 ROI 内没有 source sample
@@ -242,6 +246,14 @@
 - 它们是诊断工具，不是自动门禁测试
 - 但在问题复现和参数回归时非常重要
 
+补充说明：
+
+- `--analyze-missed-obstacles` 现在会额外输出：
+  - `aligned_neighbor_support_count`
+  - `explanation_decision`
+- `--inspect-roi` 现在也会打印这两个字段
+- 这两个量的目的不是新增判定逻辑，而是把“为什么 suspicious cell 没变成 candidate”从外部反推改成工具直接给证据
+
 ## 4. 最近验证状态
 
 ### 4.1 本轮已实际运行
@@ -255,12 +267,13 @@
 结果：
 
 - 当前 `passable_area` 自动测试 5 个 target 全部通过
-- 最近一次该包 gtest 覆盖共 58 个 case
+- 最近一次该包 gtest 覆盖共 84 个 case
 
 本轮还实跑了：
 
 - `passable_area_offline_replay --analyze-false-obstacles`
 - `passable_area_offline_replay --analyze-missed-obstacles`
+- `passable_area_offline_replay --inspect-roi`
 - `build/passable_area/passable_area_benchmark`
 - `build/passable_area/passable_area_e2e_benchmark`
 
@@ -268,6 +281,7 @@
 
 - 离线分析入口当前是可用的
 - false / miss 两条工具链都已经被最近验证过
+- ROI inspect 也已验证可用，并能输出 `aligned_neighbor_support_count / explanation_decision`
 - core benchmark 已输出吞吐结果
 - e2e benchmark 已输出端到端延迟结果，并确认 target 可运行
 
@@ -326,7 +340,8 @@
 1. 为 `scripts/passable_benchmark.sh` 建立固定的“最近一次运行结果记录”入口  
 2. 给 `passable_area_benchmark` / `passable_area_e2e_benchmark` 增加独立说明文档，记录推荐运行环境和基线指标  
 3. 后续如果 miss/false analyzer 再扩展分类，优先同步补 tools 层单测，而不是只依赖真实 bag 人工验证  
-4. 若将来引入 CI，应明确：
+4. 如果离线排查继续围绕 neighbor gate / explanation 分歧展开，优先保证 `aligned_neighbor_support_count / explanation_decision` 这类“控制链中间量”持续可见  
+5. 若将来引入 CI，应明确：
    - 默认门禁只跑 gtest
    - benchmark 和 bag 回归走手工/定时任务
 

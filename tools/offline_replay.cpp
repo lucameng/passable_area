@@ -47,6 +47,9 @@ using passable_area::core::ObservabilityState;
 using passable_area::core::PassabilityState;
 using passable_area::core::ProcessedFrame;
 
+const char *ToExplanationDecisionString(
+    passable_area::core::FrontendExplanationDecision decision);
+
 std::string DefaultParamsFile();
 std::optional<passable_area::core::Config>
 LoadConfigFromParamsFile(const std::string &params_file);
@@ -618,9 +621,15 @@ void PrintFalseObstacleFrame(
               << (hotspot.obstacle_candidate_cell ? "true" : "false")
               << "  neighbor_upper_support_count: "
               << std::to_string(hotspot.neighbor_upper_support_count)
+              << "  aligned_neighbor_support_count: "
+              << std::to_string(hotspot.aligned_neighbor_support_count)
               << "  rejected_by_neighbor_support: "
               << (hotspot.obstacle_rejected_by_neighbor_support ? "true"
                                                                 : "false")
+              << "  explanation_decision: "
+              << ToExplanationDecisionString(
+                     static_cast<passable_area::core::FrontendExplanationDecision>(
+                         hotspot.explanation_decision))
               << '\n';
   }
   std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m",
@@ -724,6 +733,21 @@ MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
   return "\033[37m";
 }
 
+const char *ToExplanationDecisionString(
+    passable_area::core::FrontendExplanationDecision decision) {
+  switch (decision) {
+  case passable_area::core::FrontendExplanationDecision::kNone:
+    return "None";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotStairMix:
+    return "BelowRobotStairMix";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotGroundLayerMix:
+    return "BelowRobotGroundLayerMix";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotUpstairGroundMix:
+    return "BelowRobotUpstairGroundMix";
+  }
+  return "Unknown";
+}
+
 void PrintMissObstacleFrame(
     const passable_area::tools::MissObstacleFrameAnalysis &frame, int rank,
     const TerminalStyle &style) {
@@ -804,7 +828,14 @@ void PrintMissObstacleFrame(
     std::cout << "    rejected_by_neighbor_support: "
               << (cell.obstacle_rejected_by_neighbor_support ? "true" : "false")
               << "  neighbor_upper_support_count: "
-              << std::to_string(cell.neighbor_upper_support_count) << '\n';
+              << std::to_string(cell.neighbor_upper_support_count)
+              << "  aligned_neighbor_support_count: "
+              << std::to_string(cell.aligned_neighbor_support_count)
+              << "  explanation_decision: "
+              << ToExplanationDecisionString(
+                     static_cast<passable_area::core::FrontendExplanationDecision>(
+                         cell.explanation_decision))
+              << '\n';
     std::cout << "    why: " << Colorize(cell.explanation, "\033[1;37m", style)
               << '\n';
   }
@@ -1585,6 +1616,12 @@ void PrintRoiFrameInspection(
                        output.obstacle_rejected_by_neighbor_support[idx])
                 << " neighbor_upper="
                 << static_cast<int>(output.neighbor_upper_support_count[idx])
+                << " aligned_neighbor="
+                << static_cast<int>(output.aligned_neighbor_support_count[idx])
+                << " explanation_decision="
+                << ToExplanationDecisionString(
+                       static_cast<passable_area::core::FrontendExplanationDecision>(
+                           output.explanation_decision[idx]))
                 << " coverage=" << output.coverage_confidence[idx]
                 << " support_conf=" << output.support_confidence[idx] << "\n";
     }

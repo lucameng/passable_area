@@ -41,6 +41,8 @@ struct FrontendOutput {
   std::vector<uint8_t> obstacle_candidate_cell;
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
   std::vector<int8_t> neighbor_upper_support_count;
+  std::vector<int8_t> aligned_neighbor_support_count;
+  std::vector<uint8_t> explanation_decision;
 };
 
 } // namespace passable_area::core

@@ -56,9 +56,23 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 - `obstacle_suspicious_cells`
 - `obstacle_candidate_cells`
 - `rejected_suspicious_cells`
+- `neighbor_upper_support_count`
+- `aligned_neighbor_support_count`
+- `explanation_decision`
 - `max_obstacle_evidence`
 - `support_ref`
 - `max_sample_z_minus_support_ref`
+
+其中前端拒绝相关字段建议这样看：
+
+- `neighbor_upper_support_count`
+  - 3x3 邻域里有多少个 `upper_support_cell`
+- `aligned_neighbor_support_count`
+  - 这些邻域结构里，有多少个历史 `support_height` 与当前 cell 的 upper 高度对齐
+  - 如果它达到 `min_neighbor_upper_support_cells`，当前 suspicious cell 不会进入 `obstacle_candidate_cell`
+- `explanation_decision`
+  - 只有在“邻域 upper-support 数量够，但对齐支撑数量还不够”时，系统才会进一步进入 explanation 分支
+  - 如果它是 `None`，但 cell 仍然被 reject，通常说明它是被更前面的 neighbor gate 直接挡掉，不是被 stair-mix / ground-mix explanation 否掉
 
 这里的“发布高度门槛”现在包含两部分：
 
@@ -76,3 +90,19 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 - `NoObstacleSourceSamplesInRoi`
 
 这些名称都对应实际字段，不是场景标签。
+
+## 6. 关于高台前沿 / 连续高支撑带的排查提示
+
+如果你看到：
+
+- ROI 内 `obstacle_suspicious=true`
+- `upper_support_cell=true`
+- 但 `obstacle_candidate_cell=false`
+- 同时 `aligned_neighbor_support_count >= min_neighbor_upper_support_cells`
+- 且 `explanation_decision=None`
+
+那么更接近这类控制链结论：
+
+> 当前 cell 已经满足局部“像障碍”的条件，但邻域被解释成连续高支撑结构，所以在进入 explanation 分支之前就被 neighbor gate 直接拦下。
+
+这种 case 不是输出高度门槛问题，也不是 `obstacle_points_min_height` 导致的。

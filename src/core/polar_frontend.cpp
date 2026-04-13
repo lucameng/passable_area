@@ -23,13 +23,6 @@ enum class AnchorValidityDecision : uint8_t {
   kInvalidWallOnly = 3U,
 };
 
-enum class ExplanationDecision : uint8_t {
-  kNone = 0U,
-  kBelowRobotStairMix = 1U,
-  kBelowRobotGroundLayerMix = 2U,
-  kBelowRobotUpstairGroundMix = 3U,
-};
-
 struct CellWorkspace {
   float raw_min_z = std::numeric_limits<float>::infinity();
   float support_anchor_candidate = std::numeric_limits<float>::quiet_NaN();
@@ -389,7 +382,7 @@ int CountAscendingNeighborSupportRefs(
 // support，但其实更像楼梯混层/脚下低层地面的 case。 做法是把 below-robot stair
 // mix、downstairs ground mix、upstairs ground mix 统一收敛成一个 explanation
 // 决策。
-ExplanationDecision ClassifyExplanationDecision(
+FrontendExplanationDecision ClassifyExplanationDecision(
     bool has_support_anchor, float relative_support_anchor,
     float relative_support_ref, float relative_upper_z, float vertical_span,
     int support_count, int ascending_stair_support_count,
@@ -400,7 +393,7 @@ ExplanationDecision ClassifyExplanationDecision(
       relative_support_ref <= -max_step_down &&
       relative_upper_z <= -upper_height_threshold && support_count >= 3 &&
       (sub_support_leak_count > 0U || stale_lower_anchor_mix)) {
-    return ExplanationDecision::kBelowRobotStairMix;
+    return FrontendExplanationDecision::kBelowRobotStairMix;
   }
 
   // Downstairs ground-mix only trusts local anchored upper-support structure;
@@ -413,7 +406,7 @@ ExplanationDecision ClassifyExplanationDecision(
       relative_upper_z <= -upper_height_threshold &&
       vertical_span <= max_step_down && !has_reinforcing_support_structure &&
       sub_support_leak_count == 0U && !stale_lower_anchor_mix) {
-    return ExplanationDecision::kBelowRobotGroundLayerMix;
+    return FrontendExplanationDecision::kBelowRobotGroundLayerMix;
   }
 
   const float min_below_robot_support_depth = -0.5f * upper_height_threshold;
@@ -433,10 +426,10 @@ ExplanationDecision ClassifyExplanationDecision(
       ascending_stair_support_count >=
           std::max(1, min_neighbor_upper_support_cells) &&
       aligned_neighbor_support_count == 0 && sub_support_leak_count == 0U) {
-    return ExplanationDecision::kBelowRobotUpstairGroundMix;
+    return FrontendExplanationDecision::kBelowRobotUpstairGroundMix;
   }
 
-  return ExplanationDecision::kNone;
+  return FrontendExplanationDecision::kNone;
 }
 
 // 解决 support_ref 被脚下更低一层拖低，导致本来可解释的上层踏面被误当 obstacle
@@ -975,6 +968,8 @@ void EmitCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
     }
     output.neighbor_upper_support_count[static_cast<size_t>(cell)] =
         static_cast<int8_t>(std::clamp(support_count, 0, 9));
+    output.aligned_neighbor_support_count[static_cast<size_t>(cell)] =
+        static_cast<int8_t>(std::clamp(aligned_neighbor_support_count, 0, 9));
     if (support_count >= min_neighbor_upper_support_cells &&
         aligned_neighbor_support_count < min_neighbor_upper_support_cells) {
       const float support_anchor =
@@ -985,7 +980,7 @@ void EmitCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
           workspace.support_ref - frame.base_pose_in_odom.position.z();
       const float relative_upper_z =
           workspace.stats.max_z - frame.base_pose_in_odom.position.z();
-      const ExplanationDecision explanation_decision =
+      const FrontendExplanationDecision explanation_decision =
           ClassifyExplanationDecision(
               has_support_anchor,
               support_anchor - frame.base_pose_in_odom.position.z(),
@@ -996,7 +991,9 @@ void EmitCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
               config.geometry.upper_min_height_above_support,
               config.geometry.max_step_up, workspace.sub_support_leak_count,
               workspace.stale_lower_anchor_mix);
-      if (explanation_decision != ExplanationDecision::kNone) {
+      output.explanation_decision[static_cast<size_t>(cell)] =
+          static_cast<uint8_t>(explanation_decision);
+      if (explanation_decision != FrontendExplanationDecision::kNone) {
         output
             .obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] =
             1U;
@@ -1039,6 +1036,9 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       static_cast<size_t>(map.size()), 0U);
   output.neighbor_upper_support_count.assign(static_cast<size_t>(map.size()),
                                              0);
+  output.aligned_neighbor_support_count.assign(static_cast<size_t>(map.size()),
+                                               0);
+  output.explanation_decision.assign(static_cast<size_t>(map.size()), 0U);
   const auto sample_indices_by_cell = GroupSampleIndicesByCell(frame, map);
   const int active_cell_count = CountActiveCells(sample_indices_by_cell);
   output.support_candidates.reserve(static_cast<size_t>(active_cell_count));

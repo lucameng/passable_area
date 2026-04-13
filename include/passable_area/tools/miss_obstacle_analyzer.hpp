@@ -55,6 +55,8 @@ struct MissObstacleRepresentativeCell {
   bool obstacle_candidate_cell = false;
   bool obstacle_rejected_by_neighbor_support = false;
   int8_t neighbor_upper_support_count = 0;
+  int8_t aligned_neighbor_support_count = 0;
+  uint8_t explanation_decision = 0U;
   std::string explanation;
 };
 

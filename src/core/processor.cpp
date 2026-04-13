@@ -108,6 +108,9 @@ Processor::buildOutput(const ProcessedFrame &frame,
       frontend_output.obstacle_rejected_by_neighbor_support;
   output.neighbor_upper_support_count =
       frontend_output.neighbor_upper_support_count;
+  output.aligned_neighbor_support_count =
+      frontend_output.aligned_neighbor_support_count;
+  output.explanation_decision = frontend_output.explanation_decision;
   output.support_state = layers.support_state;
 
   if (config_.debug.publish_base_gravity_cloud) {

@@ -46,6 +46,12 @@ FrameOutput MakeOutput() {
   output.raw_upper_support_cell.assign(9, 0U);
   output.explanation_adjusted_upper_support_cell.assign(9, 0U);
   output.upper_support_cell.assign(9, 0U);
+  output.obstacle_suspicious.assign(9, 0U);
+  output.obstacle_candidate_cell.assign(9, 0U);
+  output.obstacle_rejected_by_neighbor_support.assign(9, 0U);
+  output.neighbor_upper_support_count.assign(9, 0);
+  output.aligned_neighbor_support_count.assign(9, 0);
+  output.explanation_decision.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -156,6 +162,8 @@ TEST(FalseObstacleAnalyzerTest,
   output.obstacle_candidate_cell[0] = 1U;
   output.obstacle_rejected_by_neighbor_support[0] = 1U;
   output.neighbor_upper_support_count[0] = 1;
+  output.aligned_neighbor_support_count[0] = 2;
+  output.explanation_decision[0] = 2U;
   const int center_cell = CenterCellIndex(output);
   ASSERT_NE(center_cell, 0);
   output.obstacle_evidence[center_cell] = 0.3f;
@@ -177,6 +185,8 @@ TEST(FalseObstacleAnalyzerTest,
   EXPECT_TRUE(analysis->hotspots.front().obstacle_candidate_cell);
   EXPECT_TRUE(analysis->hotspots.front().obstacle_rejected_by_neighbor_support);
   EXPECT_EQ(analysis->hotspots.front().neighbor_upper_support_count, 1);
+  EXPECT_EQ(analysis->hotspots.front().aligned_neighbor_support_count, 2);
+  EXPECT_EQ(analysis->hotspots.front().explanation_decision, 2U);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_obstacle_evidence, 0.7f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_overhead_height, 0.9f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_support_anchor_used, 0.25f);
@@ -215,6 +225,8 @@ TEST(FalseObstacleAnalyzerTest,
   output.obstacle_suspicious.assign(1, 1U);
   output.obstacle_rejected_by_neighbor_support.assign(1, 1U);
   output.neighbor_upper_support_count.assign(1, 1);
+  output.aligned_neighbor_support_count.assign(1, 0);
+  output.explanation_decision.assign(1, 0U);
 
   const auto analysis = analyzer.analyzeFrame(output);
   ASSERT_TRUE(analysis.has_value());

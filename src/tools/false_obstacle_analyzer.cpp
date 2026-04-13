@@ -95,6 +95,21 @@ int64_t MakeBinKey(int x_bin, int y_bin) {
   return (static_cast<int64_t>(x_bin) << 32) ^ static_cast<uint32_t>(y_bin);
 }
 
+const char *ToExplanationDecisionString(
+    passable_area::core::FrontendExplanationDecision decision) {
+  switch (decision) {
+  case passable_area::core::FrontendExplanationDecision::kNone:
+    return "None";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotStairMix:
+    return "BelowRobotStairMix";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotGroundLayerMix:
+    return "BelowRobotGroundLayerMix";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotUpstairGroundMix:
+    return "BelowRobotUpstairGroundMix";
+  }
+  return "Unknown";
+}
+
 } // namespace
 
 FalseObstacleAnalyzer::FalseObstacleAnalyzer(
@@ -299,6 +314,16 @@ FalseObstacleAnalyzer::lookupLocalContext(
       context.neighbor_upper_support_count =
           output.neighbor_upper_support_count[static_cast<size_t>(source_cell)];
     }
+    if (output.aligned_neighbor_support_count.size() >
+        static_cast<size_t>(source_cell)) {
+      context.aligned_neighbor_support_count =
+          output.aligned_neighbor_support_count[static_cast<size_t>(source_cell)];
+    }
+    if (output.explanation_decision.size() >
+        static_cast<size_t>(source_cell)) {
+      context.explanation_decision =
+          output.explanation_decision[static_cast<size_t>(source_cell)];
+    }
     if (output.obstacle_evidence.size() > static_cast<size_t>(source_cell)) {
       context.source_obstacle_evidence =
           output.obstacle_evidence[static_cast<size_t>(source_cell)];
@@ -379,6 +404,9 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.obstacle_rejected_by_neighbor_support =
       context.obstacle_rejected_by_neighbor_support;
   hotspot.neighbor_upper_support_count = context.neighbor_upper_support_count;
+  hotspot.aligned_neighbor_support_count =
+      context.aligned_neighbor_support_count;
+  hotspot.explanation_decision = context.explanation_decision;
   hotspot.has_observability = context.has_observability;
   hotspot.observability_state = context.observability_state;
   hotspot.classification = classifyHotspot(hotspot);
@@ -400,6 +428,15 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   case FalseObstacleRootCause::kUnknownOrMixed:
     hotspot.explanation = "mixed or insufficient local evidence";
     break;
+  }
+  if (hotspot.obstacle_rejected_by_neighbor_support &&
+      hotspot.explanation_decision !=
+          static_cast<uint8_t>(
+              passable_area::core::FrontendExplanationDecision::kNone)) {
+    hotspot.explanation += " via ";
+    hotspot.explanation += ToExplanationDecisionString(
+        static_cast<passable_area::core::FrontendExplanationDecision>(
+            hotspot.explanation_decision));
   }
   return hotspot;
 }

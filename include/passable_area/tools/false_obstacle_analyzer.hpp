@@ -60,6 +60,8 @@ struct FalseObstacleHotspot {
   bool obstacle_candidate_cell = false;
   bool obstacle_rejected_by_neighbor_support = false;
   int8_t neighbor_upper_support_count = 0;
+  int8_t aligned_neighbor_support_count = 0;
+  uint8_t explanation_decision = 0U;
   bool has_grid_values = false;
   bool has_observability = false;
   passable_area::core::ObservabilityState observability_state =
@@ -128,6 +130,8 @@ private:
     bool obstacle_candidate_cell = false;
     bool obstacle_rejected_by_neighbor_support = false;
     int8_t neighbor_upper_support_count = 0;
+    int8_t aligned_neighbor_support_count = 0;
+    uint8_t explanation_decision = 0U;
     bool has_observability = false;
     passable_area::core::ObservabilityState observability_state =
         passable_area::core::ObservabilityState::kObserved;

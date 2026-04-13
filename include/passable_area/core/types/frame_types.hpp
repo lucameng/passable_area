@@ -8,6 +8,13 @@
 
 namespace passable_area::core {
 
+enum class FrontendExplanationDecision : uint8_t {
+  kNone = 0U,
+  kBelowRobotStairMix = 1U,
+  kBelowRobotGroundLayerMix = 2U,
+  kBelowRobotUpstairGroundMix = 3U,
+};
+
 struct FrameInput {
   Timestamp stamp = 0;
   Pose3D base_pose_in_odom;
@@ -90,6 +97,8 @@ struct FrameOutput {
   std::vector<uint8_t> obstacle_candidate_cell;
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
   std::vector<int8_t> neighbor_upper_support_count;
+  std::vector<int8_t> aligned_neighbor_support_count;
+  std::vector<uint8_t> explanation_decision;
   std::vector<uint8_t> support_state;
   std::vector<CellDebugPoint> base_gravity_cloud_points;
   std::vector<CellDebugPoint> support_points;

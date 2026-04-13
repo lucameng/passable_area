@@ -57,6 +57,8 @@ FrameOutput MakeOutput() {
   output.obstacle_candidate_cell.assign(9, 0U);
   output.obstacle_rejected_by_neighbor_support.assign(9, 0U);
   output.neighbor_upper_support_count.assign(9, 0);
+  output.aligned_neighbor_support_count.assign(9, 0);
+  output.explanation_decision.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -113,12 +115,18 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_suspicious[cell] = 1U;
   output.obstacle_rejected_by_neighbor_support[cell] = 1U;
   output.neighbor_upper_support_count[cell] = 1;
+  output.aligned_neighbor_support_count[cell] = 2;
+  output.explanation_decision[cell] = 3U;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
   EXPECT_EQ(analysis->classification,
             MissObstacleRootCause::kRejectedByNeighborSupport);
   EXPECT_EQ(analysis->rejected_suspicious_cell_count, 1);
+  ASSERT_FALSE(analysis->representative_cells.empty());
+  EXPECT_EQ(analysis->representative_cells.front().aligned_neighbor_support_count,
+            2);
+  EXPECT_EQ(analysis->representative_cells.front().explanation_decision, 3U);
 }
 
 TEST(MissObstacleAnalyzerTest,

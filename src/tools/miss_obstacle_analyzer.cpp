@@ -66,6 +66,23 @@ int RootCauseIndex(MissObstacleRootCause cause) {
   return static_cast<int>(cause);
 }
 
+const char *ToExplanationDecisionString(
+    passable_area::core::FrontendExplanationDecision decision) {
+  switch (decision) {
+  case passable_area::core::FrontendExplanationDecision::kNone:
+    return "None";
+  case passable_area::core::FrontendExplanationDecision::kBelowRobotStairMix:
+    return "BelowRobotStairMix";
+  case passable_area::core::FrontendExplanationDecision::
+      kBelowRobotGroundLayerMix:
+    return "BelowRobotGroundLayerMix";
+  case passable_area::core::FrontendExplanationDecision::
+      kBelowRobotUpstairGroundMix:
+    return "BelowRobotUpstairGroundMix";
+  }
+  return "Unknown";
+}
+
 } // namespace
 
 MissObstacleAnalyzer::MissObstacleAnalyzer(
@@ -246,6 +263,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
           output.obstacle_rejected_by_neighbor_support[idx] != 0U;
       cell.neighbor_upper_support_count =
           output.neighbor_upper_support_count[idx];
+      cell.aligned_neighbor_support_count =
+          output.aligned_neighbor_support_count[idx];
+      cell.explanation_decision = output.explanation_decision[idx];
       cell.max_sample_z_minus_support_ref =
           (has_samples && sample_stats.sample_count > 0 &&
            std::isfinite(support_ref))
@@ -254,6 +274,14 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
 
       if (cell.obstacle_rejected_by_neighbor_support) {
         cell.explanation = "suspicious obstacle rejected by neighborhood gate";
+        if (cell.explanation_decision !=
+            static_cast<uint8_t>(
+                passable_area::core::FrontendExplanationDecision::kNone)) {
+          cell.explanation += " via ";
+          cell.explanation += ToExplanationDecisionString(
+              static_cast<passable_area::core::FrontendExplanationDecision>(
+                  cell.explanation_decision));
+        }
       } else if (cell.obstacle_candidate_cell &&
                  cell.obstacle_evidence <
                      config_.obstacle_points_min_evidence) {
@@ -310,6 +338,17 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.evidence_lines.push_back(
         "obstacle_candidate_cells=" +
         std::to_string(analysis.obstacle_candidate_cell_count));
+    int cells_with_explicit_explanation = 0;
+    for (const auto &cell : analysis.representative_cells) {
+      if (cell.explanation_decision !=
+          static_cast<uint8_t>(
+              passable_area::core::FrontendExplanationDecision::kNone)) {
+        ++cells_with_explicit_explanation;
+      }
+    }
+    analysis.evidence_lines.push_back(
+        "rejected_cells_with_explicit_explanation=" +
+        std::to_string(cells_with_explicit_explanation));
   } else if (strong_evidence_cell_count > 0 && publishable_sample_count == 0) {
     if (strong_evidence_cells_with_samples == 0) {
       analysis.classification =
