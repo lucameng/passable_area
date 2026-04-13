@@ -48,6 +48,9 @@ struct CellWorkspace {
   bool stale_lower_anchor_mix = false;
 };
 
+// 解决 wall-like 高跨度 cell 在 confirm 后证据涨得太慢的
+// case。做法不是改主链判定，而是在已经确认的 obstacle
+// 上按跨度/点数/邻域支撑数给一个增益。
 float ComputeWallLikeObstacleGainScale(const CellStats &stats,
                                        float vertical_span,
                                        float relative_upper_z,
@@ -66,10 +69,15 @@ float ComputeWallLikeObstacleGainScale(const CellStats &stats,
   return 1.0f + count_bonus + span_bonus + neighbor_bonus;
 }
 
+// 解决代表角落在 -pi/pi 边界附近时扇区索引跳变的 case。
+// 做法是把角度统一规约到 [-pi, pi]，避免 observability 分桶不稳定。
 float NormalizeAngle(float angle) {
   return std::atan2(std::sin(angle), std::cos(angle));
 }
 
+// 解决“地图里有 support_height，但这格当前并不该再被当可靠锚点”的 case。
+// 这里把 finite height、confidence、support_state、age
+// 几个条件统一成一个可复用的锚点有效性判断。
 bool IsValidSupportAnchorCell(const TerrainLayers &layers, int cell,
                               const Config &config) {
   if (cell < 0 || cell >= static_cast<int>(layers.support_height.size())) {
@@ -92,6 +100,9 @@ bool IsValidSupportAnchorCell(const TerrainLayers &layers, int cell,
              std::max(1, config.persistence.support_persistence_frames));
 }
 
+// 解决本 cell 没有可用历史支撑，但 3x3 邻域里其实有稳定地面的 case。
+// 做法是用邻域有效 support 的中位数借锚，但如果本 cell
+// 自己已经有效，就不重复借邻居。
 float ResolveNeighborSupportAnchor(int cell, const LocalTerrainMap &map,
                                    const TerrainLayers &layers,
                                    const Config &config) {
@@ -127,6 +138,9 @@ float ResolveNeighborSupportAnchor(int cell, const LocalTerrainMap &map,
   return *middle;
 }
 
+// 解决 explanation 需要一个“邻域稳定支撑共识高度”来判断 layered-ground 的
+// case。 做法是只看 8 邻域的有效
+// support，高度用中位数聚合，避免被单侧异常邻居带偏。
 float ResolveNeighborSupportConsensusHeight(int cell,
                                             const LocalTerrainMap &map,
                                             const TerrainLayers &layers,
@@ -162,6 +176,9 @@ float ResolveNeighborSupportConsensusHeight(int cell,
   return *middle;
 }
 
+// 解决 explanation 需要知道“目标高度是否真有邻域支撑对齐”而不是单点偶然命中的
+// case。 做法是在 3x3 里数与目标高度接近的有效 support anchor，给
+// layered-ground / ground-mix 做约束。
 int CountNeighborAnchorsAlignedToHeight(int cell, const LocalTerrainMap &map,
                                         const TerrainLayers &layers,
                                         const Config &config, float target_z,
@@ -196,6 +213,8 @@ int CountNeighborAnchorsAlignedToHeight(int cell, const LocalTerrainMap &map,
   return match_count;
 }
 
+// 解决某些规则只需要知道“周围到底有没有足够多可借锚邻居”的 case。
+// 这里不看高度对齐，只统计 3x3 里的有效锚点数量，保持语义和对齐计数分开。
 int CountValidNeighborAnchors(int cell, const LocalTerrainMap &map,
                               const TerrainLayers &layers,
                               const Config &config) {
@@ -221,6 +240,9 @@ int CountValidNeighborAnchors(int cell, const LocalTerrainMap &map,
   return count;
 }
 
+// 解决机器人下方 layered structure 中，邻居上层带比本 cell 低层 support
+// 更可信的 case。 做法是从邻居的 upper band
+// 中提取一个上层共识高度，只接受高度差落在合法 step_up 区间的邻居。
 float ResolveNeighborUpperLayerConsensusHeight(
     int cell, const LocalTerrainMap &map,
     const std::vector<CellWorkspace> &cell_workspaces,
@@ -270,6 +292,8 @@ float ResolveNeighborUpperLayerConsensusHeight(
   return *middle;
 }
 
+// 解决“上层共识高度是否真的在邻域里形成连续结构”这个 case。做法是只统计 upper
+// band 合法且与目标高度对齐的邻居，避免把稀疏高点误当成稳定上层。
 int CountNeighborUpperLayersAlignedToHeight(
     int cell, const LocalTerrainMap &map,
     const std::vector<CellWorkspace> &cell_workspaces, float target_z,
@@ -318,6 +342,9 @@ int CountNeighborUpperLayersAlignedToHeight(
   return match_count;
 }
 
+// 解决楼梯上行趋势和机器人下方 layered-ground 容易混淆的 case。
+// 做法是统计邻域 support_ref 是否持续抬升；一旦形成上行趋势，后面 explanation
+// 就不能随意抬 ref 去吃掉 obstacle。
 int CountAscendingNeighborSupportRefs(
     int cell, const LocalTerrainMap &map,
     const std::vector<CellWorkspace> &cell_workspaces, float support_ref,
@@ -358,6 +385,10 @@ int CountAscendingNeighborSupportRefs(
   return ascending_stair_support_count;
 }
 
+// 解决 suspicious cell 虽有邻域 upper
+// support，但其实更像楼梯混层/脚下低层地面的 case。 做法是把 below-robot stair
+// mix、downstairs ground mix、upstairs ground mix 统一收敛成一个 explanation
+// 决策。
 ExplanationDecision ClassifyExplanationDecision(
     bool has_support_anchor, float relative_support_anchor,
     float relative_support_ref, float relative_upper_z, float vertical_span,
@@ -408,6 +439,10 @@ ExplanationDecision ClassifyExplanationDecision(
   return ExplanationDecision::kNone;
 }
 
+// 解决 support_ref 被脚下更低一层拖低，导致本来可解释的上层踏面被误当 obstacle
+// 的 case。 做法是在 explanation
+// 内部临时评估是否允许抬高参考层，但这个量只服务当前 cell
+// 的解释，不进入主链状态。
 bool ShouldUseElevatedEffectiveSupportRef(
     bool has_support_anchor, float relative_support_anchor,
     float relative_support_ref, float relative_effective_support_candidate_z,
@@ -439,6 +474,9 @@ bool ShouldUseElevatedEffectiveSupportRef(
          sub_support_leak_count == 0U && !stale_lower_anchor_mix;
 }
 
+// 解决后续每个 phase 都重复扫全帧点云找 cell 样本的 case。
+// 做法是先把样本按 cell 分组，后面的 anchor/profile/explanation
+// 都只消费这个索引表。
 std::vector<std::vector<size_t>>
 GroupSampleIndicesByCell(const ProcessedFrame &frame,
                          const LocalTerrainMap &map) {
@@ -457,6 +495,8 @@ GroupSampleIndicesByCell(const ProcessedFrame &frame,
   return sample_indices_by_cell;
 }
 
+// 解决 reserve 容量只能靠整张地图大小粗估，导致输出 vector 反复扩容的 case。
+// 做法是先统计当前真正有样本的 active cells，后续输出容器按这个量预分配。
 int CountActiveCells(
     const std::vector<std::vector<size_t>> &sample_indices_by_cell) {
   return static_cast<int>(std::count_if(
@@ -464,6 +504,10 @@ int CountActiveCells(
       [](const auto &sample_indices) { return !sample_indices.empty(); }));
 }
 
+// 解决每个 cell 的 anchor 来源、借锚和 upper-band 初始分层散落在多个 pass 里的
+// case。 做法是先统一解析
+// anchor，并顺手统计低于锚点、重观测锚点、上层带这些局部事实，供后续 phase
+// 复用。
 void ResolveAnchors(
     const ProcessedFrame &frame, const LocalTerrainMap &map,
     const TerrainLayers &layers, const Config &config,
@@ -537,6 +581,9 @@ void ResolveAnchors(
   }
 }
 
+// 解决 stale-anchor 判断只看本 cell 容易把局部观测稀疏误判成“旧锚点失效”的
+// case。 做法是把 3x3 邻域的 anchor 重观测数加起来，给 anchor validity
+// 一个更稳的上下文。
 int CountNeighborhoodAnchorReobserveCount(
     int cell, const LocalTerrainMap &map,
     const std::vector<CellWorkspace> &cell_workspaces) {
@@ -558,6 +605,10 @@ int CountNeighborhoodAnchorReobserveCount(
   return neighborhood_anchor_reobserve_count;
 }
 
+// 解决历史锚点虽然存在，但实际上已经 stale 或
+// wall-only，继续参与解释会把当前帧带偏的 case。 做法是把锚点统一归类为 Valid /
+// InvalidStale / InvalidWallOnly /
+// InvalidInsufficientSupport，后面只消费枚举结果。
 AnchorValidityDecision
 ClassifyAnchorValidity(const CellWorkspace &workspace,
                        int neighborhood_anchor_reobserve_count,
@@ -591,6 +642,10 @@ ClassifyAnchorValidity(const CellWorkspace &workspace,
   return AnchorValidityDecision::kValid;
 }
 
+// 解决 local suspicious trigger、support candidate 和 leak
+// 过滤各自重复扫样本、重复表达事实的 case。 做法是基于统一 anchor
+// 过滤后的样本一次性建立 local profile，再用 vertical_span 触发
+// suspicious，并保留 support candidate。
 std::vector<int> BuildLocalProfilesAndSeedCandidates(
     const ProcessedFrame &frame, const FrameObservability &observability,
     const LocalTerrainMap &map, const TerrainLayers &layers,
@@ -711,6 +766,9 @@ std::vector<int> BuildLocalProfilesAndSeedCandidates(
   return suspicious_cells;
 }
 
+// 解决“当前格是否存在 upper-support 事实”被后续 confirm 与 explanation 混用的
+// case。 做法是先只按本 cell 样本和 support_ref 标出 raw upper-support，再把
+// adjusted mask 初始化成 raw，后面只允许 explanation 单向改写。
 void MarkUpperSupportCells(
     const ProcessedFrame &frame, const LocalTerrainMap &map,
     const Config &config,
@@ -745,6 +803,9 @@ void MarkUpperSupportCells(
   }
 }
 
+// 解决 explanation 需要知道邻域是上行楼梯趋势还是平稳层状结构的 case。
+// 做法是提前给每个 cell 计算 ascending stair support
+// count，但它只提供上下文，不直接造 trigger 或 candidate。
 void BuildAdjacencyContexts(const LocalTerrainMap &map, const Config &config,
                             std::vector<CellWorkspace> &cell_workspaces) {
   for (int cell = 0; cell < map.size(); ++cell) {
@@ -759,6 +820,10 @@ void BuildAdjacencyContexts(const LocalTerrainMap &map, const Config &config,
   }
 }
 
+// 解决 raw upper-support 在脚下 layered-ground / stair transition
+// 场景里会把低层混入误解释成 obstacle 的 case。 做法是只在 explanation
+// 内部用局部候选参考层重新检查 upper-support 是否仍成立，并只改 adjusted
+// mask，不回写 support_ref。
 void BuildExplanationInputs(
     const ProcessedFrame &frame, const LocalTerrainMap &map,
     const TerrainLayers &layers, const Config &config,
@@ -858,6 +923,9 @@ void BuildExplanationInputs(
   }
 }
 
+// 解决外部 debug/analyzer 还需要一个兼容字段，但内部已经拆成 raw/adjusted
+// 两层的 case。 做法是把 legacy `upper_support_cell` 固定收口为 adjusted
+// mask，避免 legacy 语义继续漂移。
 void FinalizeUpperSupportCells(FrontendOutput &output) {
   // `upper_support_cell` remains a compatibility alias for the
   // explanation-adjusted confirmation mask. Raw local upper-band facts stay
@@ -865,6 +933,9 @@ void FinalizeUpperSupportCells(FrontendOutput &output) {
   output.upper_support_cell = output.explanation_adjusted_upper_support_cell;
 }
 
+// 解决 adjacency 既想当 trigger 又想当 confirm，最终让 obstacle 形成链路失焦的
+// case。 做法是这里只消费已经 suspicious 的 cell，用 adjusted upper-support 做
+// 3x3 confirm，再由 explanation 做单向否决。
 void EmitCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
                     const TerrainLayers &layers, const Config &config,
                     const std::vector<CellWorkspace> &cell_workspaces,
