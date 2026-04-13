@@ -112,7 +112,7 @@ Processor::update(const FrameInput&) -> FrameOutput
 
 这条主链由：
 
-- `src/passable_area/src/core/pipeline/processor.cpp`
+- `src/passable_area/src/core/processor.cpp`
 
 串起来。
 
@@ -436,7 +436,7 @@ TF：
 
 实现：
 
-- `src/passable_area/src/core/preprocess/frame_preprocessor.cpp`
+- `src/passable_area/src/core/frame_preprocessor.cpp`
 
 职责：
 
@@ -470,7 +470,7 @@ relative_z = point_in_odom.z - base_pose_in_odom.position.z()
 
 实现：
 
-- `src/passable_area/src/core/observability/frame_observability_estimator.cpp`
+- `src/passable_area/src/core/frame_observability_estimator.cpp`
 
 职责：
 
@@ -496,7 +496,7 @@ relative_z = point_in_odom.z - base_pose_in_odom.position.z()
 
 实现：
 
-- `src/passable_area/src/core/frontend/polar_frontend.cpp`
+- `src/passable_area/src/core/polar_frontend.cpp`
 
 职责：
 
@@ -664,7 +664,7 @@ obstacle 更新：
 
 实现：
 
-- `src/passable_area/src/core/features/terrain_feature_updater.cpp`
+- `src/passable_area/src/core/terrain_feature_updater.cpp`
 
 职责：
 
@@ -689,7 +689,7 @@ obstacle 更新：
 
 实现：
 
-- `src/passable_area/src/core/traversability/traversability_solver.cpp`
+- `src/passable_area/src/core/traversability_solver.cpp`
 
 职责：
 
@@ -731,7 +731,7 @@ obstacle 更新：
 
 实现：
 
-- `src/passable_area/src/core/pipeline/processor.cpp`
+- `src/passable_area/src/core/processor.cpp`
 
 职责：
 

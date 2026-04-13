@@ -1,4 +1,4 @@
-#include "passable_area/core/preprocess/frame_preprocessor.hpp"
+#include "passable_area/core/frame_preprocessor.hpp"
 
 #include <Eigen/Geometry>
 

@@ -1,4 +1,4 @@
-#include "passable_area/core/traversability/traversability_solver.hpp"
+#include "passable_area/core/traversability_solver.hpp"
 
 #include <algorithm>
 #include <cmath>

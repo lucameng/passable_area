@@ -1,4 +1,4 @@
-#include "passable_area/core/pipeline/processor.hpp"
+#include "passable_area/core/processor.hpp"
 
 #include <Eigen/Geometry>
 

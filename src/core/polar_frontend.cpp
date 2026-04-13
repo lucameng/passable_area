@@ -1,4 +1,4 @@
-#include "passable_area/core/frontend/polar_frontend.hpp"
+#include "passable_area/core/polar_frontend.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>

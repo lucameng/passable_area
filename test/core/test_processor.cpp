@@ -1,8 +1,8 @@
-#include "passable_area/core/frontend/polar_frontend.hpp"
+#include "passable_area/core/polar_frontend.hpp"
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
-#include "passable_area/core/pipeline/processor.hpp"
-#include "passable_area/core/preprocess/frame_preprocessor.hpp"
+#include "passable_area/core/processor.hpp"
+#include "passable_area/core/frame_preprocessor.hpp"
 
 #include <algorithm>
 #include <cmath>

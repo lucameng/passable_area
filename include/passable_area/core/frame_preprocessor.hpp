@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_CORE_PREPROCESS_FRAME_PREPROCESSOR_HPP_
-#define PASSABLE_AREA_CORE_PREPROCESS_FRAME_PREPROCESSOR_HPP_
+#ifndef PASSABLE_AREA_CORE_FRAME_PREPROCESSOR_HPP_
+#define PASSABLE_AREA_CORE_FRAME_PREPROCESSOR_HPP_
 
 #include "passable_area/core/types/config_types.hpp"
 #include "passable_area/core/types/frame_types.hpp"

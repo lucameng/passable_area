@@ -1,4 +1,4 @@
-#include "passable_area/core/features/terrain_feature_updater.hpp"
+#include "passable_area/core/terrain_feature_updater.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,4 +1,4 @@
-#include "passable_area/core/observability/frame_observability_estimator.hpp"
+#include "passable_area/core/frame_observability_estimator.hpp"
 
 #include <algorithm>
 #include <cmath>
