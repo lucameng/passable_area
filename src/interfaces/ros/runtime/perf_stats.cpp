@@ -1,4 +1,4 @@
-#include "passable_area/interfaces/ros/status/perf_stats.hpp"
+#include "passable_area/interfaces/ros/runtime/perf_stats.hpp"
 
 namespace passable_area::interfaces::ros {
 
@@ -20,12 +20,14 @@ void PerfStats::record(double processing_ms) {
   if (window_sec < 1.0) {
     return;
   }
-  const double avg_ms = frame_count_ > 0 ? total_ms_ / static_cast<double>(frame_count_) : 0.0;
+  const double avg_ms =
+      frame_count_ > 0 ? total_ms_ / static_cast<double>(frame_count_) : 0.0;
   const double cloud_hz = cloud_count_ / std::max(window_sec, 1e-3);
   const double odom_hz = odom_count_ / std::max(window_sec, 1e-3);
   const double proc_hz = frame_count_ / std::max(window_sec, 1e-3);
   RCLCPP_INFO(node_->get_logger(),
-              "perf window: input_hz(cloud/odom)=%.1f/%.1f frames=%d avg=%.2fms max=%.2fms "
+              "perf window: input_hz(cloud/odom)=%.1f/%.1f frames=%d "
+              "avg=%.2fms max=%.2fms "
               "rate=%.2fHz",
               cloud_hz, odom_hz, frame_count_, avg_ms, max_ms_, proc_hz);
   window_start_ = now;

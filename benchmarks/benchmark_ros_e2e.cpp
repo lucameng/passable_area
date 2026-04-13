@@ -1,4 +1,4 @@
-#include "passable_area/interfaces/ros/nodes/passable_area_node.hpp"
+#include "passable_area/interfaces/ros/passable_area_node.hpp"
 
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/odometry.hpp>

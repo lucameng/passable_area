@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_INTERFACES_ROS_STATUS_WATCHDOG_MANAGER_HPP_
-#define PASSABLE_AREA_INTERFACES_ROS_STATUS_WATCHDOG_MANAGER_HPP_
+#ifndef PASSABLE_AREA_INTERFACES_ROS_RUNTIME_WATCHDOG_MANAGER_HPP_
+#define PASSABLE_AREA_INTERFACES_ROS_RUNTIME_WATCHDOG_MANAGER_HPP_
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -7,7 +7,8 @@ namespace passable_area::interfaces::ros {
 
 class WatchdogManager {
 public:
-  void initialize(rclcpp::Node &node, const std::string &cloud_topic, const std::string &odom_topic);
+  void initialize(rclcpp::Node &node, const std::string &cloud_topic,
+                  const std::string &odom_topic);
   void markCloud(const rclcpp::Time &stamp);
   void markOdom(const rclcpp::Time &stamp);
   void markSynced(const rclcpp::Time &stamp);

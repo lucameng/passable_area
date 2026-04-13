@@ -1,15 +1,17 @@
-#include "passable_area/interfaces/ros/status/watchdog_manager.hpp"
+#include "passable_area/interfaces/ros/runtime/watchdog_manager.hpp"
 
 #include <chrono>
 
 namespace passable_area::interfaces::ros {
 
-void WatchdogManager::initialize(rclcpp::Node &node, const std::string &cloud_topic,
+void WatchdogManager::initialize(rclcpp::Node &node,
+                                 const std::string &cloud_topic,
                                  const std::string &odom_topic) {
   node_ = &node;
   cloud_topic_ = cloud_topic;
   odom_topic_ = odom_topic;
-  timer_ = node.create_wall_timer(std::chrono::seconds(2), [this]() { check(); });
+  timer_ =
+      node.create_wall_timer(std::chrono::seconds(2), [this]() { check(); });
 }
 
 void WatchdogManager::markCloud(const rclcpp::Time &stamp) {
@@ -32,23 +34,28 @@ void WatchdogManager::check() {
   const auto timeout = rclcpp::Duration::from_seconds(2.0);
   if (!seen_cloud_) {
     if (!logged_waiting_cloud_) {
-      RCLCPP_WARN(node_->get_logger(), "Waiting for cloud on '%s'", cloud_topic_.c_str());
+      RCLCPP_WARN(node_->get_logger(), "Waiting for cloud on '%s'",
+                  cloud_topic_.c_str());
       logged_waiting_cloud_ = true;
     }
   } else if ((now - last_cloud_) > timeout) {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
-                         "No cloud received for %.2f s", (now - last_cloud_).seconds());
+                         "No cloud received for %.2f s",
+                         (now - last_cloud_).seconds());
   }
   if (!seen_odom_) {
     if (!logged_waiting_odom_) {
-      RCLCPP_WARN(node_->get_logger(), "Waiting for odom on '%s'", odom_topic_.c_str());
+      RCLCPP_WARN(node_->get_logger(), "Waiting for odom on '%s'",
+                  odom_topic_.c_str());
       logged_waiting_odom_ = true;
     }
   } else if ((now - last_odom_) > timeout) {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
-                         "No odom received for %.2f s", (now - last_odom_).seconds());
+                         "No odom received for %.2f s",
+                         (now - last_odom_).seconds());
   }
-  if (seen_cloud_ && seen_odom_ && seen_synced_ && (now - last_synced_) > timeout) {
+  if (seen_cloud_ && seen_odom_ && seen_synced_ &&
+      (now - last_synced_) > timeout) {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
                          "ExactTime has not produced a synced frame for %.2f s",
                          (now - last_synced_).seconds());

@@ -187,7 +187,7 @@
 
 源码：
 
-- `benchmarks/core/benchmark_processor.cpp`
+- `benchmarks/benchmark_processor.cpp`
 
 用途：
 
@@ -204,7 +204,7 @@
 
 源码：
 
-- `benchmarks/interfaces/ros/e2e_benchmark.cpp`
+- `benchmarks/benchmark_ros_e2e.cpp`
 
 用途：
 
