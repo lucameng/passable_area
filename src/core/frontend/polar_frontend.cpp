@@ -546,7 +546,8 @@ AnchorValidityDecision ClassifyAnchorValidity(const CellWorkspace &workspace,
   const bool reject_stale_anchor =
       workspace.anchor_reobserve_count <= 1 &&
       neighborhood_anchor_reobserve_count <= 2 &&
-      workspace.upper_band_count >= 1 &&
+      workspace.below_anchor_count == 0 &&
+      workspace.upper_band_count >= std::max(2, workspace.anchor_reobserve_count + 1) &&
       workspace.min_upper_band_z >= support_anchor + upper_height_threshold;
   if (reject_stale_anchor) {
     return AnchorValidityDecision::kInvalidStale;
@@ -602,7 +603,7 @@ std::vector<int> BuildLocalProfilesAndSeedCandidates(
                                                          config.geometry.upper_min_height_above_support,
                                                          config.geometry.support_anchor_reobserve_tolerance);
       if (workspace.anchor_validity != AnchorValidityDecision::kValid) {
-        support_anchor = std::numeric_limits<float>::quiet_NaN();
+        output.support_anchor_used[static_cast<size_t>(cell)] = std::numeric_limits<float>::quiet_NaN();
       }
     }
     const bool has_support_anchor = workspace.anchor_validity == AnchorValidityDecision::kValid;
@@ -622,7 +623,7 @@ std::vector<int> BuildLocalProfilesAndSeedCandidates(
         }
         continue;
       }
-      if (!has_support_anchor &&
+      if (workspace.anchor_validity == AnchorValidityDecision::kInvalidStale &&
           sample.point_in_odom.z <= support_anchor + config.geometry.support_anchor_reobserve_tolerance) {
         continue;
       }
@@ -683,8 +684,7 @@ void MarkUpperSupportCells(const ProcessedFrame &frame,
                            FrontendOutput &output) {
   for (int cell = 0; cell < map.size(); ++cell) {
     const auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
-    if (output.upper_support_cell[static_cast<size_t>(cell)] != 0U ||
-        !std::isfinite(workspace.support_ref)) {
+    if (!std::isfinite(workspace.support_ref)) {
       continue;
     }
 
@@ -697,7 +697,8 @@ void MarkUpperSupportCells(const ProcessedFrame &frame,
         continue;
       }
       if (sample.point_in_odom.z >= workspace.support_ref + config.geometry.upper_min_height_above_support) {
-        output.upper_support_cell[static_cast<size_t>(cell)] = 1U;
+        output.raw_upper_support_cell[static_cast<size_t>(cell)] = 1U;
+        output.explanation_adjusted_upper_support_cell[static_cast<size_t>(cell)] = 1U;
         break;
       }
     }
@@ -731,7 +732,7 @@ void BuildExplanationInputs(const ProcessedFrame &frame,
                             FrontendOutput &output) {
   for (int cell = 0; cell < map.size(); ++cell) {
     auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
-    if (!workspace.has_stats || output.upper_support_cell[static_cast<size_t>(cell)] == 0U) {
+    if (!workspace.has_stats || output.raw_upper_support_cell[static_cast<size_t>(cell)] == 0U) {
       continue;
     }
 
@@ -818,8 +819,13 @@ void BuildExplanationInputs(const ProcessedFrame &frame,
         break;
       }
     }
-    output.upper_support_cell[static_cast<size_t>(cell)] = has_elevated_upper_support ? 1U : 0U;
+    output.explanation_adjusted_upper_support_cell[static_cast<size_t>(cell)] =
+        has_elevated_upper_support ? 1U : 0U;
   }
+}
+
+void FinalizeUpperSupportCells(FrontendOutput &output) {
+  output.upper_support_cell = output.explanation_adjusted_upper_support_cell;
 }
 
 void EmitCandidates(const ProcessedFrame &frame,
@@ -849,7 +855,8 @@ void EmitCandidates(const ProcessedFrame &frame,
           continue;
         }
         const int neighbor = nr * map.cols() + nc;
-        const bool is_upper_support = output.upper_support_cell[static_cast<size_t>(neighbor)] != 0U;
+        const bool is_upper_support =
+            output.explanation_adjusted_upper_support_cell[static_cast<size_t>(neighbor)] != 0U;
         support_count += is_upper_support ? 1 : 0;
         if (IsValidSupportAnchorCell(layers, neighbor, config) &&
             std::abs(layers.support_height[static_cast<size_t>(neighbor)] - workspace.stats.max_z) <=
@@ -913,6 +920,8 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   output.support_anchor_used.assign(static_cast<size_t>(map.size()),
                                     std::numeric_limits<float>::quiet_NaN());
   output.sub_support_leak_count.assign(static_cast<size_t>(map.size()), 0U);
+  output.raw_upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
+  output.explanation_adjusted_upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
   output.upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
   output.obstacle_suspicious.assign(static_cast<size_t>(map.size()), 0U);
   output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()), 0U);
@@ -945,6 +954,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                          sample_indices_by_cell,
                          cell_workspaces,
                          output);
+  FinalizeUpperSupportCells(output);
   EmitCandidates(frame, map, layers, config_, cell_workspaces, suspicious_cells, output);
   return output;
 }
