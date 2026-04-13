@@ -1,8 +1,8 @@
-#include "passable_area/core/polar_frontend.hpp"
+#include "passable_area/core/frame_preprocessor.hpp"
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
+#include "passable_area/core/polar_frontend.hpp"
 #include "passable_area/core/processor.hpp"
-#include "passable_area/core/frame_preprocessor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -14,8 +14,8 @@ namespace {
 using passable_area::core::DropoutAwareMapUpdater;
 using passable_area::core::FrameInput;
 using passable_area::core::FrameObservability;
-using passable_area::core::FrontendExplanationDecision;
 using passable_area::core::FramePreprocessor;
+using passable_area::core::FrontendExplanationDecision;
 using passable_area::core::FrontendOutput;
 using passable_area::core::LocalTerrainMap;
 using passable_area::core::ObservabilityState;
@@ -686,13 +686,12 @@ TEST(ProcessorTest,
   EXPECT_EQ(
       output.obstacle_explanation_rejected[static_cast<size_t>(primary_cell)],
       0U);
-  EXPECT_EQ(
-      output.explanation_decision[static_cast<size_t>(primary_cell)],
-      static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
+  EXPECT_EQ(output.explanation_decision[static_cast<size_t>(primary_cell)],
+            static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
   EXPECT_TRUE(
       output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)] !=
           0U ||
-      output.facade_stable_upper_edge_without_support_lift
+      output.facade_upper_edge_aligned_with_supported_neighbors
               [static_cast<size_t>(primary_cell)] != 0U);
   EXPECT_EQ(
       output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
@@ -977,10 +976,10 @@ TEST(ProcessorTest,
             0U);
   EXPECT_EQ(output.explanation_decision[static_cast<size_t>(cell)],
             static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
-  EXPECT_TRUE(
-      output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] != 0U ||
-      output.facade_stable_upper_edge_without_support_lift
-              [static_cast<size_t>(cell)] != 0U);
+  EXPECT_TRUE(output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] !=
+                  0U ||
+              output.facade_upper_edge_aligned_with_supported_neighbors
+                      [static_cast<size_t>(cell)] != 0U);
   const auto cell_candidate_count = std::count_if(
       output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
       [cell](const auto &candidate) { return candidate.cell == cell; });
@@ -1165,10 +1164,10 @@ TEST(ProcessorTest,
             0U);
   EXPECT_EQ(output.explanation_decision[static_cast<size_t>(cell)],
             static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
-  EXPECT_TRUE(
-      output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] != 0U ||
-      output.facade_stable_upper_edge_without_support_lift
-              [static_cast<size_t>(cell)] != 0U);
+  EXPECT_TRUE(output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] !=
+                  0U ||
+              output.facade_upper_edge_aligned_with_supported_neighbors
+                      [static_cast<size_t>(cell)] != 0U);
   const auto cell_candidate_count = std::count_if(
       output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
       [cell](const auto &candidate) { return candidate.cell == cell; });
@@ -1244,13 +1243,11 @@ TEST(ProcessorTest,
   EXPECT_EQ(
       output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)],
       0U);
-  EXPECT_EQ(
-      output.facade_stable_upper_edge_without_support_lift
-          [static_cast<size_t>(primary_cell)],
-      0U);
-  EXPECT_EQ(
-      output.explanation_decision[static_cast<size_t>(primary_cell)],
-      static_cast<uint8_t>(FrontendExplanationDecision::kNone));
+  EXPECT_EQ(output.facade_upper_edge_aligned_with_supported_neighbors
+                [static_cast<size_t>(primary_cell)],
+            0U);
+  EXPECT_EQ(output.explanation_decision[static_cast<size_t>(primary_cell)],
+            static_cast<uint8_t>(FrontendExplanationDecision::kNone));
   const auto primary_cell_candidate_count = std::count_if(
       output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
       [primary_cell](const auto &candidate) {
@@ -1371,8 +1368,7 @@ TEST(ProcessorTest,
       1U);
   EXPECT_EQ(
       output.explanation_decision[static_cast<size_t>(primary_cell)],
-      static_cast<uint8_t>(
-          FrontendExplanationDecision::kBelowRobotStairMix));
+      static_cast<uint8_t>(FrontendExplanationDecision::kBelowRobotStairMix));
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(
                 primary_cell)],
             1U);
@@ -1583,8 +1579,8 @@ TEST(
   EXPECT_EQ(
       output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
       2);
-  EXPECT_EQ(
-      output.obstacle_local_triggered[static_cast<size_t>(primary_cell)], 1U);
+  EXPECT_EQ(output.obstacle_local_triggered[static_cast<size_t>(primary_cell)],
+            1U);
   EXPECT_EQ(
       output.obstacle_upper_patch_confirmed[static_cast<size_t>(primary_cell)],
       1U);
@@ -1594,13 +1590,12 @@ TEST(
   EXPECT_GE(
       output.aligned_neighbor_support_count[static_cast<size_t>(primary_cell)],
       1);
-  EXPECT_EQ(
-      output.explanation_decision[static_cast<size_t>(primary_cell)],
-      static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
+  EXPECT_EQ(output.explanation_decision[static_cast<size_t>(primary_cell)],
+            static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle));
   EXPECT_TRUE(
       output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)] !=
           0U ||
-      output.facade_stable_upper_edge_without_support_lift
+      output.facade_upper_edge_aligned_with_supported_neighbors
               [static_cast<size_t>(primary_cell)] != 0U);
   EXPECT_EQ(output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(
                 primary_cell)],

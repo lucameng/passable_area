@@ -118,8 +118,8 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.explanation_decision = frontend_output.explanation_decision;
   output.facade_lower_upper_coexisting =
       frontend_output.facade_lower_upper_coexisting;
-  output.facade_stable_upper_edge_without_support_lift =
-      frontend_output.facade_stable_upper_edge_without_support_lift;
+  output.facade_upper_edge_aligned_with_supported_neighbors =
+      frontend_output.facade_upper_edge_aligned_with_supported_neighbors;
   output.support_state = layers.support_state;
 
   if (config_.debug.publish_base_gravity_cloud) {

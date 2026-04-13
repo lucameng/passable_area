@@ -56,7 +56,7 @@ FrameOutput MakeOutput() {
   output.aligned_neighbor_support_count.assign(9, 0);
   output.explanation_decision.assign(9, 0U);
   output.facade_lower_upper_coexisting.assign(9, 0U);
-  output.facade_stable_upper_edge_without_support_lift.assign(9, 0U);
+  output.facade_upper_edge_aligned_with_supported_neighbors.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -164,6 +164,8 @@ TEST(FalseObstacleAnalyzerTest,
   output.explanation_adjusted_upper_support_cell[0] = 0U;
   output.upper_support_cell[0] = 1U;
   output.obstacle_suspicious[0] = 1U;
+  output.obstacle_upper_patch_confirmed[0] = 1U;
+  output.obstacle_explanation_rejected[0] = 1U;
   output.obstacle_candidate_cell[0] = 1U;
   output.obstacle_rejected_by_neighbor_support[0] = 1U;
   output.neighbor_upper_support_count[0] = 1;
@@ -192,6 +194,9 @@ TEST(FalseObstacleAnalyzerTest,
   EXPECT_EQ(analysis->hotspots.front().neighbor_upper_support_count, 1);
   EXPECT_EQ(analysis->hotspots.front().aligned_neighbor_support_count, 2);
   EXPECT_EQ(analysis->hotspots.front().explanation_decision, 2U);
+  EXPECT_NE(
+      analysis->hotspots.front().explanation.find("explanation rejected via"),
+      std::string::npos);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_obstacle_evidence, 0.7f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_overhead_height, 0.9f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_support_anchor_used, 0.25f);

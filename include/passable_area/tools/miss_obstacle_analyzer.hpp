@@ -61,7 +61,7 @@ struct MissObstacleRepresentativeCell {
   int8_t aligned_neighbor_support_count = 0;
   uint8_t explanation_decision = 0U;
   bool facade_lower_upper_coexisting = false;
-  bool facade_stable_upper_edge_without_support_lift = false;
+  bool facade_upper_edge_aligned_with_supported_neighbors = false;
   std::string explanation;
 };
 

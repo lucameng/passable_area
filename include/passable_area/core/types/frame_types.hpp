@@ -108,7 +108,7 @@ struct FrameOutput {
   std::vector<int8_t> aligned_neighbor_support_count;
   std::vector<uint8_t> explanation_decision;
   std::vector<uint8_t> facade_lower_upper_coexisting;
-  std::vector<uint8_t> facade_stable_upper_edge_without_support_lift;
+  std::vector<uint8_t> facade_upper_edge_aligned_with_supported_neighbors;
   std::vector<uint8_t> support_state;
   std::vector<CellDebugPoint> base_gravity_cloud_points;
   std::vector<CellDebugPoint> support_points;

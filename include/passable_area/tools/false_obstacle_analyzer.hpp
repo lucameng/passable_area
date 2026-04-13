@@ -66,7 +66,7 @@ struct FalseObstacleHotspot {
   int8_t aligned_neighbor_support_count = 0;
   uint8_t explanation_decision = 0U;
   bool facade_lower_upper_coexisting = false;
-  bool facade_stable_upper_edge_without_support_lift = false;
+  bool facade_upper_edge_aligned_with_supported_neighbors = false;
   bool has_grid_values = false;
   bool has_observability = false;
   passable_area::core::ObservabilityState observability_state =
@@ -141,7 +141,7 @@ private:
     int8_t aligned_neighbor_support_count = 0;
     uint8_t explanation_decision = 0U;
     bool facade_lower_upper_coexisting = false;
-    bool facade_stable_upper_edge_without_support_lift = false;
+    bool facade_upper_edge_aligned_with_supported_neighbors = false;
     bool has_observability = false;
     passable_area::core::ObservabilityState observability_state =
         passable_area::core::ObservabilityState::kObserved;

@@ -43,10 +43,11 @@ struct CellWorkspace {
 
 struct FacadeEvidence {
   bool lower_upper_coexisting = false;
-  bool stable_upper_edge_without_support_lift = false;
+  bool upper_edge_aligned_with_supported_neighbors = false;
 
   bool any() const {
-    return lower_upper_coexisting || stable_upper_edge_without_support_lift;
+    return lower_upper_coexisting ||
+           upper_edge_aligned_with_supported_neighbors;
   }
 };
 
@@ -458,16 +459,14 @@ FacadeEvidence BuildFacadeEvidence(
   FacadeEvidence evidence;
   const auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
   const float support_anchor = workspace.support_anchor_candidate;
-  const bool has_support_anchor = std::isfinite(support_anchor) &&
-                                  workspace.anchor_validity ==
-                                      AnchorValidityDecision::kValid;
-  const float lower_sample_ceiling = has_support_anchor
-                                         ? support_anchor +
-                                               config.geometry
-                                                   .support_anchor_reobserve_tolerance
-                                         : workspace.support_ref +
-                                               config.geometry
-                                                   .support_anchor_reobserve_tolerance;
+  const bool has_support_anchor =
+      std::isfinite(support_anchor) &&
+      workspace.anchor_validity == AnchorValidityDecision::kValid;
+  const float lower_sample_ceiling =
+      has_support_anchor
+          ? support_anchor + config.geometry.support_anchor_reobserve_tolerance
+          : workspace.support_ref +
+                config.geometry.support_anchor_reobserve_tolerance;
   const float upper_band_floor =
       workspace.support_ref + config.geometry.upper_min_height_above_support;
   bool has_lower_structure_sample = false;
@@ -502,7 +501,7 @@ FacadeEvidence BuildFacadeEvidence(
             config.geometry.support_anchor_reobserve_tolerance,
             config.geometry.upper_min_height_above_support,
             config.geometry.max_step_up);
-    evidence.stable_upper_edge_without_support_lift =
+    evidence.upper_edge_aligned_with_supported_neighbors =
         upper_layer_neighbor_match_count >=
             std::max(1, config.geometry.min_neighbor_upper_support_cells) &&
         aligned_neighbor_support_count >=
@@ -716,8 +715,9 @@ ClassifyAnchorValidity(const CellWorkspace &workspace,
 }
 
 // 解决 local trigger、support candidate 和 leak 过滤各自重复扫样本的 case。
-// 做法是基于统一 anchor 过滤后的样本一次性建立 local profile，再用 vertical_span
-// 标记 local trigger。 这里不做连续支撑解释，也不做 candidate 否决。
+// 做法是基于统一 anchor 过滤后的样本一次性建立 local profile，再用
+// vertical_span 标记 local trigger。 这里不做连续支撑解释，也不做 candidate
+// 否决。
 std::vector<int> BuildLocalProfilesAndMarkTriggers(
     const ProcessedFrame &frame, const FrameObservability &observability,
     const LocalTerrainMap &map, const TerrainLayers &layers,
@@ -1013,12 +1013,12 @@ void FinalizeUpperSupportCells(FrontendOutput &output) {
 // 3. 再统一进入 explanation reject；
 // 4. reject 没命中后，必须再拿到显式 keep verdict；
 // 5. aligned neighbor support 只作为 explanation evidence，不再 pre-veto。
-void EvaluateCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
-                    const TerrainLayers &layers, const Config &config,
-                    const std::vector<std::vector<size_t>> &sample_indices_by_cell,
-                    const std::vector<CellWorkspace> &cell_workspaces,
-                    const std::vector<int> &locally_triggered_cells,
-                    FrontendOutput &output) {
+void EvaluateCandidates(
+    const ProcessedFrame &frame, const LocalTerrainMap &map,
+    const TerrainLayers &layers, const Config &config,
+    const std::vector<std::vector<size_t>> &sample_indices_by_cell,
+    const std::vector<CellWorkspace> &cell_workspaces,
+    const std::vector<int> &locally_triggered_cells, FrontendOutput &output) {
   const int min_neighbor_upper_support_cells =
       std::max(1, config.geometry.min_neighbor_upper_support_cells);
   for (const int cell : locally_triggered_cells) {
@@ -1097,13 +1097,14 @@ void EvaluateCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
     }
 
     const FacadeEvidence facade_evidence = BuildFacadeEvidence(
-        cell, frame, map, layers, config, sample_indices_by_cell, cell_workspaces,
-        aligned_neighbor_support_count);
+        cell, frame, map, layers, config, sample_indices_by_cell,
+        cell_workspaces, aligned_neighbor_support_count);
     output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] =
         facade_evidence.lower_upper_coexisting ? 1U : 0U;
-    output.facade_stable_upper_edge_without_support_lift
-        [static_cast<size_t>(cell)] =
-        facade_evidence.stable_upper_edge_without_support_lift ? 1U : 0U;
+    output
+        .facade_upper_edge_aligned_with_supported_neighbors[static_cast<size_t>(
+            cell)] =
+        facade_evidence.upper_edge_aligned_with_supported_neighbors ? 1U : 0U;
     const FrontendExplanationDecision keep_decision =
         ClassifyExplanationKeepDecision(facade_evidence);
     if (keep_decision == FrontendExplanationDecision::kNone) {
@@ -1155,7 +1156,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   output.explanation_decision.assign(static_cast<size_t>(map.size()), 0U);
   output.facade_lower_upper_coexisting.assign(static_cast<size_t>(map.size()),
                                               0U);
-  output.facade_stable_upper_edge_without_support_lift.assign(
+  output.facade_upper_edge_aligned_with_supported_neighbors.assign(
       static_cast<size_t>(map.size()), 0U);
   const auto sample_indices_by_cell = GroupSampleIndicesByCell(frame, map);
   const int active_cell_count = CountActiveCells(sample_indices_by_cell);
@@ -1178,8 +1179,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
                          cell_workspaces, output);
   FinalizeUpperSupportCells(output);
   EvaluateCandidates(frame, map, layers, config_, sample_indices_by_cell,
-                     cell_workspaces,
-                     locally_triggered_cells, output);
+                     cell_workspaces, locally_triggered_cells, output);
   return output;
 }
 

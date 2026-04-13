@@ -63,7 +63,7 @@ FrameOutput MakeOutput() {
   output.aligned_neighbor_support_count.assign(9, 0);
   output.explanation_decision.assign(9, 0U);
   output.facade_lower_upper_coexisting.assign(9, 0U);
-  output.facade_stable_upper_edge_without_support_lift.assign(9, 0U);
+  output.facade_upper_edge_aligned_with_supported_neighbors.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -131,13 +131,20 @@ TEST(MissObstacleAnalyzerTest,
             MissObstacleRootCause::kRejectedByNeighborSupport);
   EXPECT_EQ(analysis->rejected_suspicious_cell_count, 1);
   ASSERT_FALSE(analysis->representative_cells.empty());
-  EXPECT_EQ(analysis->representative_cells.front().aligned_neighbor_support_count,
-            2);
+  EXPECT_EQ(
+      analysis->representative_cells.front().aligned_neighbor_support_count, 2);
   EXPECT_EQ(analysis->representative_cells.front().explanation_decision, 3U);
+  EXPECT_NE(analysis->representative_cells.front().explanation.find(
+                "rejected during explanation"),
+            std::string::npos);
+  EXPECT_NE(analysis->explanation.find("failed upper-patch confirmation or "
+                                       "were rejected during explanation"),
+            std::string::npos);
 }
 
-TEST(MissObstacleAnalyzerTest,
-     SurfacesNoExplicitKeepExplanationWhenConfirmationPassedButNoCandidateFormed) {
+TEST(
+    MissObstacleAnalyzerTest,
+    SurfacesNoExplicitKeepExplanationWhenConfirmationPassedButNoCandidateFormed) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});

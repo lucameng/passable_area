@@ -209,8 +209,8 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       if (obstacle_suspicious && explanation_rejected) {
         ++explanation_rejected_suspicious_cell_count;
       }
-      if (obstacle_suspicious && upper_patch_confirmed && !explanation_rejected &&
-          output.obstacle_candidate_cell[idx] == 0U &&
+      if (obstacle_suspicious && upper_patch_confirmed &&
+          !explanation_rejected && output.obstacle_candidate_cell[idx] == 0U &&
           output.explanation_decision[idx] ==
               static_cast<uint8_t>(
                   passable_area::core::FrontendExplanationDecision::kNone)) {
@@ -260,7 +260,6 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
            output.obstacle_upper_patch_confirmed[idx] != 0U) ||
           (!output.obstacle_explanation_rejected.empty() &&
            output.obstacle_explanation_rejected[idx] != 0U) ||
-          output.obstacle_rejected_by_neighbor_support[idx] != 0U ||
           output.upper_support_cell[idx] != 0U ||
           output.obstacle_evidence[idx] > 0.0f ||
           std::isfinite(output.overhead_height[idx]);
@@ -310,9 +309,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.facade_lower_upper_coexisting =
           !output.facade_lower_upper_coexisting.empty() &&
           output.facade_lower_upper_coexisting[idx] != 0U;
-      cell.facade_stable_upper_edge_without_support_lift =
-          !output.facade_stable_upper_edge_without_support_lift.empty() &&
-          output.facade_stable_upper_edge_without_support_lift[idx] != 0U;
+      cell.facade_upper_edge_aligned_with_supported_neighbors =
+          !output.facade_upper_edge_aligned_with_supported_neighbors.empty() &&
+          output.facade_upper_edge_aligned_with_supported_neighbors[idx] != 0U;
       cell.max_sample_z_minus_support_ref =
           (has_samples && sample_stats.sample_count > 0 &&
            std::isfinite(support_ref))
@@ -351,7 +350,8 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                            "the obstacle-point publish height gates";
       } else if (cell.sub_support_leak_count > 0U &&
                  !cell.obstacle_candidate_cell &&
-                 !cell.obstacle_rejected_by_neighbor_support) {
+                 cell.obstacle_upper_patch_confirmed &&
+                 !cell.obstacle_explanation_rejected) {
         cell.explanation = "support anchor filtered lower-layer leak samples "
                            "before obstacle promotion";
       } else if (!cell.obstacle_suspicious) {
