@@ -102,6 +102,11 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.explanation_adjusted_upper_support_cell =
       frontend_output.explanation_adjusted_upper_support_cell;
   output.upper_support_cell = frontend_output.upper_support_cell;
+  output.obstacle_local_triggered = frontend_output.obstacle_local_triggered;
+  output.obstacle_upper_patch_confirmed =
+      frontend_output.obstacle_upper_patch_confirmed;
+  output.obstacle_explanation_rejected =
+      frontend_output.obstacle_explanation_rejected;
   output.obstacle_suspicious = frontend_output.obstacle_suspicious;
   output.obstacle_candidate_cell = frontend_output.obstacle_candidate_cell;
   output.obstacle_rejected_by_neighbor_support =
@@ -111,6 +116,10 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.aligned_neighbor_support_count =
       frontend_output.aligned_neighbor_support_count;
   output.explanation_decision = frontend_output.explanation_decision;
+  output.facade_lower_upper_coexisting =
+      frontend_output.facade_lower_upper_coexisting;
+  output.facade_stable_upper_edge_without_support_lift =
+      frontend_output.facade_stable_upper_edge_without_support_lift;
   output.support_state = layers.support_state;
 
   if (config_.debug.publish_base_gravity_cloud) {

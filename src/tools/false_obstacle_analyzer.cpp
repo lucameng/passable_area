@@ -106,6 +106,8 @@ const char *ToExplanationDecisionString(
     return "BelowRobotGroundLayerMix";
   case passable_area::core::FrontendExplanationDecision::kBelowRobotUpstairGroundMix:
     return "BelowRobotUpstairGroundMix";
+  case passable_area::core::FrontendExplanationDecision::kKeepAsObstacle:
+    return "KeepAsObstacle";
   }
   return "Unknown";
 }
@@ -293,6 +295,24 @@ FalseObstacleAnalyzer::lookupLocalContext(
       context.upper_support_cell =
           output.upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
     }
+    if (output.obstacle_local_triggered.size() >
+        static_cast<size_t>(source_cell)) {
+      context.obstacle_local_triggered =
+          output.obstacle_local_triggered[static_cast<size_t>(source_cell)] !=
+          0U;
+    }
+    if (output.obstacle_upper_patch_confirmed.size() >
+        static_cast<size_t>(source_cell)) {
+      context.obstacle_upper_patch_confirmed =
+          output.obstacle_upper_patch_confirmed[static_cast<size_t>(source_cell)] !=
+          0U;
+    }
+    if (output.obstacle_explanation_rejected.size() >
+        static_cast<size_t>(source_cell)) {
+      context.obstacle_explanation_rejected =
+          output.obstacle_explanation_rejected[static_cast<size_t>(source_cell)] !=
+          0U;
+    }
     if (output.obstacle_suspicious.size() > static_cast<size_t>(source_cell)) {
       context.obstacle_suspicious =
           output.obstacle_suspicious[static_cast<size_t>(source_cell)] != 0U;
@@ -323,6 +343,18 @@ FalseObstacleAnalyzer::lookupLocalContext(
         static_cast<size_t>(source_cell)) {
       context.explanation_decision =
           output.explanation_decision[static_cast<size_t>(source_cell)];
+    }
+    if (output.facade_lower_upper_coexisting.size() >
+        static_cast<size_t>(source_cell)) {
+      context.facade_lower_upper_coexisting =
+          output.facade_lower_upper_coexisting[static_cast<size_t>(source_cell)] !=
+          0U;
+    }
+    if (output.facade_stable_upper_edge_without_support_lift.size() >
+        static_cast<size_t>(source_cell)) {
+      context.facade_stable_upper_edge_without_support_lift =
+          output.facade_stable_upper_edge_without_support_lift
+              [static_cast<size_t>(source_cell)] != 0U;
     }
     if (output.obstacle_evidence.size() > static_cast<size_t>(source_cell)) {
       context.source_obstacle_evidence =
@@ -399,6 +431,10 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.raw_upper_support_cell = context.raw_upper_support_cell;
   hotspot.adjusted_upper_support_cell = context.adjusted_upper_support_cell;
   hotspot.upper_support_cell = context.upper_support_cell;
+  hotspot.obstacle_local_triggered = context.obstacle_local_triggered;
+  hotspot.obstacle_upper_patch_confirmed = context.obstacle_upper_patch_confirmed;
+  hotspot.obstacle_explanation_rejected =
+      context.obstacle_explanation_rejected;
   hotspot.obstacle_suspicious = context.obstacle_suspicious;
   hotspot.obstacle_candidate_cell = context.obstacle_candidate_cell;
   hotspot.obstacle_rejected_by_neighbor_support =
@@ -407,6 +443,10 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.aligned_neighbor_support_count =
       context.aligned_neighbor_support_count;
   hotspot.explanation_decision = context.explanation_decision;
+  hotspot.facade_lower_upper_coexisting =
+      context.facade_lower_upper_coexisting;
+  hotspot.facade_stable_upper_edge_without_support_lift =
+      context.facade_stable_upper_edge_without_support_lift;
   hotspot.has_observability = context.has_observability;
   hotspot.observability_state = context.observability_state;
   hotspot.classification = classifyHotspot(hotspot);

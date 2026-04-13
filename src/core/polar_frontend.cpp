@@ -41,6 +41,15 @@ struct CellWorkspace {
   bool stale_lower_anchor_mix = false;
 };
 
+struct FacadeEvidence {
+  bool lower_upper_coexisting = false;
+  bool stable_upper_edge_without_support_lift = false;
+
+  bool any() const {
+    return lower_upper_coexisting || stable_upper_edge_without_support_lift;
+  }
+};
+
 // 解决 wall-like 高跨度 cell 在 confirm 后证据涨得太慢的
 // case。做法不是改主链判定，而是在已经确认的 obstacle
 // 上按跨度/点数/邻域支撑数给一个增益。
@@ -432,6 +441,67 @@ FrontendExplanationDecision ClassifyExplanationDecision(
   return FrontendExplanationDecision::kNone;
 }
 
+FacadeEvidence BuildFacadeEvidence(
+    int cell, const ProcessedFrame &frame, const LocalTerrainMap &map,
+    const TerrainLayers &layers, const Config &config,
+    const std::vector<std::vector<size_t>> &sample_indices_by_cell,
+    const std::vector<CellWorkspace> &cell_workspaces,
+    int aligned_neighbor_support_count) {
+  FacadeEvidence evidence;
+  const auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+  const float support_anchor = workspace.support_anchor_candidate;
+  const bool has_support_anchor = std::isfinite(support_anchor) &&
+                                  workspace.anchor_validity ==
+                                      AnchorValidityDecision::kValid;
+  const float lower_sample_ceiling = has_support_anchor
+                                         ? support_anchor +
+                                               config.geometry
+                                                   .support_anchor_reobserve_tolerance
+                                         : workspace.support_ref +
+                                               config.geometry
+                                                   .support_anchor_reobserve_tolerance;
+
+  if (std::isfinite(workspace.support_ref) &&
+      std::isfinite(workspace.min_upper_band_z) && workspace.upper_band_count > 0) {
+    bool has_lower_structure_sample = false;
+    for (const size_t sample_index :
+         sample_indices_by_cell[static_cast<size_t>(cell)]) {
+      const auto &sample = frame.odom_samples[sample_index];
+      if (has_support_anchor &&
+          sample.point_in_odom.z <
+              support_anchor - config.geometry.sub_support_leak_tolerance) {
+        continue;
+      }
+      if (sample.point_in_odom.z <= lower_sample_ceiling) {
+        has_lower_structure_sample = true;
+        break;
+      }
+    }
+    evidence.lower_upper_coexisting =
+        has_lower_structure_sample &&
+        workspace.min_upper_band_z >=
+            workspace.support_ref + config.geometry.upper_min_height_above_support;
+  }
+
+  if (std::isfinite(workspace.support_ref) &&
+      std::isfinite(workspace.min_upper_band_z)) {
+    const int upper_layer_neighbor_match_count =
+        CountNeighborUpperLayersAlignedToHeight(
+            cell, map, cell_workspaces, workspace.min_upper_band_z,
+            config.geometry.support_anchor_reobserve_tolerance,
+            config.geometry.upper_min_height_above_support,
+            config.geometry.max_step_up);
+    evidence.stable_upper_edge_without_support_lift =
+        upper_layer_neighbor_match_count >=
+            std::max(1, config.geometry.min_neighbor_upper_support_cells) &&
+        aligned_neighbor_support_count >=
+            std::max(1, config.geometry.min_neighbor_upper_support_cells) &&
+        workspace.min_upper_band_z >=
+            workspace.support_ref + config.geometry.upper_min_height_above_support;
+  }
+  return evidence;
+}
+
 // 解决 support_ref 被脚下更低一层拖低，导致本来可解释的上层踏面被误当 obstacle
 // 的 case。 做法是在 explanation
 // 内部临时评估是否允许抬高参考层，但这个量只服务当前 cell
@@ -635,18 +705,17 @@ ClassifyAnchorValidity(const CellWorkspace &workspace,
   return AnchorValidityDecision::kValid;
 }
 
-// 解决 local suspicious trigger、support candidate 和 leak
-// 过滤各自重复扫样本、重复表达事实的 case。 做法是基于统一 anchor
-// 过滤后的样本一次性建立 local profile，再用 vertical_span 触发
-// suspicious，并保留 support candidate。
-std::vector<int> BuildLocalProfilesAndSeedCandidates(
+// 解决 local trigger、support candidate 和 leak 过滤各自重复扫样本的 case。
+// 做法是基于统一 anchor 过滤后的样本一次性建立 local profile，再用 vertical_span
+// 标记 local trigger。 这里不做连续支撑解释，也不做 candidate 否决。
+std::vector<int> BuildLocalProfilesAndMarkTriggers(
     const ProcessedFrame &frame, const FrameObservability &observability,
     const LocalTerrainMap &map, const TerrainLayers &layers,
     const Config &config,
     const std::vector<std::vector<size_t>> &sample_indices_by_cell,
     std::vector<CellWorkspace> &cell_workspaces, FrontendOutput &output) {
-  std::vector<int> suspicious_cells;
-  suspicious_cells.reserve(cell_workspaces.size() / 8U + 1U);
+  std::vector<int> locally_triggered_cells;
+  locally_triggered_cells.reserve(cell_workspaces.size() / 8U + 1U);
   const float sector_size = 2.0f * static_cast<float>(M_PI) /
                             static_cast<float>(observability.sectors.size());
   const float yaw = YawFromQuaternion(frame.base_pose_in_odom.orientation);
@@ -748,15 +817,16 @@ std::vector<int> BuildLocalProfilesAndSeedCandidates(
           cell, workspace.stats.min_z, std::clamp(coverage, 0.0f, 1.0f)});
     }
     if (vertical_span > suspicious_vertical_span) {
+      output.obstacle_local_triggered[static_cast<size_t>(cell)] = 1U;
       output.obstacle_suspicious[static_cast<size_t>(cell)] = 1U;
-      suspicious_cells.push_back(cell);
+      locally_triggered_cells.push_back(cell);
     } else if (sector_state == ObservabilityState::kPartiallyObserved) {
       output.ambiguous_candidates.push_back(
           AmbiguousCandidate{cell, workspace.stats.min_z});
     }
   }
 
-  return suspicious_cells;
+  return locally_triggered_cells;
 }
 
 // 解决“当前格是否存在 upper-support 事实”被后续 confirm 与 explanation 混用的
@@ -926,17 +996,20 @@ void FinalizeUpperSupportCells(FrontendOutput &output) {
   output.upper_support_cell = output.explanation_adjusted_upper_support_cell;
 }
 
-// 解决 adjacency 既想当 trigger 又想当 confirm，最终让 obstacle 形成链路失焦的
-// case。 做法是这里只消费已经 suspicious 的 cell，用 adjusted upper-support 做
-// 3x3 confirm，再由 explanation 做单向否决。
-void EmitCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
+// 解决 confirm、explanation reject、candidate 形成混在一起的 case。做法是：
+// 1. local trigger 已经单独完成；
+// 2. 这里先判断 upper patch confirmation；
+// 3. 再统一进入 explanation 决策；
+// 4. aligned neighbor support 只作为 explanation evidence，不再 pre-veto。
+void EvaluateCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
                     const TerrainLayers &layers, const Config &config,
+                    const std::vector<std::vector<size_t>> &sample_indices_by_cell,
                     const std::vector<CellWorkspace> &cell_workspaces,
-                    const std::vector<int> &suspicious_cells,
+                    const std::vector<int> &locally_triggered_cells,
                     FrontendOutput &output) {
   const int min_neighbor_upper_support_cells =
       std::max(1, config.geometry.min_neighbor_upper_support_cells);
-  for (const int cell : suspicious_cells) {
+  for (const int cell : locally_triggered_cells) {
     const auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
     if (!workspace.has_stats) {
       continue;
@@ -970,50 +1043,72 @@ void EmitCandidates(const ProcessedFrame &frame, const LocalTerrainMap &map,
         static_cast<int8_t>(std::clamp(support_count, 0, 9));
     output.aligned_neighbor_support_count[static_cast<size_t>(cell)] =
         static_cast<int8_t>(std::clamp(aligned_neighbor_support_count, 0, 9));
-    if (support_count >= min_neighbor_upper_support_cells &&
-        aligned_neighbor_support_count < min_neighbor_upper_support_cells) {
-      const float support_anchor =
-          output.support_anchor_used[static_cast<size_t>(cell)];
-      const bool has_support_anchor = std::isfinite(support_anchor);
-      const float vertical_span = workspace.stats.max_z - workspace.stats.min_z;
-      const float relative_support_ref =
-          workspace.support_ref - frame.base_pose_in_odom.position.z();
-      const float relative_upper_z =
-          workspace.stats.max_z - frame.base_pose_in_odom.position.z();
-      const FrontendExplanationDecision explanation_decision =
-          ClassifyExplanationDecision(
-              has_support_anchor,
-              support_anchor - frame.base_pose_in_odom.position.z(),
-              relative_support_ref, relative_upper_z, vertical_span,
-              support_count, workspace.ascending_stair_support_count,
-              aligned_neighbor_support_count, min_neighbor_upper_support_cells,
-              config.geometry.max_step_down,
-              config.geometry.upper_min_height_above_support,
-              config.geometry.max_step_up, workspace.sub_support_leak_count,
-              workspace.stale_lower_anchor_mix);
-      output.explanation_decision[static_cast<size_t>(cell)] =
-          static_cast<uint8_t>(explanation_decision);
-      if (explanation_decision != FrontendExplanationDecision::kNone) {
-        output
-            .obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] =
-            1U;
-        continue;
-      }
-
-      const float wall_like_gain_scale =
-          workspace.sub_support_leak_count == 0U
-              ? ComputeWallLikeObstacleGainScale(workspace.stats, vertical_span,
-                                                 relative_upper_z,
-                                                 support_count)
-              : 1.0f;
-      output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
-      output.obstacle_candidates.push_back(ObstacleCandidate{
-          cell, workspace.stats.max_z, std::clamp(vertical_span, 0.0f, 1.0f),
-          wall_like_gain_scale});
-    } else {
+    const bool upper_patch_confirmed =
+        support_count >= min_neighbor_upper_support_cells;
+    output.obstacle_upper_patch_confirmed[static_cast<size_t>(cell)] =
+        upper_patch_confirmed ? 1U : 0U;
+    if (!upper_patch_confirmed) {
       output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] =
           1U;
+      output.obstacle_explanation_rejected[static_cast<size_t>(cell)] = 0U;
+      output.explanation_decision[static_cast<size_t>(cell)] =
+          static_cast<uint8_t>(FrontendExplanationDecision::kNone);
+      continue;
     }
+
+    const float support_anchor =
+        output.support_anchor_used[static_cast<size_t>(cell)];
+    const bool has_support_anchor = std::isfinite(support_anchor);
+    const float vertical_span = workspace.stats.max_z - workspace.stats.min_z;
+    const float relative_support_ref =
+        workspace.support_ref - frame.base_pose_in_odom.position.z();
+    const float relative_upper_z =
+        workspace.stats.max_z - frame.base_pose_in_odom.position.z();
+    const FrontendExplanationDecision reject_decision =
+        ClassifyExplanationDecision(
+            has_support_anchor,
+            support_anchor - frame.base_pose_in_odom.position.z(),
+            relative_support_ref, relative_upper_z, vertical_span,
+            support_count, workspace.ascending_stair_support_count,
+            aligned_neighbor_support_count, min_neighbor_upper_support_cells,
+            config.geometry.max_step_down,
+            config.geometry.upper_min_height_above_support,
+            config.geometry.max_step_up, workspace.sub_support_leak_count,
+            workspace.stale_lower_anchor_mix);
+    if (reject_decision != FrontendExplanationDecision::kNone) {
+      output.explanation_decision[static_cast<size_t>(cell)] =
+          static_cast<uint8_t>(reject_decision);
+      output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] =
+          1U;
+      output.obstacle_explanation_rejected[static_cast<size_t>(cell)] = 1U;
+      continue;
+    }
+
+    const FacadeEvidence facade_evidence = BuildFacadeEvidence(
+        cell, frame, map, layers, config, sample_indices_by_cell, cell_workspaces,
+        aligned_neighbor_support_count);
+    output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] =
+        facade_evidence.lower_upper_coexisting ? 1U : 0U;
+    output.facade_stable_upper_edge_without_support_lift
+        [static_cast<size_t>(cell)] =
+        facade_evidence.stable_upper_edge_without_support_lift ? 1U : 0U;
+    if (facade_evidence.any()) {
+      output.explanation_decision[static_cast<size_t>(cell)] =
+          static_cast<uint8_t>(FrontendExplanationDecision::kKeepAsObstacle);
+    } else {
+      output.explanation_decision[static_cast<size_t>(cell)] =
+          static_cast<uint8_t>(FrontendExplanationDecision::kNone);
+    }
+
+    const float wall_like_gain_scale =
+        workspace.sub_support_leak_count == 0U
+            ? ComputeWallLikeObstacleGainScale(workspace.stats, vertical_span,
+                                               relative_upper_z, support_count)
+            : 1.0f;
+    output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
+    output.obstacle_candidates.push_back(ObstacleCandidate{
+        cell, workspace.stats.max_z, std::clamp(vertical_span, 0.0f, 1.0f),
+        wall_like_gain_scale});
   }
 }
 
@@ -1030,6 +1125,11 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   output.explanation_adjusted_upper_support_cell.assign(
       static_cast<size_t>(map.size()), 0U);
   output.upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
+  output.obstacle_local_triggered.assign(static_cast<size_t>(map.size()), 0U);
+  output.obstacle_upper_patch_confirmed.assign(static_cast<size_t>(map.size()),
+                                               0U);
+  output.obstacle_explanation_rejected.assign(static_cast<size_t>(map.size()),
+                                              0U);
   output.obstacle_suspicious.assign(static_cast<size_t>(map.size()), 0U);
   output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()), 0U);
   output.obstacle_rejected_by_neighbor_support.assign(
@@ -1039,6 +1139,10 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   output.aligned_neighbor_support_count.assign(static_cast<size_t>(map.size()),
                                                0);
   output.explanation_decision.assign(static_cast<size_t>(map.size()), 0U);
+  output.facade_lower_upper_coexisting.assign(static_cast<size_t>(map.size()),
+                                              0U);
+  output.facade_stable_upper_edge_without_support_lift.assign(
+      static_cast<size_t>(map.size()), 0U);
   const auto sample_indices_by_cell = GroupSampleIndicesByCell(frame, map);
   const int active_cell_count = CountActiveCells(sample_indices_by_cell);
   output.support_candidates.reserve(static_cast<size_t>(active_cell_count));
@@ -1050,7 +1154,7 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
 
   ResolveAnchors(frame, map, layers, config_, sample_indices_by_cell,
                  cell_workspaces);
-  const auto suspicious_cells = BuildLocalProfilesAndSeedCandidates(
+  const auto locally_triggered_cells = BuildLocalProfilesAndMarkTriggers(
       frame, observability, map, layers, config_, sample_indices_by_cell,
       cell_workspaces, output);
   MarkUpperSupportCells(frame, map, config_, sample_indices_by_cell,
@@ -1059,8 +1163,9 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   BuildExplanationInputs(frame, map, layers, config_, sample_indices_by_cell,
                          cell_workspaces, output);
   FinalizeUpperSupportCells(output);
-  EmitCandidates(frame, map, layers, config_, cell_workspaces, suspicious_cells,
-                 output);
+  EvaluateCandidates(frame, map, layers, config_, sample_indices_by_cell,
+                     cell_workspaces,
+                     locally_triggered_cells, output);
   return output;
 }
 

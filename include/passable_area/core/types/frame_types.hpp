@@ -13,6 +13,7 @@ enum class FrontendExplanationDecision : uint8_t {
   kBelowRobotStairMix = 1U,
   kBelowRobotGroundLayerMix = 2U,
   kBelowRobotUpstairGroundMix = 3U,
+  kKeepAsObstacle = 4U,
 };
 
 struct FrameInput {
@@ -93,12 +94,17 @@ struct FrameOutput {
   std::vector<uint8_t> explanation_adjusted_upper_support_cell;
   // Compatibility alias kept equal to explanation_adjusted_upper_support_cell.
   std::vector<uint8_t> upper_support_cell;
+  std::vector<uint8_t> obstacle_local_triggered;
+  std::vector<uint8_t> obstacle_upper_patch_confirmed;
+  std::vector<uint8_t> obstacle_explanation_rejected;
   std::vector<uint8_t> obstacle_suspicious;
   std::vector<uint8_t> obstacle_candidate_cell;
   std::vector<uint8_t> obstacle_rejected_by_neighbor_support;
   std::vector<int8_t> neighbor_upper_support_count;
   std::vector<int8_t> aligned_neighbor_support_count;
   std::vector<uint8_t> explanation_decision;
+  std::vector<uint8_t> facade_lower_upper_coexisting;
+  std::vector<uint8_t> facade_stable_upper_edge_without_support_lift;
   std::vector<uint8_t> support_state;
   std::vector<CellDebugPoint> base_gravity_cloud_points;
   std::vector<CellDebugPoint> support_points;

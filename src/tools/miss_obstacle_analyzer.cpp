@@ -79,6 +79,8 @@ const char *ToExplanationDecisionString(
   case passable_area::core::FrontendExplanationDecision::
       kBelowRobotUpstairGroundMix:
     return "BelowRobotUpstairGroundMix";
+  case passable_area::core::FrontendExplanationDecision::kKeepAsObstacle:
+    return "KeepAsObstacle";
   }
   return "Unknown";
 }
@@ -257,6 +259,15 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.adjusted_upper_support_cell =
           output.explanation_adjusted_upper_support_cell[idx] != 0U;
       cell.upper_support_cell = output.upper_support_cell[idx] != 0U;
+      cell.obstacle_local_triggered =
+          !output.obstacle_local_triggered.empty() &&
+          output.obstacle_local_triggered[idx] != 0U;
+      cell.obstacle_upper_patch_confirmed =
+          !output.obstacle_upper_patch_confirmed.empty() &&
+          output.obstacle_upper_patch_confirmed[idx] != 0U;
+      cell.obstacle_explanation_rejected =
+          !output.obstacle_explanation_rejected.empty() &&
+          output.obstacle_explanation_rejected[idx] != 0U;
       cell.obstacle_suspicious = output.obstacle_suspicious[idx] != 0U;
       cell.obstacle_candidate_cell = output.obstacle_candidate_cell[idx] != 0U;
       cell.obstacle_rejected_by_neighbor_support =
@@ -266,6 +277,12 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.aligned_neighbor_support_count =
           output.aligned_neighbor_support_count[idx];
       cell.explanation_decision = output.explanation_decision[idx];
+      cell.facade_lower_upper_coexisting =
+          !output.facade_lower_upper_coexisting.empty() &&
+          output.facade_lower_upper_coexisting[idx] != 0U;
+      cell.facade_stable_upper_edge_without_support_lift =
+          !output.facade_stable_upper_edge_without_support_lift.empty() &&
+          output.facade_stable_upper_edge_without_support_lift[idx] != 0U;
       cell.max_sample_z_minus_support_ref =
           (has_samples && sample_stats.sample_count > 0 &&
            std::isfinite(support_ref))
@@ -301,6 +318,11 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       } else if (!cell.obstacle_suspicious) {
         cell.explanation = "samples did not create enough vertical separation "
                            "to become suspicious";
+      } else if (cell.explanation_decision ==
+                 static_cast<uint8_t>(
+                     passable_area::core::FrontendExplanationDecision::
+                         kKeepAsObstacle)) {
+        cell.explanation = "candidate kept as obstacle by facade evidence";
       } else {
         cell.explanation = "mixed local evidence";
       }

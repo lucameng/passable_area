@@ -617,6 +617,15 @@ void PrintFalseObstacleFrame(
               << (hotspot.adjusted_upper_support_cell ? "true" : "false")
               << "  upper_support_cell: "
               << (hotspot.upper_support_cell ? "true" : "false")
+              << "  obstacle_local_triggered: "
+              << (hotspot.obstacle_local_triggered ? "true" : "false")
+              << "  obstacle_upper_patch_confirmed: "
+              << (hotspot.obstacle_upper_patch_confirmed ? "true" : "false")
+              << "  obstacle_explanation_rejected: "
+              << (hotspot.obstacle_explanation_rejected ? "true" : "false")
+              << '\n';
+    std::cout << "    obstacle_suspicious: "
+              << (hotspot.obstacle_suspicious ? "true" : "false")
               << "  obstacle_candidate_cell: "
               << (hotspot.obstacle_candidate_cell ? "true" : "false")
               << "  neighbor_upper_support_count: "
@@ -630,6 +639,12 @@ void PrintFalseObstacleFrame(
               << ToExplanationDecisionString(
                      static_cast<passable_area::core::FrontendExplanationDecision>(
                          hotspot.explanation_decision))
+              << '\n';
+    std::cout << "    facade_lower_upper_coexisting: "
+              << (hotspot.facade_lower_upper_coexisting ? "true" : "false")
+              << "  facade_stable_upper_edge_without_support_lift: "
+              << (hotspot.facade_stable_upper_edge_without_support_lift ? "true"
+                                                                       : "false")
               << '\n';
   }
   std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m",
@@ -744,6 +759,8 @@ const char *ToExplanationDecisionString(
     return "BelowRobotGroundLayerMix";
   case passable_area::core::FrontendExplanationDecision::kBelowRobotUpstairGroundMix:
     return "BelowRobotUpstairGroundMix";
+  case passable_area::core::FrontendExplanationDecision::kKeepAsObstacle:
+    return "KeepAsObstacle";
   }
   return "Unknown";
 }
@@ -821,7 +838,14 @@ void PrintMissObstacleFrame(
               << (cell.adjusted_upper_support_cell ? "true" : "false")
               << "  upper_support_cell: "
               << (cell.upper_support_cell ? "true" : "false")
-              << "  obstacle_suspicious: "
+              << "  obstacle_local_triggered: "
+              << (cell.obstacle_local_triggered ? "true" : "false")
+              << "  obstacle_upper_patch_confirmed: "
+              << (cell.obstacle_upper_patch_confirmed ? "true" : "false")
+              << "  obstacle_explanation_rejected: "
+              << (cell.obstacle_explanation_rejected ? "true" : "false")
+              << '\n';
+    std::cout << "    obstacle_suspicious: "
               << (cell.obstacle_suspicious ? "true" : "false")
               << "  obstacle_candidate_cell: "
               << (cell.obstacle_candidate_cell ? "true" : "false") << '\n';
@@ -835,6 +859,12 @@ void PrintMissObstacleFrame(
               << ToExplanationDecisionString(
                      static_cast<passable_area::core::FrontendExplanationDecision>(
                          cell.explanation_decision))
+              << '\n';
+    std::cout << "    facade_lower_upper_coexisting: "
+              << (cell.facade_lower_upper_coexisting ? "true" : "false")
+              << "  facade_stable_upper_edge_without_support_lift: "
+              << (cell.facade_stable_upper_edge_without_support_lift ? "true"
+                                                                    : "false")
               << '\n';
     std::cout << "    why: " << Colorize(cell.explanation, "\033[1;37m", style)
               << '\n';
@@ -1609,6 +1639,12 @@ void PrintRoiFrameInspection(
                 << static_cast<int>(
                        output.explanation_adjusted_upper_support_cell[idx])
                 << " upper=" << static_cast<int>(output.upper_support_cell[idx])
+                << " local_trigger="
+                << static_cast<int>(output.obstacle_local_triggered[idx])
+                << " upper_patch_confirmed="
+                << static_cast<int>(output.obstacle_upper_patch_confirmed[idx])
+                << " explanation_rejected="
+                << static_cast<int>(output.obstacle_explanation_rejected[idx])
                 << " suspicious="
                 << static_cast<int>(output.obstacle_suspicious[idx])
                 << " rejected="
@@ -1622,6 +1658,11 @@ void PrintRoiFrameInspection(
                 << ToExplanationDecisionString(
                        static_cast<passable_area::core::FrontendExplanationDecision>(
                            output.explanation_decision[idx]))
+                << " facade_lower_upper_coexisting="
+                << static_cast<int>(output.facade_lower_upper_coexisting[idx])
+                << " facade_stable_upper_edge_without_support_lift="
+                << static_cast<int>(
+                       output.facade_stable_upper_edge_without_support_lift[idx])
                 << " coverage=" << output.coverage_confidence[idx]
                 << " support_conf=" << output.support_confidence[idx] << "\n";
     }
