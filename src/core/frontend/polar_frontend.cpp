@@ -16,6 +16,38 @@ struct CellStats {
   int count = 0;
 };
 
+enum class AnchorValidityDecision : uint8_t {
+  kInvalidInsufficientSupport = 0U,
+  kValid = 1U,
+  kInvalidStale = 2U,
+  kInvalidWallOnly = 3U,
+};
+
+enum class ExplanationDecision : uint8_t {
+  kNone = 0U,
+  kBelowRobotStairMix = 1U,
+  kBelowRobotGroundLayerMix = 2U,
+  kBelowRobotUpstairGroundMix = 3U,
+};
+
+struct CellWorkspace {
+  float raw_min_z = std::numeric_limits<float>::infinity();
+  float support_anchor_candidate = std::numeric_limits<float>::quiet_NaN();
+  float support_ref = std::numeric_limits<float>::quiet_NaN();
+  float effective_support_ref = std::numeric_limits<float>::quiet_NaN();
+  float min_upper_band_z = std::numeric_limits<float>::infinity();
+  CellStats stats;
+  int anchor_reobserve_count = 0;
+  int below_anchor_count = 0;
+  int upper_band_count = 0;
+  int ascending_stair_support_count = 0;
+  uint16_t sub_support_leak_count = 0U;
+  uint8_t local_history_anchor_valid = 0U;
+  AnchorValidityDecision anchor_validity = AnchorValidityDecision::kInvalidInsufficientSupport;
+  bool has_stats = false;
+  bool stale_lower_anchor_mix = false;
+};
+
 float ComputeWallLikeObstacleGainScale(const CellStats &stats,
                                        float vertical_span,
                                        float relative_upper_z,
@@ -185,10 +217,7 @@ int CountValidNeighborAnchors(int cell,
 
 float ResolveNeighborUpperLayerConsensusHeight(int cell,
                                                const LocalTerrainMap &map,
-                                               const std::vector<float> &support_anchor_by_cell,
-                                               const std::vector<int> &upper_band_count_by_cell,
-                                               const std::vector<float> &min_upper_band_z_by_cell,
-                                               const std::vector<uint16_t> &sub_support_leak_count,
+                                               const std::vector<CellWorkspace> &cell_workspaces,
                                                float upper_height_threshold,
                                                float max_step_up) {
   const int row = cell / map.cols();
@@ -206,11 +235,12 @@ float ResolveNeighborUpperLayerConsensusHeight(int cell,
         continue;
       }
       const int neighbor = nr * map.cols() + nc;
-      const float neighbor_support_anchor = support_anchor_by_cell[static_cast<size_t>(neighbor)];
-      const float neighbor_min_upper_band_z = min_upper_band_z_by_cell[static_cast<size_t>(neighbor)];
+      const auto &neighbor_workspace = cell_workspaces[static_cast<size_t>(neighbor)];
+      const float neighbor_support_anchor = neighbor_workspace.support_anchor_candidate;
+      const float neighbor_min_upper_band_z = neighbor_workspace.min_upper_band_z;
       if (!std::isfinite(neighbor_support_anchor) || !std::isfinite(neighbor_min_upper_band_z) ||
-          upper_band_count_by_cell[static_cast<size_t>(neighbor)] == 0 ||
-          sub_support_leak_count[static_cast<size_t>(neighbor)] != 0U) {
+          neighbor_workspace.upper_band_count == 0 ||
+          neighbor_workspace.sub_support_leak_count != 0U) {
         continue;
       }
       const float neighbor_upper_gap = neighbor_min_upper_band_z - neighbor_support_anchor;
@@ -231,10 +261,7 @@ float ResolveNeighborUpperLayerConsensusHeight(int cell,
 
 int CountNeighborUpperLayersAlignedToHeight(int cell,
                                             const LocalTerrainMap &map,
-                                            const std::vector<float> &support_anchor_by_cell,
-                                            const std::vector<int> &upper_band_count_by_cell,
-                                            const std::vector<float> &min_upper_band_z_by_cell,
-                                            const std::vector<uint16_t> &sub_support_leak_count,
+                                            const std::vector<CellWorkspace> &cell_workspaces,
                                             float target_z,
                                             float tolerance,
                                             float upper_height_threshold,
@@ -257,11 +284,12 @@ int CountNeighborUpperLayersAlignedToHeight(int cell,
         continue;
       }
       const int neighbor = nr * map.cols() + nc;
-      const float neighbor_support_anchor = support_anchor_by_cell[static_cast<size_t>(neighbor)];
-      const float neighbor_min_upper_band_z = min_upper_band_z_by_cell[static_cast<size_t>(neighbor)];
+      const auto &neighbor_workspace = cell_workspaces[static_cast<size_t>(neighbor)];
+      const float neighbor_support_anchor = neighbor_workspace.support_anchor_candidate;
+      const float neighbor_min_upper_band_z = neighbor_workspace.min_upper_band_z;
       if (!std::isfinite(neighbor_support_anchor) || !std::isfinite(neighbor_min_upper_band_z) ||
-          upper_band_count_by_cell[static_cast<size_t>(neighbor)] == 0 ||
-          sub_support_leak_count[static_cast<size_t>(neighbor)] != 0U) {
+          neighbor_workspace.upper_band_count == 0 ||
+          neighbor_workspace.sub_support_leak_count != 0U) {
         continue;
       }
       const float neighbor_upper_gap = neighbor_min_upper_band_z - neighbor_support_anchor;
@@ -276,38 +304,9 @@ int CountNeighborUpperLayersAlignedToHeight(int cell,
   return match_count;
 }
 
-bool ShouldRejectBelowRobotStairMix(float relative_support_ref,
-                                    float relative_upper_z,
-                                    int support_count,
-                                    float max_step_down,
-                                    float upper_height_threshold,
-                                    uint16_t sub_support_leak_count,
-                                    bool stale_lower_anchor_mix) {
-  return std::isfinite(relative_support_ref) && relative_support_ref <= -max_step_down &&
-         relative_upper_z <= -upper_height_threshold && support_count >= 3 &&
-         (sub_support_leak_count > 0U || stale_lower_anchor_mix);
-}
-
-bool ShouldRejectBelowRobotGroundLayerMix(float relative_support_ref,
-                                          float relative_upper_z,
-                                          float vertical_span,
-                                          int aligned_neighbor_support_count,
-                                          float max_step_down,
-                                          float upper_height_threshold,
-                                          uint16_t sub_support_leak_count,
-                                          bool stale_lower_anchor_mix) {
-  // Downstairs ground-mix only trusts local anchored upper-support structure; dense upper bands alone do not
-  // override a below-robot ground-layer interpretation.
-  const bool has_reinforcing_support_structure = aligned_neighbor_support_count > 0;
-  return std::isfinite(relative_support_ref) && relative_support_ref <= -max_step_down &&
-         relative_upper_z <= -upper_height_threshold && vertical_span <= max_step_down &&
-         !has_reinforcing_support_structure && sub_support_leak_count == 0U &&
-         !stale_lower_anchor_mix;
-}
-
 int CountAscendingNeighborSupportRefs(int cell,
                                       const LocalTerrainMap &map,
-                                      const std::unordered_map<int, float> &support_ref_by_cell,
+                                      const std::vector<CellWorkspace> &cell_workspaces,
                                       float support_ref,
                                       float upper_height_threshold,
                                       float max_step_up) {
@@ -331,14 +330,11 @@ int CountAscendingNeighborSupportRefs(int cell,
         continue;
       }
       const int neighbor = nr * map.cols() + nc;
-      const auto neighbor_support_it = support_ref_by_cell.find(neighbor);
-      if (neighbor_support_it == support_ref_by_cell.end()) {
+      const auto &neighbor_workspace = cell_workspaces[static_cast<size_t>(neighbor)];
+      if (!std::isfinite(neighbor_workspace.support_ref)) {
         continue;
       }
-      const float neighbor_support = neighbor_support_it->second;
-      if (!std::isfinite(neighbor_support)) {
-        continue;
-      }
+      const float neighbor_support = neighbor_workspace.support_ref;
       if (neighbor_support >= support_ref + min_ascending_support_delta &&
           neighbor_support <= support_ref + max_step_up) {
         ++ascending_stair_support_count;
@@ -348,17 +344,36 @@ int CountAscendingNeighborSupportRefs(int cell,
   return ascending_stair_support_count;
 }
 
-bool ShouldRejectBelowRobotUpstairGroundMix(bool has_support_anchor,
-                                            float relative_support_anchor,
-                                            float relative_support_ref,
-                                            float relative_upper_z,
-                                            float vertical_span,
-                                            int ascending_stair_support_count,
-                                            int aligned_neighbor_support_count,
-                                            int min_neighbor_upper_support_cells,
-                                            float upper_height_threshold,
-                                            float max_step_up,
-                                            uint16_t sub_support_leak_count) {
+ExplanationDecision ClassifyExplanationDecision(bool has_support_anchor,
+                                                float relative_support_anchor,
+                                                float relative_support_ref,
+                                                float relative_upper_z,
+                                                float vertical_span,
+                                                int support_count,
+                                                int ascending_stair_support_count,
+                                                int aligned_neighbor_support_count,
+                                                int min_neighbor_upper_support_cells,
+                                                float max_step_down,
+                                                float upper_height_threshold,
+                                                float max_step_up,
+                                                uint16_t sub_support_leak_count,
+                                                bool stale_lower_anchor_mix) {
+  if (std::isfinite(relative_support_ref) && relative_support_ref <= -max_step_down &&
+      relative_upper_z <= -upper_height_threshold && support_count >= 3 &&
+      (sub_support_leak_count > 0U || stale_lower_anchor_mix)) {
+    return ExplanationDecision::kBelowRobotStairMix;
+  }
+
+  // Downstairs ground-mix only trusts local anchored upper-support structure; dense upper bands
+  // alone do not override a below-robot ground-layer interpretation.
+  const bool has_reinforcing_support_structure = aligned_neighbor_support_count > 0;
+  if (std::isfinite(relative_support_ref) && relative_support_ref <= -max_step_down &&
+      relative_upper_z <= -upper_height_threshold && vertical_span <= max_step_down &&
+      !has_reinforcing_support_structure && sub_support_leak_count == 0U &&
+      !stale_lower_anchor_mix) {
+    return ExplanationDecision::kBelowRobotGroundLayerMix;
+  }
+
   const float min_below_robot_support_depth = -0.5f * upper_height_threshold;
   const float max_ground_mix_span = max_step_up + upper_height_threshold;
   const float max_below_robot_upper_z = 0.0f;
@@ -367,12 +382,16 @@ bool ShouldRejectBelowRobotUpstairGroundMix(bool has_support_anchor,
       (std::isfinite(relative_support_anchor) &&
        relative_support_anchor <= min_below_robot_support_depth);
   // Upstairs ground-mix is explained by an ascending support trend, with below-robot anchors still allowed.
-  return anchor_is_compatible_with_below_robot_mix && std::isfinite(relative_support_ref) &&
-         relative_support_ref <= min_below_robot_support_depth &&
-         relative_upper_z <= max_below_robot_upper_z &&
-         vertical_span <= max_ground_mix_span &&
-         ascending_stair_support_count >= std::max(1, min_neighbor_upper_support_cells) &&
-         aligned_neighbor_support_count == 0 && sub_support_leak_count == 0U;
+  if (anchor_is_compatible_with_below_robot_mix && std::isfinite(relative_support_ref) &&
+      relative_support_ref <= min_below_robot_support_depth &&
+      relative_upper_z <= max_below_robot_upper_z &&
+      vertical_span <= max_ground_mix_span &&
+      ascending_stair_support_count >= std::max(1, min_neighbor_upper_support_cells) &&
+      aligned_neighbor_support_count == 0 && sub_support_leak_count == 0U) {
+    return ExplanationDecision::kBelowRobotUpstairGroundMix;
+  }
+
+  return ExplanationDecision::kNone;
 }
 
 bool ShouldUseElevatedEffectiveSupportRef(bool has_support_anchor,
@@ -410,26 +429,9 @@ bool ShouldUseElevatedEffectiveSupportRef(bool has_support_anchor,
          !stale_lower_anchor_mix;
 }
 
-} // namespace
-
-FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
-                                  const FrameObservability &observability,
-                                  const LocalTerrainMap &map) const {
-  FrontendOutput output;
-  output.support_anchor_used.assign(static_cast<size_t>(map.size()),
-                                    std::numeric_limits<float>::quiet_NaN());
-  output.sub_support_leak_count.assign(static_cast<size_t>(map.size()), 0U);
-  output.upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
-  output.obstacle_suspicious.assign(static_cast<size_t>(map.size()), 0U);
-  output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()), 0U);
-  output.obstacle_rejected_by_neighbor_support.assign(static_cast<size_t>(map.size()), 0U);
-  output.neighbor_upper_support_count.assign(static_cast<size_t>(map.size()), 0);
+std::vector<std::vector<size_t>> GroupSampleIndicesByCell(const ProcessedFrame &frame,
+                                                          const LocalTerrainMap &map) {
   std::vector<std::vector<size_t>> sample_indices_by_cell(static_cast<size_t>(map.size()));
-
-  const float sector_size =
-      2.0f * static_cast<float>(M_PI) / static_cast<float>(observability.sectors.size());
-  const float yaw = YawFromQuaternion(frame.base_pose_in_odom.orientation);
-
   for (size_t sample_index = 0; sample_index < frame.odom_samples.size(); ++sample_index) {
     const auto &sample = frame.odom_samples[sample_index];
     int cell = -1;
@@ -438,88 +440,146 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     }
     sample_indices_by_cell[static_cast<size_t>(cell)].push_back(sample_index);
   }
+  return sample_indices_by_cell;
+}
 
-  std::unordered_map<int, CellStats> stats_by_cell;
-  stats_by_cell.reserve(frame.odom_samples.size() / 4U + 1U);
-  output.support_candidates.reserve(stats_by_cell.size());
-  output.obstacle_candidates.reserve(stats_by_cell.size());
-  output.ambiguous_candidates.reserve(stats_by_cell.size());
+int CountActiveCells(const std::vector<std::vector<size_t>> &sample_indices_by_cell) {
+  return static_cast<int>(std::count_if(sample_indices_by_cell.begin(),
+                                        sample_indices_by_cell.end(),
+                                        [](const auto &sample_indices) {
+                                          return !sample_indices.empty();
+                                        }));
+}
 
-  std::unordered_set<int> suspicious_cells;
-  suspicious_cells.reserve(stats_by_cell.size());
-  const auto &layers = map.layers();
-  const float upper_height_threshold = config_.geometry.upper_min_height_above_support;
-  const float suspicious_vertical_span = config_.geometry.max_step_up * 0.75f;
-  const float support_anchor_reobserve_tolerance =
-      config_.geometry.support_anchor_reobserve_tolerance;
-  const int min_neighbor_upper_support_cells =
-      std::max(1, config_.geometry.min_neighbor_upper_support_cells);
-  std::unordered_map<int, float> support_ref_by_cell;
-  support_ref_by_cell.reserve(stats_by_cell.size());
-  std::vector<float> raw_min_z_by_cell(static_cast<size_t>(map.size()),
-                                       std::numeric_limits<float>::infinity());
-  std::vector<float> support_anchor_candidate_by_cell(static_cast<size_t>(map.size()),
-                                                      std::numeric_limits<float>::quiet_NaN());
-  std::vector<uint8_t> local_history_anchor_valid(static_cast<size_t>(map.size()), 0U);
-  std::vector<int> anchor_reobserve_count_by_cell(static_cast<size_t>(map.size()), 0);
-  std::vector<int> below_anchor_count_by_cell(static_cast<size_t>(map.size()), 0);
-  std::vector<int> upper_band_count_by_cell(static_cast<size_t>(map.size()), 0);
-  std::vector<float> min_upper_band_z_by_cell(static_cast<size_t>(map.size()),
-                                              std::numeric_limits<float>::infinity());
-  // Frontend-local temporary explanation ref; never persisted as map support.
-  std::vector<float> effective_support_ref_by_cell(static_cast<size_t>(map.size()),
-                                                   std::numeric_limits<float>::quiet_NaN());
-  std::vector<int> ascending_stair_support_count_by_cell(static_cast<size_t>(map.size()), 0);
-
+void ResolveAnchors(const ProcessedFrame &frame,
+                    const LocalTerrainMap &map,
+                    const TerrainLayers &layers,
+                    const Config &config,
+                    const std::vector<std::vector<size_t>> &sample_indices_by_cell,
+                    std::vector<CellWorkspace> &cell_workspaces) {
   for (int cell = 0; cell < map.size(); ++cell) {
     const auto &sample_indices = sample_indices_by_cell[static_cast<size_t>(cell)];
     if (sample_indices.empty()) {
       continue;
     }
-    float raw_min_z = std::numeric_limits<float>::infinity();
-    for (const size_t sample_index : sample_indices) {
-      raw_min_z = std::min(raw_min_z, frame.odom_samples[sample_index].point_in_odom.z);
-    }
-    raw_min_z_by_cell[static_cast<size_t>(cell)] = raw_min_z;
 
-    const bool has_local_history_anchor = IsValidSupportAnchorCell(layers, cell, config_);
-    local_history_anchor_valid[static_cast<size_t>(cell)] = has_local_history_anchor ? 1U : 0U;
+    auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+    for (const size_t sample_index : sample_indices) {
+      workspace.raw_min_z =
+          std::min(workspace.raw_min_z, frame.odom_samples[sample_index].point_in_odom.z);
+    }
+
+    const bool has_local_history_anchor = IsValidSupportAnchorCell(layers, cell, config);
+    workspace.local_history_anchor_valid = has_local_history_anchor ? 1U : 0U;
+
     float support_anchor = std::numeric_limits<float>::quiet_NaN();
     bool has_support_anchor = false;
     if (has_local_history_anchor) {
       const float local_anchor = layers.support_height[static_cast<size_t>(cell)];
-      if (local_anchor >= raw_min_z - config_.geometry.sub_support_leak_tolerance) {
+      if (local_anchor >= workspace.raw_min_z - config.geometry.sub_support_leak_tolerance) {
         support_anchor = local_anchor;
         has_support_anchor = true;
       }
     }
     if (!has_support_anchor) {
-      const float neighbor_anchor = ResolveNeighborSupportAnchor(cell, map, layers, config_);
+      const float neighbor_anchor = ResolveNeighborSupportAnchor(cell, map, layers, config);
       if (std::isfinite(neighbor_anchor) &&
-          neighbor_anchor >= raw_min_z - config_.geometry.sub_support_leak_tolerance) {
+          neighbor_anchor >= workspace.raw_min_z - config.geometry.sub_support_leak_tolerance) {
         support_anchor = neighbor_anchor;
         has_support_anchor = true;
       }
     }
-    if (has_support_anchor) {
-      support_anchor_candidate_by_cell[static_cast<size_t>(cell)] = support_anchor;
-      for (const size_t sample_index : sample_indices) {
-        const auto &sample = frame.odom_samples[sample_index];
-        if (sample.point_in_odom.z < support_anchor - config_.geometry.sub_support_leak_tolerance) {
-          ++below_anchor_count_by_cell[static_cast<size_t>(cell)];
-          continue;
-        }
-        if (sample.point_in_odom.z <= support_anchor + support_anchor_reobserve_tolerance) {
-          ++anchor_reobserve_count_by_cell[static_cast<size_t>(cell)];
-        }
-        if (sample.point_in_odom.z >= support_anchor + upper_height_threshold) {
-          ++upper_band_count_by_cell[static_cast<size_t>(cell)];
-          min_upper_band_z_by_cell[static_cast<size_t>(cell)] = std::min(
-              min_upper_band_z_by_cell[static_cast<size_t>(cell)], sample.point_in_odom.z);
-        }
+    if (!has_support_anchor) {
+      workspace.anchor_validity = AnchorValidityDecision::kInvalidInsufficientSupport;
+      continue;
+    }
+
+    workspace.support_anchor_candidate = support_anchor;
+    workspace.anchor_validity = AnchorValidityDecision::kValid;
+    for (const size_t sample_index : sample_indices) {
+      const auto &sample = frame.odom_samples[sample_index];
+      if (sample.point_in_odom.z < support_anchor - config.geometry.sub_support_leak_tolerance) {
+        ++workspace.below_anchor_count;
+        continue;
+      }
+      if (sample.point_in_odom.z <= support_anchor + config.geometry.support_anchor_reobserve_tolerance) {
+        ++workspace.anchor_reobserve_count;
+      }
+      if (sample.point_in_odom.z >= support_anchor + config.geometry.upper_min_height_above_support) {
+        ++workspace.upper_band_count;
+        workspace.min_upper_band_z = std::min(workspace.min_upper_band_z, sample.point_in_odom.z);
       }
     }
   }
+}
+
+int CountNeighborhoodAnchorReobserveCount(int cell,
+                                          const LocalTerrainMap &map,
+                                          const std::vector<CellWorkspace> &cell_workspaces) {
+  int neighborhood_anchor_reobserve_count = 0;
+  const int row = cell / map.cols();
+  const int col = cell % map.cols();
+  for (int dr = -1; dr <= 1; ++dr) {
+    for (int dc = -1; dc <= 1; ++dc) {
+      const int nr = row + dr;
+      const int nc = col + dc;
+      if (nr < 0 || nr >= map.rows() || nc < 0 || nc >= map.cols()) {
+        continue;
+      }
+      const int neighbor = nr * map.cols() + nc;
+      neighborhood_anchor_reobserve_count +=
+          cell_workspaces[static_cast<size_t>(neighbor)].anchor_reobserve_count;
+    }
+  }
+  return neighborhood_anchor_reobserve_count;
+}
+
+AnchorValidityDecision ClassifyAnchorValidity(const CellWorkspace &workspace,
+                                              int neighborhood_anchor_reobserve_count,
+                                              float support_anchor,
+                                              float upper_height_threshold,
+                                              float support_anchor_reobserve_tolerance) {
+  if (!std::isfinite(support_anchor)) {
+    return AnchorValidityDecision::kInvalidInsufficientSupport;
+  }
+
+  const bool reject_stale_anchor =
+      workspace.anchor_reobserve_count <= 1 &&
+      neighborhood_anchor_reobserve_count <= 2 &&
+      workspace.upper_band_count >= 1 &&
+      workspace.min_upper_band_z >= support_anchor + upper_height_threshold;
+  if (reject_stale_anchor) {
+    return AnchorValidityDecision::kInvalidStale;
+  }
+
+  const bool reject_wall_only_anchor =
+      workspace.below_anchor_count >= 3 &&
+      workspace.below_anchor_count > workspace.anchor_reobserve_count * 2 &&
+      (workspace.upper_band_count == 0 ||
+       workspace.min_upper_band_z <
+           support_anchor + upper_height_threshold + support_anchor_reobserve_tolerance);
+  if (reject_wall_only_anchor) {
+    return AnchorValidityDecision::kInvalidWallOnly;
+  }
+
+  return AnchorValidityDecision::kValid;
+}
+
+std::vector<int> BuildLocalProfilesAndSeedCandidates(
+    const ProcessedFrame &frame,
+    const FrameObservability &observability,
+    const LocalTerrainMap &map,
+    const TerrainLayers &layers,
+    const Config &config,
+    const std::vector<std::vector<size_t>> &sample_indices_by_cell,
+    std::vector<CellWorkspace> &cell_workspaces,
+    FrontendOutput &output) {
+  std::vector<int> suspicious_cells;
+  suspicious_cells.reserve(cell_workspaces.size() / 8U + 1U);
+  const float sector_size =
+      2.0f * static_cast<float>(M_PI) / static_cast<float>(observability.sectors.size());
+  const float yaw = YawFromQuaternion(frame.base_pose_in_odom.orientation);
+  const float suspicious_vertical_span = config.geometry.max_step_up * 0.75f;
 
   for (int cell = 0; cell < map.size(); ++cell) {
     const auto &sample_indices = sample_indices_by_cell[static_cast<size_t>(cell)];
@@ -527,78 +587,56 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       continue;
     }
 
-    const bool has_local_history_anchor =
-        local_history_anchor_valid[static_cast<size_t>(cell)] != 0U;
-    float support_anchor = support_anchor_candidate_by_cell[static_cast<size_t>(cell)];
-    bool has_support_anchor = std::isfinite(support_anchor);
-    int neighborhood_anchor_reobserve_count = 0;
-    if (has_support_anchor) {
-      const int row = cell / map.cols();
-      const int col = cell % map.cols();
-      for (int dr = -1; dr <= 1; ++dr) {
-        for (int dc = -1; dc <= 1; ++dc) {
-          const int nr = row + dr;
-          const int nc = col + dc;
-          if (nr < 0 || nr >= map.rows() || nc < 0 || nc >= map.cols()) {
-            continue;
-          }
-          const int neighbor = nr * map.cols() + nc;
-          neighborhood_anchor_reobserve_count +=
-              anchor_reobserve_count_by_cell[static_cast<size_t>(neighbor)];
-        }
+    auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+    const bool has_local_history_anchor = workspace.local_history_anchor_valid != 0U;
+    float support_anchor = workspace.support_anchor_candidate;
+    workspace.anchor_validity = std::isfinite(support_anchor)
+                                    ? AnchorValidityDecision::kValid
+                                    : AnchorValidityDecision::kInvalidInsufficientSupport;
+    if (workspace.anchor_validity == AnchorValidityDecision::kValid) {
+      const int neighborhood_anchor_reobserve_count =
+          CountNeighborhoodAnchorReobserveCount(cell, map, cell_workspaces);
+      workspace.anchor_validity = ClassifyAnchorValidity(workspace,
+                                                         neighborhood_anchor_reobserve_count,
+                                                         support_anchor,
+                                                         config.geometry.upper_min_height_above_support,
+                                                         config.geometry.support_anchor_reobserve_tolerance);
+      if (workspace.anchor_validity != AnchorValidityDecision::kValid) {
+        support_anchor = std::numeric_limits<float>::quiet_NaN();
       }
     }
-    const bool reject_stale_anchor =
-        has_support_anchor &&
-        anchor_reobserve_count_by_cell[static_cast<size_t>(cell)] <= 1 &&
-        neighborhood_anchor_reobserve_count <= 2 &&
-        upper_band_count_by_cell[static_cast<size_t>(cell)] >= 1 &&
-        min_upper_band_z_by_cell[static_cast<size_t>(cell)] >= support_anchor + upper_height_threshold;
-    const bool reject_wall_only_anchor =
-        has_support_anchor &&
-        below_anchor_count_by_cell[static_cast<size_t>(cell)] >= 3 &&
-        below_anchor_count_by_cell[static_cast<size_t>(cell)] >
-            anchor_reobserve_count_by_cell[static_cast<size_t>(cell)] * 2 &&
-        (upper_band_count_by_cell[static_cast<size_t>(cell)] == 0 ||
-         min_upper_band_z_by_cell[static_cast<size_t>(cell)] <
-             support_anchor + upper_height_threshold + support_anchor_reobserve_tolerance);
-    if (reject_stale_anchor || reject_wall_only_anchor) {
-      has_support_anchor = false;
-      support_anchor = std::numeric_limits<float>::quiet_NaN();
-    }
+    const bool has_support_anchor = workspace.anchor_validity == AnchorValidityDecision::kValid;
+
     if (has_support_anchor) {
       output.support_anchor_used[static_cast<size_t>(cell)] = support_anchor;
     }
 
-    CellStats stats;
-    uint16_t leak_count = 0U;
     for (const size_t sample_index : sample_indices) {
       const auto &sample = frame.odom_samples[sample_index];
       const bool is_leak =
           has_support_anchor &&
-          sample.point_in_odom.z < support_anchor - config_.geometry.sub_support_leak_tolerance;
+          sample.point_in_odom.z < support_anchor - config.geometry.sub_support_leak_tolerance;
       if (is_leak) {
-        if (leak_count < std::numeric_limits<uint16_t>::max()) {
-          ++leak_count;
+        if (workspace.sub_support_leak_count < std::numeric_limits<uint16_t>::max()) {
+          ++workspace.sub_support_leak_count;
         }
         continue;
       }
-      if (reject_stale_anchor &&
-          sample.point_in_odom.z <= support_anchor + support_anchor_reobserve_tolerance) {
+      if (!has_support_anchor &&
+          sample.point_in_odom.z <= support_anchor + config.geometry.support_anchor_reobserve_tolerance) {
         continue;
       }
-      stats.min_z = std::min(stats.min_z, sample.point_in_odom.z);
-      stats.max_z = std::max(stats.max_z, sample.point_in_odom.z);
-      ++stats.count;
+      workspace.stats.min_z = std::min(workspace.stats.min_z, sample.point_in_odom.z);
+      workspace.stats.max_z = std::max(workspace.stats.max_z, sample.point_in_odom.z);
+      ++workspace.stats.count;
     }
-    output.sub_support_leak_count[static_cast<size_t>(cell)] = leak_count;
-    if (stats.count == 0) {
+    output.sub_support_leak_count[static_cast<size_t>(cell)] = workspace.sub_support_leak_count;
+    if (workspace.stats.count == 0) {
       continue;
     }
-    stats_by_cell.emplace(cell, stats);
+    workspace.has_stats = true;
 
     const Eigen::Vector2f center = map.indexToOdom(cell);
-    // Use the cell-center body angle as the stable sector representative for this cell.
     const float representative_base_angle =
         NormalizeAngle(std::atan2(center.y() - frame.base_pose_in_odom.position.y(),
                                   center.x() - frame.base_pose_in_odom.position.x()) -
@@ -609,70 +647,91 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
         0,
         static_cast<int>(observability.sectors.size()) - 1);
     const auto sector_state = observability.sectors[sector].state;
-    const float vertical_span = stats.max_z - stats.min_z;
+    const float vertical_span = workspace.stats.max_z - workspace.stats.min_z;
     const float coverage = observability.sectors[sector].coverage_confidence;
-    const float support_ref = has_local_history_anchor && has_support_anchor
-                                  ? layers.support_height[static_cast<size_t>(cell)]
-                                  : stats.min_z;
-    support_ref_by_cell.emplace(cell, support_ref);
-    effective_support_ref_by_cell[static_cast<size_t>(cell)] = support_ref;
+
+    workspace.support_ref = has_local_history_anchor && has_support_anchor
+                                ? layers.support_height[static_cast<size_t>(cell)]
+                                : workspace.stats.min_z;
+    workspace.effective_support_ref = workspace.support_ref;
+    workspace.stale_lower_anchor_mix =
+        has_support_anchor &&
+        workspace.upper_band_count >= std::max(2, workspace.anchor_reobserve_count) &&
+        workspace.min_upper_band_z >=
+            support_anchor + config.geometry.upper_min_height_above_support;
 
     if (sector_state != ObservabilityState::kMissingByDropout) {
       output.support_candidates.push_back(
-          SupportCandidate{cell, stats.min_z, std::clamp(coverage, 0.0f, 1.0f)});
+          SupportCandidate{cell, workspace.stats.min_z, std::clamp(coverage, 0.0f, 1.0f)});
     }
     if (vertical_span > suspicious_vertical_span) {
       output.obstacle_suspicious[static_cast<size_t>(cell)] = 1U;
-      suspicious_cells.insert(cell);
+      suspicious_cells.push_back(cell);
     } else if (sector_state == ObservabilityState::kPartiallyObserved) {
-      output.ambiguous_candidates.push_back(AmbiguousCandidate{cell, stats.min_z});
+      output.ambiguous_candidates.push_back(AmbiguousCandidate{cell, workspace.stats.min_z});
     }
   }
 
+  return suspicious_cells;
+}
+
+void MarkUpperSupportCells(const ProcessedFrame &frame,
+                           const LocalTerrainMap &map,
+                           const Config &config,
+                           const std::vector<std::vector<size_t>> &sample_indices_by_cell,
+                           const std::vector<CellWorkspace> &cell_workspaces,
+                           FrontendOutput &output) {
   for (int cell = 0; cell < map.size(); ++cell) {
-    if (output.upper_support_cell[static_cast<size_t>(cell)] != 0U) {
+    const auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+    if (output.upper_support_cell[static_cast<size_t>(cell)] != 0U ||
+        !std::isfinite(workspace.support_ref)) {
       continue;
     }
-    const auto support_ref_it = support_ref_by_cell.find(cell);
-    if (support_ref_it == support_ref_by_cell.end() || !std::isfinite(support_ref_it->second)) {
-      continue;
-    }
+
     const float support_anchor = output.support_anchor_used[static_cast<size_t>(cell)];
     const bool has_support_anchor = std::isfinite(support_anchor);
     for (const size_t sample_index : sample_indices_by_cell[static_cast<size_t>(cell)]) {
       const auto &sample = frame.odom_samples[sample_index];
       if (has_support_anchor &&
-          sample.point_in_odom.z < support_anchor - config_.geometry.sub_support_leak_tolerance) {
+          sample.point_in_odom.z < support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
-      if (sample.point_in_odom.z >= support_ref_it->second + upper_height_threshold) {
+      if (sample.point_in_odom.z >= workspace.support_ref + config.geometry.upper_min_height_above_support) {
         output.upper_support_cell[static_cast<size_t>(cell)] = 1U;
         break;
       }
     }
   }
+}
 
+void BuildAdjacencyContexts(const LocalTerrainMap &map,
+                            const Config &config,
+                            std::vector<CellWorkspace> &cell_workspaces) {
   for (int cell = 0; cell < map.size(); ++cell) {
-    const auto support_ref_it = support_ref_by_cell.find(cell);
-    if (support_ref_it == support_ref_by_cell.end()) {
+    auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+    if (!std::isfinite(workspace.support_ref)) {
       continue;
     }
-    ascending_stair_support_count_by_cell[static_cast<size_t>(cell)] = CountAscendingNeighborSupportRefs(
+    workspace.ascending_stair_support_count = CountAscendingNeighborSupportRefs(
         cell,
         map,
-        support_ref_by_cell,
-        support_ref_it->second,
-        upper_height_threshold,
-        config_.geometry.max_step_up);
+        cell_workspaces,
+        workspace.support_ref,
+        config.geometry.upper_min_height_above_support,
+        config.geometry.max_step_up);
   }
+}
 
+void BuildExplanationInputs(const ProcessedFrame &frame,
+                            const LocalTerrainMap &map,
+                            const TerrainLayers &layers,
+                            const Config &config,
+                            const std::vector<std::vector<size_t>> &sample_indices_by_cell,
+                            std::vector<CellWorkspace> &cell_workspaces,
+                            FrontendOutput &output) {
   for (int cell = 0; cell < map.size(); ++cell) {
-    const auto stats_it = stats_by_cell.find(cell);
-    const auto support_ref_it = support_ref_by_cell.find(cell);
-    if (stats_it == stats_by_cell.end() || support_ref_it == support_ref_by_cell.end()) {
-      continue;
-    }
-    if (output.upper_support_cell[static_cast<size_t>(cell)] == 0U) {
+    auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+    if (!workspace.has_stats || output.upper_support_cell[static_cast<size_t>(cell)] == 0U) {
       continue;
     }
 
@@ -681,103 +740,103 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     if (!has_support_anchor) {
       continue;
     }
-    const float support_ref = support_ref_it->second;
+
     const float upper_layer_consensus_candidate_z = ResolveNeighborUpperLayerConsensusHeight(
         cell,
         map,
-        support_anchor_candidate_by_cell,
-        upper_band_count_by_cell,
-        min_upper_band_z_by_cell,
-        output.sub_support_leak_count,
-        upper_height_threshold,
-        config_.geometry.max_step_up);
+        cell_workspaces,
+        config.geometry.upper_min_height_above_support,
+        config.geometry.max_step_up);
     const float anchored_support_candidate_z =
-        ResolveNeighborSupportConsensusHeight(cell, map, layers, config_);
+        ResolveNeighborSupportConsensusHeight(cell, map, layers, config);
     const float effective_support_candidate_z = std::isfinite(upper_layer_consensus_candidate_z)
                                                     ? upper_layer_consensus_candidate_z
                                                     : anchored_support_candidate_z;
     if (!std::isfinite(effective_support_candidate_z)) {
       continue;
     }
+
     int candidate_reobserve_count = 0;
     for (const size_t sample_index : sample_indices_by_cell[static_cast<size_t>(cell)]) {
       const auto &sample = frame.odom_samples[sample_index];
-      if (sample.point_in_odom.z < support_anchor - config_.geometry.sub_support_leak_tolerance) {
+      if (sample.point_in_odom.z < support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
       if (std::abs(sample.point_in_odom.z - effective_support_candidate_z) <=
-          support_anchor_reobserve_tolerance) {
+          config.geometry.support_anchor_reobserve_tolerance) {
         ++candidate_reobserve_count;
       }
     }
 
-    const float relative_support_anchor =
-        support_anchor - frame.base_pose_in_odom.position.z();
-    const float relative_support_ref = support_ref - frame.base_pose_in_odom.position.z();
-    const float relative_effective_support_candidate_z =
-        effective_support_candidate_z - frame.base_pose_in_odom.position.z();
-    const float candidate_gap_above_support_ref = effective_support_candidate_z - support_ref;
-    const bool stale_lower_anchor_mix =
-        upper_band_count_by_cell[static_cast<size_t>(cell)] >=
-            std::max(2, anchor_reobserve_count_by_cell[static_cast<size_t>(cell)]) &&
-        min_upper_band_z_by_cell[static_cast<size_t>(cell)] >=
-            support_anchor + upper_height_threshold;
     const bool using_upper_layer_consensus_candidate =
         std::isfinite(upper_layer_consensus_candidate_z);
     const int upper_layer_neighbor_match_count =
         using_upper_layer_consensus_candidate
             ? CountNeighborUpperLayersAlignedToHeight(cell,
                                                       map,
-                                                      support_anchor_candidate_by_cell,
-                                                      upper_band_count_by_cell,
-                                                      min_upper_band_z_by_cell,
-                                                      output.sub_support_leak_count,
+                                                      cell_workspaces,
                                                       effective_support_candidate_z,
-                                                      support_anchor_reobserve_tolerance,
-                                                      upper_height_threshold,
-                                                      config_.geometry.max_step_up)
+                                                      config.geometry.support_anchor_reobserve_tolerance,
+                                                      config.geometry.upper_min_height_above_support,
+                                                      config.geometry.max_step_up)
             : CountNeighborAnchorsAlignedToHeight(cell,
                                                   map,
                                                   layers,
-                                                  config_,
+                                                  config,
                                                   effective_support_candidate_z,
-                                                  support_anchor_reobserve_tolerance);
+                                                  config.geometry.support_anchor_reobserve_tolerance);
     const bool use_elevated_effective_support_ref = ShouldUseElevatedEffectiveSupportRef(
         has_support_anchor,
-        relative_support_anchor,
-        relative_support_ref,
-        relative_effective_support_candidate_z,
-        candidate_gap_above_support_ref,
-        upper_band_count_by_cell[static_cast<size_t>(cell)],
-        anchor_reobserve_count_by_cell[static_cast<size_t>(cell)],
+        support_anchor - frame.base_pose_in_odom.position.z(),
+        workspace.support_ref - frame.base_pose_in_odom.position.z(),
+        effective_support_candidate_z - frame.base_pose_in_odom.position.z(),
+        effective_support_candidate_z - workspace.support_ref,
+        workspace.upper_band_count,
+        workspace.anchor_reobserve_count,
         candidate_reobserve_count,
         upper_layer_neighbor_match_count,
-        ascending_stair_support_count_by_cell[static_cast<size_t>(cell)],
-        min_neighbor_upper_support_cells,
-        support_anchor_reobserve_tolerance,
-        config_.geometry.max_step_up,
-        output.sub_support_leak_count[static_cast<size_t>(cell)],
-        stale_lower_anchor_mix);
+        workspace.ascending_stair_support_count,
+        std::max(1, config.geometry.min_neighbor_upper_support_cells),
+        config.geometry.support_anchor_reobserve_tolerance,
+        config.geometry.max_step_up,
+        workspace.sub_support_leak_count,
+        workspace.stale_lower_anchor_mix);
     if (!use_elevated_effective_support_ref) {
       continue;
     }
 
-    effective_support_ref_by_cell[static_cast<size_t>(cell)] = effective_support_candidate_z;
+    workspace.effective_support_ref = effective_support_candidate_z;
     bool has_elevated_upper_support = false;
     for (const size_t sample_index : sample_indices_by_cell[static_cast<size_t>(cell)]) {
       const auto &sample = frame.odom_samples[sample_index];
-      if (sample.point_in_odom.z < support_anchor - config_.geometry.sub_support_leak_tolerance) {
+      if (sample.point_in_odom.z < support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
-      if (sample.point_in_odom.z >= effective_support_candidate_z + upper_height_threshold) {
+      if (sample.point_in_odom.z >=
+          effective_support_candidate_z + config.geometry.upper_min_height_above_support) {
         has_elevated_upper_support = true;
         break;
       }
     }
     output.upper_support_cell[static_cast<size_t>(cell)] = has_elevated_upper_support ? 1U : 0U;
   }
+}
 
+void EmitCandidates(const ProcessedFrame &frame,
+                    const LocalTerrainMap &map,
+                    const TerrainLayers &layers,
+                    const Config &config,
+                    const std::vector<CellWorkspace> &cell_workspaces,
+                    const std::vector<int> &suspicious_cells,
+                    FrontendOutput &output) {
+  const int min_neighbor_upper_support_cells =
+      std::max(1, config.geometry.min_neighbor_upper_support_cells);
   for (const int cell : suspicious_cells) {
+    const auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
+    if (!workspace.has_stats) {
+      continue;
+    }
+
     const int row = cell / map.cols();
     const int col = cell % map.cols();
     int support_count = 0;
@@ -792,10 +851,9 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
         const int neighbor = nr * map.cols() + nc;
         const bool is_upper_support = output.upper_support_cell[static_cast<size_t>(neighbor)] != 0U;
         support_count += is_upper_support ? 1 : 0;
-        if (const auto stats_it = stats_by_cell.find(cell);
-            stats_it != stats_by_cell.end() && IsValidSupportAnchorCell(layers, neighbor, config_) &&
-            std::abs(layers.support_height[static_cast<size_t>(neighbor)] - stats_it->second.max_z) <=
-                support_anchor_reobserve_tolerance) {
+        if (IsValidSupportAnchorCell(layers, neighbor, config) &&
+            std::abs(layers.support_height[static_cast<size_t>(neighbor)] - workspace.stats.max_z) <=
+                config.geometry.support_anchor_reobserve_tolerance) {
           ++aligned_neighbor_support_count;
         }
       }
@@ -804,79 +862,90 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
         static_cast<int8_t>(std::clamp(support_count, 0, 9));
     if (support_count >= min_neighbor_upper_support_cells &&
         aligned_neighbor_support_count < min_neighbor_upper_support_cells) {
-      const auto stats_it = stats_by_cell.find(cell);
-      if (stats_it != stats_by_cell.end()) {
-        const auto raw_support_ref_it = support_ref_by_cell.find(cell);
-        if (raw_support_ref_it == support_ref_by_cell.end()) {
-          continue;
-        }
-        const float vertical_span = stats_it->second.max_z - stats_it->second.min_z;
-        const float support_ref = effective_support_ref_by_cell[static_cast<size_t>(cell)];
-        const float raw_support_ref = raw_support_ref_it->second;
-        const float support_anchor = output.support_anchor_used[static_cast<size_t>(cell)];
-        const bool has_support_anchor = std::isfinite(support_anchor);
-        const float relative_support_anchor =
-            support_anchor - frame.base_pose_in_odom.position.z();
-        const float relative_support_ref = support_ref - frame.base_pose_in_odom.position.z();
-        const float relative_upper_z = stats_it->second.max_z - frame.base_pose_in_odom.position.z();
-        const bool stale_lower_anchor_mix =
-            has_support_anchor &&
-            upper_band_count_by_cell[static_cast<size_t>(cell)] >=
-                std::max(2, anchor_reobserve_count_by_cell[static_cast<size_t>(cell)]) &&
-            min_upper_band_z_by_cell[static_cast<size_t>(cell)] >=
-                support_anchor + upper_height_threshold;
-        const int ascending_stair_support_count =
-            ascending_stair_support_count_by_cell[static_cast<size_t>(cell)];
-        const bool below_robot_stair_mix = ShouldRejectBelowRobotStairMix(
-            raw_support_ref - frame.base_pose_in_odom.position.z(),
-            relative_upper_z,
-            support_count,
-            config_.geometry.max_step_down,
-            upper_height_threshold,
-            output.sub_support_leak_count[static_cast<size_t>(cell)],
-            stale_lower_anchor_mix);
-        const bool below_robot_ground_layer_mix = ShouldRejectBelowRobotGroundLayerMix(
-            raw_support_ref - frame.base_pose_in_odom.position.z(),
-            relative_upper_z,
-            vertical_span,
-            aligned_neighbor_support_count,
-            config_.geometry.max_step_down,
-            upper_height_threshold,
-            output.sub_support_leak_count[static_cast<size_t>(cell)],
-            stale_lower_anchor_mix);
-        const bool below_robot_upstair_ground_mix = ShouldRejectBelowRobotUpstairGroundMix(
-            has_support_anchor,
-            relative_support_anchor,
-            raw_support_ref - frame.base_pose_in_odom.position.z(),
-            relative_upper_z,
-            vertical_span,
-            ascending_stair_support_count,
-            aligned_neighbor_support_count,
-            min_neighbor_upper_support_cells,
-            upper_height_threshold,
-            config_.geometry.max_step_up,
-            output.sub_support_leak_count[static_cast<size_t>(cell)]);
-        if (below_robot_stair_mix || below_robot_ground_layer_mix ||
-            below_robot_upstair_ground_mix) {
-          output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
-          continue;
-        }
-        const float wall_like_gain_scale =
-            output.sub_support_leak_count[static_cast<size_t>(cell)] == 0U
-                ? ComputeWallLikeObstacleGainScale(
-                      stats_it->second, vertical_span, relative_upper_z, support_count)
-                : 1.0f;
-        output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
-        output.obstacle_candidates.push_back(
-            ObstacleCandidate{cell,
-                              stats_it->second.max_z,
-                              std::clamp(vertical_span, 0.0f, 1.0f),
-                              wall_like_gain_scale});
+      const float support_anchor = output.support_anchor_used[static_cast<size_t>(cell)];
+      const bool has_support_anchor = std::isfinite(support_anchor);
+      const float vertical_span = workspace.stats.max_z - workspace.stats.min_z;
+      const float relative_support_ref = workspace.support_ref - frame.base_pose_in_odom.position.z();
+      const float relative_upper_z = workspace.stats.max_z - frame.base_pose_in_odom.position.z();
+      const ExplanationDecision explanation_decision = ClassifyExplanationDecision(
+          has_support_anchor,
+          support_anchor - frame.base_pose_in_odom.position.z(),
+          relative_support_ref,
+          relative_upper_z,
+          vertical_span,
+          support_count,
+          workspace.ascending_stair_support_count,
+          aligned_neighbor_support_count,
+          min_neighbor_upper_support_cells,
+          config.geometry.max_step_down,
+          config.geometry.upper_min_height_above_support,
+          config.geometry.max_step_up,
+          workspace.sub_support_leak_count,
+          workspace.stale_lower_anchor_mix);
+      if (explanation_decision != ExplanationDecision::kNone) {
+        output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
+        continue;
       }
+
+      const float wall_like_gain_scale =
+          workspace.sub_support_leak_count == 0U
+              ? ComputeWallLikeObstacleGainScale(
+                    workspace.stats, vertical_span, relative_upper_z, support_count)
+              : 1.0f;
+      output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
+      output.obstacle_candidates.push_back(
+          ObstacleCandidate{cell,
+                            workspace.stats.max_z,
+                            std::clamp(vertical_span, 0.0f, 1.0f),
+                            wall_like_gain_scale});
     } else {
       output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] = 1U;
     }
   }
+}
+
+} // namespace
+
+FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
+                                  const FrameObservability &observability,
+                                  const LocalTerrainMap &map) const {
+  FrontendOutput output;
+  output.support_anchor_used.assign(static_cast<size_t>(map.size()),
+                                    std::numeric_limits<float>::quiet_NaN());
+  output.sub_support_leak_count.assign(static_cast<size_t>(map.size()), 0U);
+  output.upper_support_cell.assign(static_cast<size_t>(map.size()), 0U);
+  output.obstacle_suspicious.assign(static_cast<size_t>(map.size()), 0U);
+  output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()), 0U);
+  output.obstacle_rejected_by_neighbor_support.assign(static_cast<size_t>(map.size()), 0U);
+  output.neighbor_upper_support_count.assign(static_cast<size_t>(map.size()), 0);
+  const auto sample_indices_by_cell = GroupSampleIndicesByCell(frame, map);
+  const int active_cell_count = CountActiveCells(sample_indices_by_cell);
+  output.support_candidates.reserve(static_cast<size_t>(active_cell_count));
+  output.obstacle_candidates.reserve(static_cast<size_t>(active_cell_count));
+  output.ambiguous_candidates.reserve(static_cast<size_t>(active_cell_count));
+
+  std::vector<CellWorkspace> cell_workspaces(static_cast<size_t>(map.size()));
+  const auto &layers = map.layers();
+
+  ResolveAnchors(frame, map, layers, config_, sample_indices_by_cell, cell_workspaces);
+  const auto suspicious_cells = BuildLocalProfilesAndSeedCandidates(frame,
+                                                                    observability,
+                                                                    map,
+                                                                    layers,
+                                                                    config_,
+                                                                    sample_indices_by_cell,
+                                                                    cell_workspaces,
+                                                                    output);
+  MarkUpperSupportCells(frame, map, config_, sample_indices_by_cell, cell_workspaces, output);
+  BuildAdjacencyContexts(map, config_, cell_workspaces);
+  BuildExplanationInputs(frame,
+                         map,
+                         layers,
+                         config_,
+                         sample_indices_by_cell,
+                         cell_workspaces,
+                         output);
+  EmitCandidates(frame, map, layers, config_, cell_workspaces, suspicious_cells, output);
   return output;
 }
 
