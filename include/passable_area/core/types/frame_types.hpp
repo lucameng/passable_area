@@ -80,6 +80,11 @@ struct FrameOutput {
   std::vector<float> support_continuity;
   std::vector<float> support_anchor_used;
   std::vector<uint16_t> sub_support_leak_count;
+  // Raw local upper-band fact relative to the current cell support_ref.
+  std::vector<uint8_t> raw_upper_support_cell;
+  // Explanation-adjusted upper-support mask used by neighborhood confirmation.
+  std::vector<uint8_t> explanation_adjusted_upper_support_cell;
+  // Compatibility alias kept equal to explanation_adjusted_upper_support_cell.
   std::vector<uint8_t> upper_support_cell;
   std::vector<uint8_t> obstacle_suspicious;
   std::vector<uint8_t> obstacle_candidate_cell;

@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_CORE_TRAVERSABILITY_TRAVERSABILITY_SOLVER_HPP_
-#define PASSABLE_AREA_CORE_TRAVERSABILITY_TRAVERSABILITY_SOLVER_HPP_
+#ifndef PASSABLE_AREA_CORE_TRAVERSABILITY_SOLVER_HPP_
+#define PASSABLE_AREA_CORE_TRAVERSABILITY_SOLVER_HPP_
 
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/types/config_types.hpp"

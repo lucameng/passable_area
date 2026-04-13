@@ -1,13 +1,13 @@
-#ifndef PASSABLE_AREA_CORE_PIPELINE_PROCESSOR_HPP_
-#define PASSABLE_AREA_CORE_PIPELINE_PROCESSOR_HPP_
+#ifndef PASSABLE_AREA_CORE_PROCESSOR_HPP_
+#define PASSABLE_AREA_CORE_PROCESSOR_HPP_
 
-#include "passable_area/core/features/terrain_feature_updater.hpp"
-#include "passable_area/core/frontend/polar_frontend.hpp"
+#include "passable_area/core/terrain_feature_updater.hpp"
+#include "passable_area/core/polar_frontend.hpp"
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
-#include "passable_area/core/observability/frame_observability_estimator.hpp"
-#include "passable_area/core/preprocess/frame_preprocessor.hpp"
-#include "passable_area/core/traversability/traversability_solver.hpp"
+#include "passable_area/core/frame_observability_estimator.hpp"
+#include "passable_area/core/frame_preprocessor.hpp"
+#include "passable_area/core/traversability_solver.hpp"
 #include "passable_area/core/types/config_types.hpp"
 #include "passable_area/core/types/frame_types.hpp"
 

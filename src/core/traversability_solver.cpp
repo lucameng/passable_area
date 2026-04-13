@@ -1,4 +1,4 @@
-#include "passable_area/core/traversability/traversability_solver.hpp"
+#include "passable_area/core/traversability_solver.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -20,14 +20,18 @@ void TraversabilitySolver::update(LocalTerrainMap &map) const {
     const float step_up = layers.step_up[cell];
     const float step_down = layers.step_down[cell];
     const float roughness = layers.roughness[cell];
-    const auto support_state = static_cast<SupportState>(layers.support_state[cell]);
-    const bool stale = static_cast<float>(layers.last_reliable_age[cell]) > stale_threshold_frames;
+    const auto support_state =
+        static_cast<SupportState>(layers.support_state[cell]);
+    const bool stale = static_cast<float>(layers.last_reliable_age[cell]) >
+                       stale_threshold_frames;
 
     PassabilityState state = PassabilityState::kUnknown;
     if (coverage < 0.15f || support_state == SupportState::kNone ||
-        support_confidence < config_.observability.min_support_confidence || stale) {
+        support_confidence < config_.observability.min_support_confidence ||
+        stale) {
       state = PassabilityState::kUnknown;
-    } else if (std::isfinite(clearance) && clearance < config_.geometry.min_clearance) {
+    } else if (std::isfinite(clearance) &&
+               clearance < config_.geometry.min_clearance) {
       state = PassabilityState::kImpassable;
     } else if (continuity < 0.3f && obstacle > 0.4f) {
       state = PassabilityState::kImpassable;
@@ -35,7 +39,8 @@ void TraversabilitySolver::update(LocalTerrainMap &map) const {
                step_up <= config_.geometry.max_step_up &&
                step_down <= config_.geometry.max_step_down &&
                roughness <= config_.geometry.max_support_roughness &&
-               (!std::isfinite(clearance) || clearance >= config_.geometry.min_clearance)) {
+               (!std::isfinite(clearance) ||
+                clearance >= config_.geometry.min_clearance)) {
       state = PassabilityState::kPassable;
     }
 
@@ -49,16 +54,21 @@ void TraversabilitySolver::update(LocalTerrainMap &map) const {
       continue;
     }
 
-    const float slope_ratio =
-        std::clamp(slope / std::max(config_.geometry.max_support_slope_deg, 1.0f), 0.0f, 1.0f);
-    const float step_ratio =
-        std::clamp(std::max(step_up / std::max(config_.geometry.max_step_up, 1e-3f),
-                            step_down / std::max(config_.geometry.max_step_down, 1e-3f)),
-                   0.0f, 1.0f);
+    const float slope_ratio = std::clamp(
+        slope / std::max(config_.geometry.max_support_slope_deg, 1.0f), 0.0f,
+        1.0f);
+    const float step_ratio = std::clamp(
+        std::max(step_up / std::max(config_.geometry.max_step_up, 1e-3f),
+                 step_down / std::max(config_.geometry.max_step_down, 1e-3f)),
+        0.0f, 1.0f);
     const float rough_ratio = std::clamp(
-        roughness / std::max(config_.geometry.max_support_roughness, 1e-3f), 0.0f, 1.0f);
-    const float cost = 10.0f + 90.0f * (0.4f * slope_ratio + 0.35f * step_ratio + 0.25f * rough_ratio);
-    layers.traversal_cost[cell] = static_cast<int8_t>(std::clamp(cost, 1.0f, 99.0f));
+        roughness / std::max(config_.geometry.max_support_roughness, 1e-3f),
+        0.0f, 1.0f);
+    const float cost =
+        10.0f +
+        90.0f * (0.4f * slope_ratio + 0.35f * step_ratio + 0.25f * rough_ratio);
+    layers.traversal_cost[cell] =
+        static_cast<int8_t>(std::clamp(cost, 1.0f, 99.0f));
   }
 }
 

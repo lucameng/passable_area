@@ -252,7 +252,7 @@
 
 实现位置：
 
-- `src/passable_area/src/core/pipeline/processor.cpp`
+- `src/passable_area/src/core/processor.cpp`
 
 主流程非常清晰：
 
@@ -271,7 +271,7 @@ buildOutput(...)
 
 文件：
 
-- `src/passable_area/src/core/preprocess/frame_preprocessor.cpp`
+- `src/passable_area/src/core/frame_preprocessor.cpp`
 
 它做的不是复杂语义理解，而是为后续阶段准备两份“同一帧的不同表达”。
 
@@ -366,7 +366,7 @@ map_.recenter(preprocessed.base_pose_in_odom.position.head<2>())
 
 文件：
 
-- `src/passable_area/src/core/observability/frame_observability_estimator.cpp`
+- `src/passable_area/src/core/frame_observability_estimator.cpp`
 
 这一步只看 `cloud_in_base`，不看地图。
 
@@ -416,7 +416,7 @@ map_.recenter(preprocessed.base_pose_in_odom.position.head<2>())
 
 文件：
 
-- `src/passable_area/src/core/frontend/polar_frontend.cpp`
+- `src/passable_area/src/core/polar_frontend.cpp`
 
 这是整套算法里最核心、也最绕的部分。
 
@@ -680,7 +680,7 @@ vertical_span > max_step_up * 0.75
 
 文件：
 
-- `src/passable_area/src/core/features/terrain_feature_updater.cpp`
+- `src/passable_area/src/core/terrain_feature_updater.cpp`
 
 这一步只做几何特征更新，不做通行性决策。
 
@@ -710,7 +710,7 @@ vertical_span > max_step_up * 0.75
 
 文件：
 
-- `src/passable_area/src/core/traversability/traversability_solver.cpp`
+- `src/passable_area/src/core/traversability_solver.cpp`
 
 这一步负责把地图层转成最终的：
 
@@ -770,7 +770,7 @@ vertical_span > max_step_up * 0.75
 
 文件：
 
-- `src/passable_area/src/core/pipeline/processor.cpp`
+- `src/passable_area/src/core/processor.cpp`
 
 这一步把内部地图层和调试信息打包成 `FrameOutput`。
 
@@ -973,8 +973,8 @@ vertical_span > max_step_up * 0.75
 
 文件：
 
-- `include/passable_area/core/pipeline/processor.hpp`
-- `src/core/pipeline/processor.cpp`
+- `include/passable_area/core/processor.hpp`
+- `src/core/processor.cpp`
 
 作用：
 
@@ -1115,7 +1115,7 @@ vertical_span > max_step_up * 0.75
 1. `src/passable_area/docs/algorithm_scheme.md`
 2. `src/passable_area/src/main/passable_area_node_main.cpp`
 3. `src/passable_area/src/interfaces/ros/nodes/passable_area_node.cpp`
-4. `src/passable_area/src/core/pipeline/processor.cpp`
+4. `src/passable_area/src/core/processor.cpp`
 
 第一轮的目标不是看细节，而是回答这几个问题：
 
@@ -1140,9 +1140,9 @@ vertical_span > max_step_up * 0.75
 
 建议顺序：
 
-1. `src/core/preprocess/frame_preprocessor.cpp`
-2. `src/core/observability/frame_observability_estimator.cpp`
-3. `src/core/frontend/polar_frontend.cpp`
+1. `src/core/frame_preprocessor.cpp`
+2. `src/core/frame_observability_estimator.cpp`
+3. `src/core/polar_frontend.cpp`
 
 其中读 `polar_frontend.cpp` 时，不要一开始就试图把所有 helper 细节全记住。
 
@@ -1158,8 +1158,8 @@ vertical_span > max_step_up * 0.75
 建议顺序：
 
 1. `src/core/mapping/dropout_aware_map_updater.cpp`
-2. `src/core/features/terrain_feature_updater.cpp`
-3. `src/core/traversability/traversability_solver.cpp`
+2. `src/core/terrain_feature_updater.cpp`
+3. `src/core/traversability_solver.cpp`
 
 这一步的目标是回答：
 

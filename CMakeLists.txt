@@ -43,14 +43,14 @@ include_directories(
 )
 
 set(core_sources
-  src/core/preprocess/frame_preprocessor.cpp
-  src/core/observability/frame_observability_estimator.cpp
-  src/core/frontend/polar_frontend.cpp
+  src/core/frame_preprocessor.cpp
+  src/core/frame_observability_estimator.cpp
+  src/core/polar_frontend.cpp
   src/core/mapping/local_terrain_map.cpp
   src/core/mapping/dropout_aware_map_updater.cpp
-  src/core/features/terrain_feature_updater.cpp
-  src/core/traversability/traversability_solver.cpp
-  src/core/pipeline/processor.cpp
+  src/core/terrain_feature_updater.cpp
+  src/core/traversability_solver.cpp
+  src/core/processor.cpp
 )
 
 add_library(passable_area_core STATIC ${core_sources})

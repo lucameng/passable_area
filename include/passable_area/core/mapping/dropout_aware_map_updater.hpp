@@ -1,7 +1,7 @@
 #ifndef PASSABLE_AREA_CORE_MAPPING_DROPOUT_AWARE_MAP_UPDATER_HPP_
 #define PASSABLE_AREA_CORE_MAPPING_DROPOUT_AWARE_MAP_UPDATER_HPP_
 
-#include "passable_area/core/frontend/candidate_types.hpp"
+#include "passable_area/core/candidate_types.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/types/config_types.hpp"
 #include "passable_area/core/types/frame_types.hpp"

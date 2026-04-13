@@ -42,11 +42,14 @@ FrameOutput MakeOutput(float yaw_rad = 0.0f) {
   return output;
 }
 
-int IndexForCellCenter(const nav_msgs::msg::OccupancyGrid &grid, float x, float y) {
-  const int col =
-      static_cast<int>(std::floor((x - static_cast<float>(grid.info.origin.position.x)) / grid.info.resolution));
-  const int row =
-      static_cast<int>(std::floor((y - static_cast<float>(grid.info.origin.position.y)) / grid.info.resolution));
+int IndexForCellCenter(const nav_msgs::msg::OccupancyGrid &grid, float x,
+                       float y) {
+  const int col = static_cast<int>(
+      std::floor((x - static_cast<float>(grid.info.origin.position.x)) /
+                 grid.info.resolution));
+  const int row = static_cast<int>(
+      std::floor((y - static_cast<float>(grid.info.origin.position.y)) /
+                 grid.info.resolution));
   return row * static_cast<int>(grid.info.width) + col;
 }
 
@@ -90,8 +93,10 @@ TEST(OutputConverterTest, GridOutputsShareRobotCentricGeometry) {
   EXPECT_FLOAT_EQ(static_cast<float>(terrain_state.info.resolution), 1.0f);
   EXPECT_EQ(terrain_state.info.width, 3U);
   EXPECT_EQ(terrain_state.info.height, 3U);
-  EXPECT_FLOAT_EQ(static_cast<float>(terrain_state.info.origin.position.x), -1.5f);
-  EXPECT_FLOAT_EQ(static_cast<float>(terrain_state.info.origin.position.y), -1.5f);
+  EXPECT_FLOAT_EQ(static_cast<float>(terrain_state.info.origin.position.x),
+                  -1.5f);
+  EXPECT_FLOAT_EQ(static_cast<float>(terrain_state.info.origin.position.y),
+                  -1.5f);
   EXPECT_EQ(terrain_state.info.width, terrain_cost.info.width);
   EXPECT_EQ(terrain_state.info.height, terrain_cost.info.height);
   EXPECT_FLOAT_EQ(static_cast<float>(terrain_state.info.origin.position.x),
@@ -112,7 +117,8 @@ TEST(OutputConverterTest, GridOutputsRespectNonZeroYawResampling) {
   auto output = MakeOutput(static_cast<float>(M_PI_2));
 
   const int source_index = 2 * output.cols + 1; // odom center (0, 1)
-  output.passability[source_index] = static_cast<int8_t>(PassabilityState::kImpassable);
+  output.passability[source_index] =
+      static_cast<int8_t>(PassabilityState::kImpassable);
   output.traversal_cost[source_index] = 42;
 
   std_msgs::msg::Header header;
@@ -124,7 +130,8 @@ TEST(OutputConverterTest, GridOutputsRespectNonZeroYawResampling) {
   const int target_index = IndexForCellCenter(terrain_state, 1.0f, 0.0f);
   ASSERT_GE(target_index, 0);
   ASSERT_LT(target_index, static_cast<int>(terrain_state.data.size()));
-  EXPECT_EQ(terrain_state.data[target_index], static_cast<int8_t>(PassabilityState::kImpassable));
+  EXPECT_EQ(terrain_state.data[target_index],
+            static_cast<int8_t>(PassabilityState::kImpassable));
   EXPECT_EQ(terrain_cost.data[target_index], 42);
 }
 
@@ -132,7 +139,8 @@ TEST(OutputConverterTest, GridMapAndOccupancyOutputsStayAligned) {
   OutputConverter converter;
   auto output = MakeOutput();
   const int center_index = 1 * output.cols + 1;
-  output.passability[center_index] = static_cast<int8_t>(PassabilityState::kPassable);
+  output.passability[center_index] =
+      static_cast<int8_t>(PassabilityState::kPassable);
   output.traversal_cost[center_index] = 7;
 
   std_msgs::msg::Header header;
@@ -145,18 +153,22 @@ TEST(OutputConverterTest, GridMapAndOccupancyOutputsStayAligned) {
 
   const int occupancy_index = IndexForCellCenter(terrain_state, 0.0f, 0.0f);
   ASSERT_GE(occupancy_index, 0);
-  EXPECT_EQ(terrain_state.data[occupancy_index], static_cast<int8_t>(PassabilityState::kPassable));
+  EXPECT_EQ(terrain_state.data[occupancy_index],
+            static_cast<int8_t>(PassabilityState::kPassable));
   EXPECT_EQ(terrain_cost.data[occupancy_index], 7);
-  EXPECT_FLOAT_EQ(grid_map.atPosition("passability", grid_map::Position(0.0, 0.0)),
-                  static_cast<float>(static_cast<int8_t>(PassabilityState::kPassable)));
+  EXPECT_FLOAT_EQ(
+      grid_map.atPosition("passability", grid_map::Position(0.0, 0.0)),
+      static_cast<float>(static_cast<int8_t>(PassabilityState::kPassable)));
 }
 
-TEST(OutputConverterTest, GridMapUsesSameRobotCentricDirectionAsOccupancyOutputs) {
+TEST(OutputConverterTest,
+     GridMapUsesSameRobotCentricDirectionAsOccupancyOutputs) {
   OutputConverter converter;
   auto output = MakeOutput();
 
   const int forward_index = 2 * output.cols + 1; // odom/base_gravity (0, 1)
-  output.passability[forward_index] = static_cast<int8_t>(PassabilityState::kImpassable);
+  output.passability[forward_index] =
+      static_cast<int8_t>(PassabilityState::kImpassable);
   output.support_height[forward_index] = 3.0f;
 
   std_msgs::msg::Header header;
@@ -166,12 +178,16 @@ TEST(OutputConverterTest, GridMapUsesSameRobotCentricDirectionAsOccupancyOutputs
   const auto grid_map_msg = converter.toGridMap(output, header);
   const auto grid_map = ToGridMap(grid_map_msg);
 
-  const int forward_target_index = IndexForCellCenter(terrain_state, 0.0f, 1.0f);
+  const int forward_target_index =
+      IndexForCellCenter(terrain_state, 0.0f, 1.0f);
   ASSERT_GE(forward_target_index, 0);
   ASSERT_LT(forward_target_index, static_cast<int>(terrain_state.data.size()));
   EXPECT_EQ(terrain_state.data[forward_target_index],
             static_cast<int8_t>(PassabilityState::kImpassable));
-  EXPECT_FLOAT_EQ(grid_map.atPosition("passability", grid_map::Position(0.0, 1.0)),
-                  static_cast<float>(static_cast<int8_t>(PassabilityState::kImpassable)));
-  EXPECT_FLOAT_EQ(grid_map.atPosition("support_height", grid_map::Position(0.0, 1.0)), 3.0f);
+  EXPECT_FLOAT_EQ(
+      grid_map.atPosition("passability", grid_map::Position(0.0, 1.0)),
+      static_cast<float>(static_cast<int8_t>(PassabilityState::kImpassable)));
+  EXPECT_FLOAT_EQ(
+      grid_map.atPosition("support_height", grid_map::Position(0.0, 1.0)),
+      3.0f);
 }

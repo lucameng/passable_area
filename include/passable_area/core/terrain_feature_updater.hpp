@@ -1,5 +1,5 @@
-#ifndef PASSABLE_AREA_CORE_FEATURES_TERRAIN_FEATURE_UPDATER_HPP_
-#define PASSABLE_AREA_CORE_FEATURES_TERRAIN_FEATURE_UPDATER_HPP_
+#ifndef PASSABLE_AREA_CORE_TERRAIN_FEATURE_UPDATER_HPP_
+#define PASSABLE_AREA_CORE_TERRAIN_FEATURE_UPDATER_HPP_
 
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/types/config_types.hpp"
