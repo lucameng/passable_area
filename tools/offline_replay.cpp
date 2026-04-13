@@ -544,7 +544,11 @@ void PrintFalseObstacleFrame(const passable_area::tools::FalseObstacleFrameAnaly
     std::cout << "    support_anchor_used: " << FormatFloat(hotspot.support_anchor_used)
               << "  sub_support_leak_count: "
               << std::to_string(hotspot.sub_support_leak_count) << '\n';
-    std::cout << "    upper_support_cell: " << (hotspot.upper_support_cell ? "true" : "false")
+    std::cout << "    raw_upper_support_cell: "
+              << (hotspot.raw_upper_support_cell ? "true" : "false")
+              << "  adjusted_upper_support_cell: "
+              << (hotspot.adjusted_upper_support_cell ? "true" : "false")
+              << "  upper_support_cell: " << (hotspot.upper_support_cell ? "true" : "false")
               << "  obstacle_candidate_cell: "
               << (hotspot.obstacle_candidate_cell ? "true" : "false")
               << "  neighbor_upper_support_count: "
@@ -681,7 +685,11 @@ void PrintMissObstacleFrame(const passable_area::tools::MissObstacleFrameAnalysi
     std::cout << "    max_sample_z_minus_support_ref: "
               << FormatFloat(cell.max_sample_z_minus_support_ref)
               << "  sub_support_leak_count: " << std::to_string(cell.sub_support_leak_count) << '\n';
-    std::cout << "    upper_support_cell: " << (cell.upper_support_cell ? "true" : "false")
+    std::cout << "    raw_upper_support_cell: "
+              << (cell.raw_upper_support_cell ? "true" : "false")
+              << "  adjusted_upper_support_cell: "
+              << (cell.adjusted_upper_support_cell ? "true" : "false")
+              << "  upper_support_cell: " << (cell.upper_support_cell ? "true" : "false")
               << "  obstacle_suspicious: " << (cell.obstacle_suspicious ? "true" : "false")
               << "  obstacle_candidate_cell: " << (cell.obstacle_candidate_cell ? "true" : "false")
               << '\n';
@@ -1373,6 +1381,9 @@ void PrintRoiFrameInspection(const FrameOutput &output, const passable_area::cor
                 << " obstacle_evidence=" << output.obstacle_evidence[idx]
                 << " support_anchor=" << output.support_anchor_used[idx]
                 << " leak_count=" << output.sub_support_leak_count[idx]
+                << " raw_upper=" << static_cast<int>(output.raw_upper_support_cell[idx])
+                << " adjusted_upper="
+                << static_cast<int>(output.explanation_adjusted_upper_support_cell[idx])
                 << " upper=" << static_cast<int>(output.upper_support_cell[idx])
                 << " suspicious=" << static_cast<int>(output.obstacle_suspicious[idx])
                 << " rejected=" << static_cast<int>(output.obstacle_rejected_by_neighbor_support[idx])

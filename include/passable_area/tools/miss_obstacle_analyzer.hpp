@@ -48,6 +48,8 @@ struct MissObstacleRepresentativeCell {
   float support_anchor_used = 0.0f;
   float max_sample_z_minus_support_ref = 0.0f;
   uint16_t sub_support_leak_count = 0U;
+  bool raw_upper_support_cell = false;
+  bool adjusted_upper_support_cell = false;
   bool upper_support_cell = false;
   bool obstacle_suspicious = false;
   bool obstacle_candidate_cell = false;

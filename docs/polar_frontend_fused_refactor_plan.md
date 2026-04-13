@@ -541,6 +541,8 @@ CellWorkspace
 1. 取消“外部 gate 直接读取 elevated effective support ref”的模式
 2. 统一为 explanation classifier 内部推导
 3. 清理对外暴露的多套 support 基线依赖
+4. 保留 legacy `upper_support_cell = explanation_adjusted_upper_support_cell` 作为兼容语义，
+   raw vs adjusted 通过显式调试字段区分
 
 验收标准：
 

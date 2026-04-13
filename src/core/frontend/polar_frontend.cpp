@@ -34,7 +34,6 @@ struct CellWorkspace {
   float raw_min_z = std::numeric_limits<float>::infinity();
   float support_anchor_candidate = std::numeric_limits<float>::quiet_NaN();
   float support_ref = std::numeric_limits<float>::quiet_NaN();
-  float effective_support_ref = std::numeric_limits<float>::quiet_NaN();
   float min_upper_band_z = std::numeric_limits<float>::infinity();
   CellStats stats;
   int anchor_reobserve_count = 0;
@@ -654,7 +653,6 @@ std::vector<int> BuildLocalProfilesAndSeedCandidates(
     workspace.support_ref = has_local_history_anchor && has_support_anchor
                                 ? layers.support_height[static_cast<size_t>(cell)]
                                 : workspace.stats.min_z;
-    workspace.effective_support_ref = workspace.support_ref;
     workspace.stale_lower_anchor_mix =
         has_support_anchor &&
         workspace.upper_band_count >= std::max(2, workspace.anchor_reobserve_count) &&
@@ -806,7 +804,6 @@ void BuildExplanationInputs(const ProcessedFrame &frame,
       continue;
     }
 
-    workspace.effective_support_ref = effective_support_candidate_z;
     bool has_elevated_upper_support = false;
     for (const size_t sample_index : sample_indices_by_cell[static_cast<size_t>(cell)]) {
       const auto &sample = frame.odom_samples[sample_index];
@@ -825,6 +822,9 @@ void BuildExplanationInputs(const ProcessedFrame &frame,
 }
 
 void FinalizeUpperSupportCells(FrontendOutput &output) {
+  // `upper_support_cell` remains a compatibility alias for the explanation-adjusted
+  // confirmation mask. Raw local upper-band facts stay available via
+  // `raw_upper_support_cell`.
   output.upper_support_cell = output.explanation_adjusted_upper_support_cell;
 }
 

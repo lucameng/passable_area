@@ -50,6 +50,8 @@ FrameOutput MakeOutput() {
   output.support_confidence.assign(9, 0.0f);
   output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.sub_support_leak_count.assign(9, 0U);
+  output.raw_upper_support_cell.assign(9, 0U);
+  output.explanation_adjusted_upper_support_cell.assign(9, 0U);
   output.upper_support_cell.assign(9, 0U);
   output.obstacle_suspicious.assign(9, 0U);
   output.obstacle_candidate_cell.assign(9, 0U);
@@ -116,6 +118,25 @@ TEST(MissObstacleAnalyzerTest, ReturnsRejectedByNeighborSupportWhenSuspiciousCel
   ASSERT_TRUE(analysis.has_value());
   EXPECT_EQ(analysis->classification, MissObstacleRootCause::kRejectedByNeighborSupport);
   EXPECT_EQ(analysis->rejected_suspicious_cell_count, 1);
+}
+
+TEST(MissObstacleAnalyzerTest, PreservesRawAdjustedAndLegacyUpperSupportVisibility) {
+  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
+  auto output = MakeOutput();
+  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
+  const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_rejected_by_neighbor_support[cell] = 1U;
+  output.raw_upper_support_cell[cell] = 1U;
+  output.explanation_adjusted_upper_support_cell[cell] = 0U;
+  output.upper_support_cell[cell] = 0U;
+
+  const auto analysis = analyzer.analyzeFrame(output, frame);
+  ASSERT_TRUE(analysis.has_value());
+  ASSERT_FALSE(analysis->representative_cells.empty());
+  EXPECT_TRUE(analysis->representative_cells.front().raw_upper_support_cell);
+  EXPECT_FALSE(analysis->representative_cells.front().adjusted_upper_support_cell);
+  EXPECT_FALSE(analysis->representative_cells.front().upper_support_cell);
 }
 
 TEST(MissObstacleAnalyzerTest, ReturnsObstacleEvidenceTooLowWhenCandidateDoesNotAccumulateEnoughEvidence) {

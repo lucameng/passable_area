@@ -43,6 +43,9 @@ FrameOutput MakeOutput() {
   output.overhead_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.sub_support_leak_count.assign(9, 0U);
+  output.raw_upper_support_cell.assign(9, 0U);
+  output.explanation_adjusted_upper_support_cell.assign(9, 0U);
+  output.upper_support_cell.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -134,7 +137,6 @@ TEST(FalseObstacleAnalyzerTest, UsesSupportingPointSourceCellForDiscreteFrontend
       {0.45f, 0.45f, 0.1f}, 0));
   output.obstacle_points.push_back(passable_area::core::MakeCellDebugPoint(
       {0.35f, 0.35f, 0.2f}, 0));
-  output.upper_support_cell.assign(9, 0U);
   output.obstacle_suspicious.assign(9, 0U);
   output.obstacle_candidate_cell.assign(9, 0U);
   output.obstacle_rejected_by_neighbor_support.assign(9, 0U);
@@ -142,6 +144,8 @@ TEST(FalseObstacleAnalyzerTest, UsesSupportingPointSourceCellForDiscreteFrontend
   output.obstacle_evidence[0] = 0.7f;
   output.overhead_height[0] = 0.9f;
   output.support_anchor_used[0] = 0.25f;
+  output.raw_upper_support_cell[0] = 1U;
+  output.explanation_adjusted_upper_support_cell[0] = 0U;
   output.upper_support_cell[0] = 1U;
   output.obstacle_suspicious[0] = 1U;
   output.obstacle_candidate_cell[0] = 1U;
@@ -161,6 +165,8 @@ TEST(FalseObstacleAnalyzerTest, UsesSupportingPointSourceCellForDiscreteFrontend
   EXPECT_EQ(analysis->hotspots.front().source_cell, 0);
   EXPECT_EQ(analysis->hotspots.front().center_cell, center_cell);
   EXPECT_FALSE(analysis->hotspots.front().source_matches_center);
+  EXPECT_TRUE(analysis->hotspots.front().raw_upper_support_cell);
+  EXPECT_FALSE(analysis->hotspots.front().adjusted_upper_support_cell);
   EXPECT_TRUE(analysis->hotspots.front().upper_support_cell);
   EXPECT_TRUE(analysis->hotspots.front().obstacle_suspicious);
   EXPECT_TRUE(analysis->hotspots.front().obstacle_candidate_cell);
@@ -195,6 +201,8 @@ TEST(FalseObstacleAnalyzerTest, InvalidSourceCellDoesNotMarkDiscreteLookupAsGrid
   }
 
   output.obstacle_points.push_back(passable_area::core::MakeCellDebugPoint({0.45f, 0.45f, 0.1f}, 7));
+  output.raw_upper_support_cell.assign(1, 1U);
+  output.explanation_adjusted_upper_support_cell.assign(1, 1U);
   output.upper_support_cell.assign(1, 1U);
   output.obstacle_suspicious.assign(1, 1U);
   output.obstacle_rejected_by_neighbor_support.assign(1, 1U);
@@ -204,5 +212,7 @@ TEST(FalseObstacleAnalyzerTest, InvalidSourceCellDoesNotMarkDiscreteLookupAsGrid
   ASSERT_TRUE(analysis.has_value());
   ASSERT_FALSE(analysis->hotspots.empty());
   EXPECT_FALSE(analysis->hotspots.front().has_grid_values);
+  EXPECT_FALSE(analysis->hotspots.front().raw_upper_support_cell);
+  EXPECT_FALSE(analysis->hotspots.front().adjusted_upper_support_cell);
   EXPECT_EQ(analysis->hotspots.front().classification, FalseObstacleRootCause::kUnknownOrMixed);
 }

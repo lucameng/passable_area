@@ -234,6 +234,14 @@ FalseObstacleAnalyzer::LocalCellContext FalseObstacleAnalyzer::lookupLocalContex
   const bool source_cell_valid = source_cell >= 0 && source_cell < total_cells;
   context.source_cell = source_cell_valid ? source_cell : -1;
   if (source_cell_valid) {
+    if (output.raw_upper_support_cell.size() > static_cast<size_t>(source_cell)) {
+      context.raw_upper_support_cell =
+          output.raw_upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
+    }
+    if (output.explanation_adjusted_upper_support_cell.size() > static_cast<size_t>(source_cell)) {
+      context.adjusted_upper_support_cell =
+          output.explanation_adjusted_upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
+    }
     if (output.upper_support_cell.size() > static_cast<size_t>(source_cell)) {
       context.upper_support_cell = output.upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
     }
@@ -312,6 +320,8 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.source_overhead_height = context.source_overhead_height;
   hotspot.source_support_anchor_used = context.source_support_anchor_used;
   hotspot.sub_support_leak_count = context.sub_support_leak_count;
+  hotspot.raw_upper_support_cell = context.raw_upper_support_cell;
+  hotspot.adjusted_upper_support_cell = context.adjusted_upper_support_cell;
   hotspot.upper_support_cell = context.upper_support_cell;
   hotspot.obstacle_suspicious = context.obstacle_suspicious;
   hotspot.obstacle_candidate_cell = context.obstacle_candidate_cell;

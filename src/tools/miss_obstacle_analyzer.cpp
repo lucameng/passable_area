@@ -210,6 +210,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.support_confidence = output.support_confidence[idx];
       cell.support_anchor_used = output.support_anchor_used[idx];
       cell.sub_support_leak_count = output.sub_support_leak_count[idx];
+      cell.raw_upper_support_cell = output.raw_upper_support_cell[idx] != 0U;
+      cell.adjusted_upper_support_cell =
+          output.explanation_adjusted_upper_support_cell[idx] != 0U;
       cell.upper_support_cell = output.upper_support_cell[idx] != 0U;
       cell.obstacle_suspicious = output.obstacle_suspicious[idx] != 0U;
       cell.obstacle_candidate_cell = output.obstacle_candidate_cell[idx] != 0U;

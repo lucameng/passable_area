@@ -374,12 +374,13 @@ TF：
 - `support_continuity`
 - `support_anchor_used`
 - `sub_support_leak_count`
+- `raw_upper_support_cell`
+- `explanation_adjusted_upper_support_cell`
 - `upper_support_cell`
 - `obstacle_suspicious`
 - `obstacle_candidate_cell`
 - `obstacle_rejected_by_neighbor_support`
 - `neighbor_upper_support_count`
-- `effective_support_ref_elevated`
 - `support_state`
 - `base_gravity_cloud_points`
 - `support_points`
@@ -542,7 +543,17 @@ relative_z = point_in_odom.z - base_pose_in_odom.position.z()
 其中：
 
 - `support_height` 是地图长期层
-- `effective_support_ref` 只是前端局部解释量，不写回地图 `support_height`
+- `effective_support_ref` 只是 explanation 内部的局部推导量，不写回地图 `support_height`
+- 当前调试输出里不再单独暴露 `effective_support_ref`
+
+和 `upper_support` 相关的三个输出层含义是：
+
+- `raw_upper_support_cell`
+  - 当前 cell 相对 `support_ref` 的原始 upper-band 事实
+- `explanation_adjusted_upper_support_cell`
+  - 经过 explanation 调整后、供邻域确认使用的 upper-support 语义
+- `upper_support_cell`
+  - 兼容层，当前固定等价于 `explanation_adjusted_upper_support_cell`
 
 #### 8.3.3 锚点的来源与拒绝逻辑
 
@@ -577,7 +588,7 @@ relative_z = point_in_odom.z - base_pose_in_odom.position.z()
 当前实现逻辑是：
 
 - 先保留 `vertical_span` 的 suspicious trigger
-- 再要求 3x3 邻域里有足够多的 `upper_support_cell`
+- 再要求 3x3 邻域里有足够多的 explanation-adjusted `upper_support_cell`
 - 同时要排除被当前前端解释成“楼梯/上下层混合/前缘重解释”的情况
 
 只有这样才会形成：
@@ -599,6 +610,7 @@ relative_z = point_in_odom.z - base_pose_in_odom.position.z()
 - 只影响 `upper_support` / obstacle explanation
 - 不写回地图的 `support_height`
 - 不是新的长期支撑估计
+- 不再作为跨 phase 的通用 `CellWorkspace` 状态存在
 
 它主要用于避免下面这类典型误判：
 
