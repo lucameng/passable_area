@@ -120,6 +120,7 @@
 - Expose neighbor-gate evidence in offline analysis
 - Clarify facade evidence naming and demote legacy reject display
 - Add shlibs.local override for log4cplus packaging dependency
+
 ## [0.0.7] - 2026-03-16
 
 ### 🚀 Features
