@@ -31,6 +31,7 @@ enum class AnchorValidityDecision : uint8_t {
 struct CellWorkspace {
   CellStats raw_stats;
   CellStats filtered_stats;
+  CellStats trigger_stats;
   float support_anchor_candidate = std::numeric_limits<float>::quiet_NaN();
   float support_ref = std::numeric_limits<float>::quiet_NaN();
   float min_upper_band_z = std::numeric_limits<float>::infinity();
@@ -164,6 +165,18 @@ float ResolveNeighborSupportAnchor(int cell, const LocalTerrainMap &map,
   return *middle;
 }
 
+SupportAnchorOrigin ResolveSupportAnchorOrigin(int cell,
+                                               const LocalTerrainMap &map,
+                                               const TerrainLayers &layers,
+                                               const Config &config) {
+  if (IsValidSupportAnchorCell(layers, cell, config)) {
+    return SupportAnchorOrigin::kLocalSupport;
+  }
+  return std::isfinite(ResolveNeighborSupportAnchor(cell, map, layers, config))
+             ? SupportAnchorOrigin::kBorrowedNeighbor
+             : SupportAnchorOrigin::kNone;
+}
+
 ResolvedSupportAnchor ResolveSupportAnchorCandidate(int cell,
                                                     const LocalTerrainMap &map,
                                                     const TerrainLayers &layers,
@@ -175,10 +188,7 @@ ResolvedSupportAnchor ResolveSupportAnchorCandidate(int cell,
 
   if (IsValidSupportAnchorCell(layers, cell, config)) {
     const float local_anchor = layers.support_height[static_cast<size_t>(cell)];
-    if (local_anchor >=
-        raw_min_z - config.geometry.sub_support_leak_tolerance) {
-      return {local_anchor, SupportAnchorOrigin::kLocalSupport};
-    }
+    return {local_anchor, SupportAnchorOrigin::kLocalSupport};
   }
 
   const float neighbor_anchor =
@@ -325,7 +335,7 @@ float ResolveNeighborUpperLayerConsensusHeight(
       if (!std::isfinite(neighbor_support_anchor) ||
           !std::isfinite(neighbor_min_upper_band_z) ||
           neighbor_workspace.upper_band_count == 0 ||
-          neighbor_workspace.sub_support_leak_count != 0U) {
+          neighbor_workspace.anchor_below_observation_count != 0U) {
         continue;
       }
       const float neighbor_upper_gap =
@@ -379,7 +389,7 @@ int CountNeighborUpperLayersAlignedToHeight(
       if (!std::isfinite(neighbor_support_anchor) ||
           !std::isfinite(neighbor_min_upper_band_z) ||
           neighbor_workspace.upper_band_count == 0 ||
-          neighbor_workspace.sub_support_leak_count != 0U) {
+          neighbor_workspace.anchor_below_observation_count != 0U) {
         continue;
       }
       const float neighbor_upper_gap =
@@ -449,11 +459,11 @@ FrontendExplanationDecision ClassifyExplanationRejectDecision(
     int support_count, int ascending_stair_support_count,
     int aligned_neighbor_support_count, int min_neighbor_upper_support_cells,
     float max_step_down, float upper_height_threshold, float max_step_up,
-    uint16_t sub_support_leak_count, bool stale_lower_anchor_mix) {
+    uint16_t anchor_below_observation_count, bool stale_lower_anchor_mix) {
   if (std::isfinite(relative_support_ref) &&
       relative_support_ref <= -max_step_down &&
       relative_upper_z <= -upper_height_threshold && support_count >= 3 &&
-      (sub_support_leak_count > 0U || stale_lower_anchor_mix)) {
+      (anchor_below_observation_count > 0U || stale_lower_anchor_mix)) {
     return FrontendExplanationDecision::kBelowRobotStairMix;
   }
 
@@ -466,7 +476,7 @@ FrontendExplanationDecision ClassifyExplanationRejectDecision(
       relative_support_ref <= -max_step_down &&
       relative_upper_z <= -upper_height_threshold &&
       vertical_span <= max_step_down && !has_reinforcing_support_structure &&
-      sub_support_leak_count == 0U && !stale_lower_anchor_mix) {
+      anchor_below_observation_count == 0U && !stale_lower_anchor_mix) {
     return FrontendExplanationDecision::kBelowRobotGroundLayerMix;
   }
 
@@ -486,7 +496,8 @@ FrontendExplanationDecision ClassifyExplanationRejectDecision(
       vertical_span <= max_ground_mix_span &&
       ascending_stair_support_count >=
           std::max(1, min_neighbor_upper_support_cells) &&
-      aligned_neighbor_support_count == 0 && sub_support_leak_count == 0U) {
+      aligned_neighbor_support_count == 0 &&
+      anchor_below_observation_count == 0U) {
     return FrontendExplanationDecision::kBelowRobotUpstairGroundMix;
   }
 
@@ -574,7 +585,7 @@ bool ShouldUseElevatedEffectiveSupportRef(
     int upper_layer_neighbor_match_count, int ascending_stair_support_count,
     int min_neighbor_upper_support_cells,
     float support_anchor_reobserve_tolerance, float max_step_up,
-    uint16_t sub_support_leak_count, bool stale_lower_anchor_mix) {
+    uint16_t anchor_below_observation_count, bool stale_lower_anchor_mix) {
   const float min_below_robot_support_depth = -0.1f;
   const bool below_robot_layered_structure =
       has_support_anchor && std::isfinite(relative_support_anchor) &&
@@ -594,7 +605,7 @@ bool ShouldUseElevatedEffectiveSupportRef(
          upper_band_count > 0 && anchor_reobserve_count >= 2 &&
          candidate_reobserve_count >= 2 &&
          upper_layer_neighbor_match_count >= 2 && non_stair_trend &&
-         sub_support_leak_count == 0U && !stale_lower_anchor_mix;
+         anchor_below_observation_count == 0U && !stale_lower_anchor_mix;
 }
 
 // 解决后续每个 phase 都重复扫全帧点云找 cell 样本的 case。
@@ -652,6 +663,8 @@ void ResolveAnchors(
     const bool has_local_history_anchor =
         IsValidSupportAnchorCell(layers, cell, config);
     workspace.local_history_anchor_valid = has_local_history_anchor ? 1U : 0U;
+    workspace.support_anchor_origin =
+        ResolveSupportAnchorOrigin(cell, map, layers, config);
 
     const ResolvedSupportAnchor resolved_anchor = ResolveSupportAnchorCandidate(
         cell, map, layers, config, workspace.raw_stats.min_z);
@@ -662,7 +675,6 @@ void ResolveAnchors(
     }
 
     workspace.support_anchor_candidate = resolved_anchor.z;
-    workspace.support_anchor_origin = resolved_anchor.origin;
     workspace.anchor_validity = AnchorValidityDecision::kValid;
     for (const size_t sample_index : sample_indices) {
       const auto &sample = frame.odom_samples[sample_index];
@@ -748,16 +760,18 @@ ClassifyAnchorValidity(const CellWorkspace &workspace,
   return AnchorValidityDecision::kValid;
 }
 
+// 判定这个 anchor 是否有 trigger 前的 hard leak suppression 权限。
+// borrowed / weak anchor 只能作为 explanation 参考，不能提前删 lower samples；
+// 只有足够可靠的 local/history anchor 才能做 hard suppression。
+// 这样既防 borrowed anchor 越权压掉 lower structure，
+// 也保留 strong local anchor 应有的 suppression 能力。
 SupportAnchorAuthority ClassifyAnchorAuthority(const CellWorkspace &workspace) {
-  if (workspace.anchor_validity != AnchorValidityDecision::kValid) {
+  if (!std::isfinite(workspace.support_anchor_candidate) ||
+      workspace.anchor_validity != AnchorValidityDecision::kValid) {
     return SupportAnchorAuthority::kInvalid;
   }
-  if (workspace.support_anchor_origin != SupportAnchorOrigin::kLocalSupport) {
-    return SupportAnchorAuthority::kExplanationOnly;
-  }
-  // First-pass conservative admission rule: only locally reobserved anchors
-  // get pre-trigger destructive leak suppression authority.
-  if (workspace.anchor_reobserve_count >= 2) {
+  if (workspace.support_anchor_origin == SupportAnchorOrigin::kLocalSupport &&
+      workspace.local_history_anchor_valid != 0U) {
     return SupportAnchorAuthority::kLeakEligible;
   }
   return SupportAnchorAuthority::kExplanationOnly;
@@ -809,6 +823,10 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
     workspace.anchor_leak_suppression_enabled =
         workspace.support_anchor_authority ==
         SupportAnchorAuthority::kLeakEligible;
+    if (has_support_anchor && !workspace.anchor_leak_suppression_enabled) {
+      workspace.support_anchor_authority =
+          SupportAnchorAuthority::kExplanationOnly;
+    }
 
     if (has_support_anchor) {
       output.support_anchor_used[static_cast<size_t>(cell)] = support_anchor;
@@ -848,6 +866,7 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
       }
       AccumulateCellStats(workspace.filtered_stats, sample.point_in_odom.z);
     }
+    workspace.trigger_stats = workspace.filtered_stats;
     output.sub_support_leak_count[static_cast<size_t>(cell)] =
         workspace.sub_support_leak_count;
     output.anchor_below_observation_count[static_cast<size_t>(cell)] =
@@ -866,7 +885,7 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
         static_cast<uint16_t>(
             std::clamp(workspace.filtered_stats.count, 0,
                        static_cast<int>(std::numeric_limits<uint16_t>::max())));
-    if (workspace.filtered_stats.count == 0) {
+    if (workspace.trigger_stats.count == 0) {
       continue;
     }
     workspace.has_stats = true;
@@ -882,7 +901,7 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
                        sector_size)),
                    0, static_cast<int>(observability.sectors.size()) - 1);
     const auto sector_state = observability.sectors[sector].state;
-    const CellStats &trigger_stats = workspace.filtered_stats;
+    const CellStats &trigger_stats = workspace.trigger_stats;
     const float vertical_span = trigger_stats.max_z - trigger_stats.min_z;
     const float coverage = observability.sectors[sector].coverage_confidence;
 
@@ -1045,7 +1064,8 @@ void BuildExplanationInputs(
             workspace.ascending_stair_support_count,
             std::max(1, config.geometry.min_neighbor_upper_support_cells),
             config.geometry.support_anchor_reobserve_tolerance,
-            config.geometry.max_step_up, workspace.sub_support_leak_count,
+            config.geometry.max_step_up,
+            workspace.anchor_below_observation_count,
             workspace.stale_lower_anchor_mix);
     if (!use_elevated_effective_support_ref) {
       continue;
@@ -1161,7 +1181,8 @@ void EvaluateCandidates(
             aligned_neighbor_support_count, min_neighbor_upper_support_cells,
             config.geometry.max_step_down,
             config.geometry.upper_min_height_above_support,
-            config.geometry.max_step_up, workspace.sub_support_leak_count,
+            config.geometry.max_step_up,
+            workspace.anchor_below_observation_count,
             workspace.stale_lower_anchor_mix);
     if (reject_decision != FrontendExplanationDecision::kNone) {
       output.explanation_decision[static_cast<size_t>(cell)] =
