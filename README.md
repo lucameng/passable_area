@@ -16,8 +16,9 @@
   - `/terrain_debug/grid_map` (`grid_map_msgs/msg/GridMap`)
   - `/terrain_debug/base_gravity_cloud`
   - `/terrain_debug/support_points`
-  - `/terrain_debug/unknown_mask`
-  - `/terrain_debug/observability` (`passable_area/msg/TerrainObservability`)
+- `/terrain_debug/unknown_mask`
+- `/terrain_debug/observability` (`passable_area/msg/TerrainObservability`)
+- `/passable_area/status_code` (`std_msgs/msg/Int32`)
 
 `terrain_state` uses:
 - `0` = passable
@@ -109,6 +110,17 @@ Config is split across:
 - `config/debug.yaml`
 
 `config/passable_area.yaml` holds algorithm and preprocessing parameters. `config/debug.yaml` holds debug publishers and debug output topics.
+
+Runtime status reporting:
+- `output.status_code_topic`: status code topic name, default `/passable_area/status_code`
+- published as `std_msgs/msg/Int32` at 10 Hz
+- current codes:
+  - `100` = `OK_RUNNING`
+  - `1000` = `ERR_CLOUD_TIMEOUT`
+  - `1001` = `ERR_ODOM_TIMEOUT`
+  - `1002` = `ERR_SYNC_STALL`
+  - `1004` = `ERR_OUTPUT_STALL`
+  - `1902` = `FATAL_RUNTIME_EXCEPTION`
 
 Runtime logging:
 - `passable_area` now supports `dr_logger` with ROS fallback

@@ -128,6 +128,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "output.unknown_mask_topic", topics.unknown_mask_topic);
   topics.observability_topic = node.declare_parameter(
       "output.observability_topic", topics.observability_topic);
+  topics.status_code_topic = node.declare_parameter(
+      "output.status_code_topic", topics.status_code_topic);
   return params;
 }
 

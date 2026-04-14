@@ -90,6 +90,7 @@ set(interface_sources
   src/interfaces/common/logging/node_logger.cpp
   src/interfaces/ros/runtime/result_publishers.cpp
   src/interfaces/ros/runtime/debug_publishers.cpp
+  src/interfaces/ros/runtime/status_code_manager.cpp
   src/interfaces/ros/runtime/watchdog_manager.cpp
   src/interfaces/ros/runtime/perf_stats.cpp
   src/interfaces/ros/passable_area_node.cpp
@@ -262,6 +263,30 @@ if(BUILD_TESTING)
       target_link_libraries(test_debug_publishers ${cpp_typesupport_target})
     else()
       rosidl_target_interfaces(test_debug_publishers
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
+  endif()
+
+  ament_add_gtest(test_status_code_manager
+    test/interfaces/ros/test_status_code_manager.cpp
+  )
+  if(TARGET test_status_code_manager)
+    target_include_directories(test_status_code_manager PUBLIC include)
+    target_link_libraries(test_status_code_manager
+      passable_area_ros
+      passable_area_core
+      ${OpenCV_LIBS}
+    )
+    ament_target_dependencies(test_status_code_manager
+      Eigen3
+      OpenCV
+      rclcpp
+      std_msgs
+    )
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_status_code_manager ${cpp_typesupport_target})
+    else()
+      rosidl_target_interfaces(test_status_code_manager
         ${PROJECT_NAME} "rosidl_typesupport_cpp")
     endif()
   endif()

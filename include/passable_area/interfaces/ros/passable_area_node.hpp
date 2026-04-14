@@ -9,6 +9,7 @@
 #include "passable_area/interfaces/ros/runtime/debug_publishers.hpp"
 #include "passable_area/interfaces/ros/runtime/perf_stats.hpp"
 #include "passable_area/interfaces/ros/runtime/result_publishers.hpp"
+#include "passable_area/interfaces/ros/runtime/status_code_manager.hpp"
 #include "passable_area/interfaces/ros/runtime/watchdog_manager.hpp"
 #include "passable_area/passable_area.hpp"
 
@@ -62,6 +63,7 @@ private:
   OdomConverter odom_converter_;
   ResultPublishers result_publishers_;
   DebugPublishers debug_publishers_;
+  StatusCodeManager status_code_manager_;
   WatchdogManager watchdog_;
   PerfStats perf_stats_;
   std::shared_ptr<LogBridge> log_bridge_;
