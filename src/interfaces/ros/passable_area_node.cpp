@@ -48,6 +48,7 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
   sync_->registerCallback(std::bind(&PassableAreaNode::onSynced, this,
                                     std::placeholders::_1,
                                     std::placeholders::_2));
+  logTopicConfiguration();
 }
 
 bool PassableAreaNode::initDrLogger() {
@@ -176,6 +177,26 @@ void PassableAreaNode::logFatal(const char *format, ...) {
   const std::string message = formatLogMessage(format, args);
   va_end(args);
   RCLCPP_FATAL(get_logger(), "%s", message.c_str());
+}
+
+void PassableAreaNode::logTopicConfiguration() {
+  logInfo("===== Subscribed Topics =====");
+  logInfo("input_cloud_topic: %s", topic_config_.input_cloud_topic.c_str());
+  logInfo("odom_topic: %s", topic_config_.odom_topic.c_str());
+  logInfo("sync_queue_size: %d", topic_config_.sync_queue_size);
+  logInfo("===== Output Topics =====");
+  logInfo("terrain_state_topic: %s", topic_config_.terrain_state_topic.c_str());
+  logInfo("terrain_cost_topic: %s", topic_config_.terrain_cost_topic.c_str());
+  logInfo("debug_grid_map_topic: %s",
+          topic_config_.debug_grid_map_topic.c_str());
+  logInfo("base_gravity_cloud_topic: %s",
+          topic_config_.base_gravity_cloud_topic.c_str());
+  logInfo("support_points_topic: %s", topic_config_.support_points_topic.c_str());
+  logInfo("obstacle_points_topic: %s",
+          topic_config_.obstacle_points_topic.c_str());
+  logInfo("unknown_mask_topic: %s", topic_config_.unknown_mask_topic.c_str());
+  logInfo("observability_topic: %s", topic_config_.observability_topic.c_str());
+  logInfo("status_code_topic: %s", topic_config_.status_code_topic.c_str());
 }
 
 void PassableAreaNode::onCloudObserved(

@@ -51,6 +51,7 @@ private:
                        const char *format, ...);
   void logError(const char *format, ...);
   void logFatal(const char *format, ...);
+  void logTopicConfiguration();
   void publishBaseGravityTransform(
       const passable_area::core::Pose3D &base_pose_in_odom,
       const builtin_interfaces::msg::Time &stamp);
