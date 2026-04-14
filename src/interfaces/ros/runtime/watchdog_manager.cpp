@@ -13,6 +13,8 @@ void WatchdogManager::initialize(rclcpp::Node &node,
   node_logger_ = std::move(node_logger);
   cloud_topic_ = cloud_topic;
   odom_topic_ = odom_topic;
+  logWaitingForCloud();
+  logWaitingForOdom();
   timer_ =
       node.create_wall_timer(std::chrono::seconds(2), [this]() { check(); });
 }
@@ -36,16 +38,7 @@ void WatchdogManager::check() {
   const auto now = node_->now();
   const auto timeout = rclcpp::Duration::from_seconds(2.0);
   if (!seen_cloud_) {
-    if (!logged_waiting_cloud_) {
-      if (node_logger_) {
-        node_logger_->log(NodeLogger::Level::kWarn, "Waiting for cloud on '%s'",
-                          cloud_topic_.c_str());
-      } else {
-        RCLCPP_WARN(node_->get_logger(), "Waiting for cloud on '%s'",
-                    cloud_topic_.c_str());
-      }
-      logged_waiting_cloud_ = true;
-    }
+    logWaitingForCloud();
   } else if ((now - last_cloud_) > timeout) {
     if (node_logger_) {
       node_logger_->logWarnThrottle(2.0, "watchdog_cloud_timeout",
@@ -58,16 +51,7 @@ void WatchdogManager::check() {
     }
   }
   if (!seen_odom_) {
-    if (!logged_waiting_odom_) {
-      if (node_logger_) {
-        node_logger_->log(NodeLogger::Level::kWarn, "Waiting for odom on '%s'",
-                          odom_topic_.c_str());
-      } else {
-        RCLCPP_WARN(node_->get_logger(), "Waiting for odom on '%s'",
-                    odom_topic_.c_str());
-      }
-      logged_waiting_odom_ = true;
-    }
+    logWaitingForOdom();
   } else if ((now - last_odom_) > timeout) {
     if (node_logger_) {
       node_logger_->logWarnThrottle(2.0, "watchdog_odom_timeout",
@@ -93,6 +77,34 @@ void WatchdogManager::check() {
           (now - last_synced_).seconds());
     }
   }
+}
+
+void WatchdogManager::logWaitingForCloud() {
+  if (logged_waiting_cloud_) {
+    return;
+  }
+  if (node_logger_) {
+    node_logger_->log(NodeLogger::Level::kWarn, "Waiting for cloud on '%s'",
+                      cloud_topic_.c_str());
+  } else {
+    RCLCPP_WARN(node_->get_logger(), "Waiting for cloud on '%s'",
+                cloud_topic_.c_str());
+  }
+  logged_waiting_cloud_ = true;
+}
+
+void WatchdogManager::logWaitingForOdom() {
+  if (logged_waiting_odom_) {
+    return;
+  }
+  if (node_logger_) {
+    node_logger_->log(NodeLogger::Level::kWarn, "Waiting for odom on '%s'",
+                      odom_topic_.c_str());
+  } else {
+    RCLCPP_WARN(node_->get_logger(), "Waiting for odom on '%s'",
+                odom_topic_.c_str());
+  }
+  logged_waiting_odom_ = true;
 }
 
 } // namespace passable_area::interfaces::ros

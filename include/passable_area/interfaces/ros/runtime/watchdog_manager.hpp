@@ -20,6 +20,8 @@ public:
 
 private:
   void check();
+  void logWaitingForCloud();
+  void logWaitingForOdom();
 
   rclcpp::Node *node_ = nullptr;
   std::shared_ptr<NodeLogger> node_logger_;
