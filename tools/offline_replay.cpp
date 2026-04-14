@@ -55,8 +55,9 @@ const char *ToSupportAnchorAuthorityString(
     passable_area::core::SupportAnchorAuthority authority);
 
 std::string DefaultParamsFile();
-std::optional<passable_area::core::Config>
-LoadConfigFromParamsFile(const std::string &params_file);
+std::vector<std::string> DefaultParamsFiles();
+std::optional<passable_area::interfaces::ros::RosNodeParams>
+LoadNodeParamsFromParamsFiles(const std::vector<std::string> &params_files);
 
 std::unique_ptr<rosbag2_cpp::Reader>
 OpenBagReader(const std::string &bag_path) {
@@ -1211,7 +1212,8 @@ ParseRoiInspectArgs(const std::vector<std::string> &args) {
 
 std::optional<BagReplaySummary>
 RunBagReplay(const std::string &bag_path,
-             const passable_area::core::Config &config) {
+             const passable_area::core::Config &config,
+             const passable_area::interfaces::ros::RosTopicConfig &topics) {
   if (!std::filesystem::exists(bag_path)) {
     std::cerr << "bag path does not exist: " << bag_path << '\n';
     return std::nullopt;
@@ -1232,12 +1234,12 @@ RunBagReplay(const std::string &bag_path,
   while (reader->has_next()) {
     auto bag_msg = reader->read_next();
     rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
-    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+    if (bag_msg->topic_name == topics.input_cloud_topic) {
       sensor_msgs::msg::PointCloud2 cloud_msg;
       cloud_ser.deserialize_message(&serialized, &cloud_msg);
       clouds.emplace(rclcpp::Time(cloud_msg.header.stamp).nanoseconds(),
                      std::move(cloud_msg));
-    } else if (bag_msg->topic_name == "/ODOM") {
+    } else if (bag_msg->topic_name == topics.odom_topic) {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
       odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
@@ -1333,17 +1335,59 @@ std::string DefaultParamsFile() {
          "passable_area.yaml";
 }
 
-std::optional<passable_area::core::Config>
-LoadConfigFromParamsFile(const std::string &params_file) {
-  if (!std::filesystem::exists(params_file)) {
-    std::cerr << "params file does not exist: " << params_file << '\n';
+std::vector<std::string> ParamsFilesForReplay(
+    const std::string &primary_params_file) {
+  std::vector<std::string> params_files;
+  params_files.push_back(primary_params_file);
+  const std::filesystem::path primary_path(primary_params_file);
+  const auto parent = primary_path.parent_path();
+  const auto append_if_distinct_and_exists =
+      [&](const std::filesystem::path &candidate) {
+        if (candidate.empty() || candidate == primary_path ||
+            !std::filesystem::exists(candidate)) {
+          return;
+        }
+        params_files.push_back(candidate.string());
+      };
+  append_if_distinct_and_exists(parent / "sensors.yaml");
+  append_if_distinct_and_exists(parent / "debug.yaml");
+  return params_files;
+}
+
+std::vector<std::string> DefaultParamsFiles() {
+  return {
+      "/home/deep/deeprobotics/passable_humble_ws/src/passable_area/config/"
+      "passable_area.yaml",
+      "/home/deep/deeprobotics/passable_humble_ws/src/passable_area/config/"
+      "sensors.yaml",
+      "/home/deep/deeprobotics/passable_humble_ws/src/passable_area/config/"
+      "debug.yaml",
+  };
+}
+
+std::optional<passable_area::interfaces::ros::RosNodeParams>
+LoadNodeParamsFromParamsFiles(const std::vector<std::string> &params_files) {
+  if (params_files.empty()) {
+    std::cerr << "no params files provided\n";
     return std::nullopt;
+  }
+  for (const auto &params_file : params_files) {
+    if (!std::filesystem::exists(params_file)) {
+      std::cerr << "params file does not exist: " << params_file << '\n';
+      return std::nullopt;
+    }
   }
 
   rclcpp::NodeOptions options;
-  options.arguments({"--ros-args", "--params-file", params_file});
+  std::vector<std::string> arguments = {"--ros-args"};
+  arguments.reserve(1 + params_files.size() * 2);
+  for (const auto &params_file : params_files) {
+    arguments.push_back("--params-file");
+    arguments.push_back(params_file);
+  }
+  options.arguments(arguments);
   auto node = std::make_shared<rclcpp::Node>("passable_area", options);
-  return passable_area::interfaces::ros::RosParamLoader{}.load(*node).config;
+  return passable_area::interfaces::ros::RosParamLoader{}.load(*node);
 }
 
 std::optional<passable_area::tools::FalseObstacleBagSummary>
@@ -1353,10 +1397,13 @@ RunFalseObstacleReplay(const FalseObstacleReplayArgs &args) {
     return std::nullopt;
   }
 
-  const auto config = LoadConfigFromParamsFile(args.params_file);
-  if (!config) {
+  const auto node_params =
+      LoadNodeParamsFromParamsFiles(ParamsFilesForReplay(args.params_file));
+  if (!node_params) {
     return std::nullopt;
   }
+  const auto &config = node_params->config;
+  const auto &topics = node_params->topics;
 
   auto reader = OpenBagReader(args.bag_path);
 
@@ -1374,13 +1421,13 @@ RunFalseObstacleReplay(const FalseObstacleReplayArgs &args) {
       bag_start_time = std::min(*bag_start_time, bag_msg->time_stamp);
     }
     rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
-    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+    if (bag_msg->topic_name == topics.input_cloud_topic) {
       sensor_msgs::msg::PointCloud2 cloud_msg;
       cloud_ser.deserialize_message(&serialized, &cloud_msg);
       const int64_t stamp = rclcpp::Time(cloud_msg.header.stamp).nanoseconds();
       clouds.emplace(stamp, std::move(cloud_msg));
       cloud_bag_times.emplace(stamp, bag_msg->time_stamp);
-    } else if (bag_msg->topic_name == "/ODOM") {
+    } else if (bag_msg->topic_name == topics.odom_topic) {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
       odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
@@ -1390,8 +1437,8 @@ RunFalseObstacleReplay(const FalseObstacleReplayArgs &args) {
 
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
-  passable_area::core::Processor processor(*config);
-  passable_area::tools::FalseObstacleAnalyzer analyzer(*config,
+  passable_area::core::Processor processor(config);
+  passable_area::tools::FalseObstacleAnalyzer analyzer(config,
                                                        args.analyzer_config);
 
   int total_frames = 0;
@@ -1470,10 +1517,13 @@ RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
     return std::nullopt;
   }
 
-  const auto config = LoadConfigFromParamsFile(args.params_file);
-  if (!config) {
+  const auto node_params =
+      LoadNodeParamsFromParamsFiles(ParamsFilesForReplay(args.params_file));
+  if (!node_params) {
     return std::nullopt;
   }
+  const auto &config = node_params->config;
+  const auto &topics = node_params->topics;
 
   auto reader = OpenBagReader(args.bag_path);
 
@@ -1491,13 +1541,13 @@ RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
       bag_start_time = std::min(*bag_start_time, bag_msg->time_stamp);
     }
     rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
-    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+    if (bag_msg->topic_name == topics.input_cloud_topic) {
       sensor_msgs::msg::PointCloud2 cloud_msg;
       cloud_ser.deserialize_message(&serialized, &cloud_msg);
       const int64_t stamp = rclcpp::Time(cloud_msg.header.stamp).nanoseconds();
       clouds.emplace(stamp, std::move(cloud_msg));
       cloud_bag_times.emplace(stamp, bag_msg->time_stamp);
-    } else if (bag_msg->topic_name == "/ODOM") {
+    } else if (bag_msg->topic_name == topics.odom_topic) {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
       odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
@@ -1507,9 +1557,9 @@ RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
 
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
-  passable_area::core::FramePreprocessor preprocessor(*config);
-  passable_area::core::Processor processor(*config);
-  passable_area::tools::MissObstacleAnalyzer analyzer(*config,
+  passable_area::core::FramePreprocessor preprocessor(config);
+  passable_area::core::Processor processor(config);
+  passable_area::tools::MissObstacleAnalyzer analyzer(config,
                                                       args.analyzer_config);
 
   int total_frames = 0;
@@ -1784,10 +1834,13 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
     std::cerr << "bag path does not exist: " << args.bag_path << '\n';
     return std::nullopt;
   }
-  const auto config = LoadConfigFromParamsFile(args.params_file);
-  if (!config) {
+  const auto node_params =
+      LoadNodeParamsFromParamsFiles(ParamsFilesForReplay(args.params_file));
+  if (!node_params) {
     return std::nullopt;
   }
+  const auto &config = node_params->config;
+  const auto &topics = node_params->topics;
 
   auto reader = OpenBagReader(args.bag_path);
 
@@ -1805,13 +1858,13 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
       bag_start_time = std::min(*bag_start_time, bag_msg->time_stamp);
     }
     rclcpp::SerializedMessage serialized(*bag_msg->serialized_data);
-    if (bag_msg->topic_name == "/LOC_BODY_POINTS") {
+    if (bag_msg->topic_name == topics.input_cloud_topic) {
       sensor_msgs::msg::PointCloud2 cloud_msg;
       cloud_ser.deserialize_message(&serialized, &cloud_msg);
       const int64_t stamp = rclcpp::Time(cloud_msg.header.stamp).nanoseconds();
       clouds.emplace(stamp, std::move(cloud_msg));
       cloud_bag_times.emplace(stamp, bag_msg->time_stamp);
-    } else if (bag_msg->topic_name == "/ODOM") {
+    } else if (bag_msg->topic_name == topics.odom_topic) {
       nav_msgs::msg::Odometry odom_msg;
       odom_ser.deserialize_message(&serialized, &odom_msg);
       odoms.emplace(rclcpp::Time(odom_msg.header.stamp).nanoseconds(),
@@ -1821,8 +1874,8 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
 
   passable_area::interfaces::ros::PointCloudConverter cloud_converter;
   passable_area::interfaces::ros::OdomConverter odom_converter;
-  passable_area::core::FramePreprocessor preprocessor(*config);
-  passable_area::core::Processor processor(*config);
+  passable_area::core::FramePreprocessor preprocessor(config);
+  passable_area::core::Processor processor(config);
   int printed_frames = 0;
   const double half_window_sec =
       static_cast<double>(args.time_window_sec) * 0.5;
@@ -1936,12 +1989,14 @@ int main(int argc, char **argv) {
     }
     const std::string params_file = ParseStringFlagValue(args, "--params-file")
                                         .value_or(DefaultParamsFile());
-    const auto config = LoadConfigFromParamsFile(params_file);
-    if (!config) {
+    const auto node_params =
+        LoadNodeParamsFromParamsFiles(ParamsFilesForReplay(params_file));
+    if (!node_params) {
       rclcpp::shutdown();
       return 1;
     }
-    const auto summary = RunBagReplay(*bag_path, *config);
+    const auto summary =
+        RunBagReplay(*bag_path, node_params->config, node_params->topics);
     if (!summary) {
       rclcpp::shutdown();
       return 1;
