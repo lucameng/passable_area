@@ -1,3 +1,9 @@
+## [2.0.0] - 2026-04-14
+
+### 🐛 Bug Fixes
+
+- Reduce the map resolution to solve edge obstacles
+
 ## [1.0.0] - 2026-04-14
 
 ### 🚀 Features
