@@ -28,6 +28,7 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
   initDrLogger();
   result_publishers_.initialize(*this, topic_config_);
   debug_publishers_.initialize(*this, topic_config_, config_.debug);
+  status_code_manager_.initialize(*this, topic_config_, node_logger_);
   watchdog_.initialize(*this, topic_config_.input_cloud_topic,
                        topic_config_.odom_topic, node_logger_);
   perf_stats_.initialize(*this, node_logger_);
@@ -180,6 +181,7 @@ void PassableAreaNode::logFatal(const char *format, ...) {
 void PassableAreaNode::onCloudObserved(
     const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
   (void)msg;
+  status_code_manager_.markCloud(now());
   watchdog_.markCloud(now());
   perf_stats_.observeCloud();
 }
@@ -187,6 +189,7 @@ void PassableAreaNode::onCloudObserved(
 void PassableAreaNode::onOdomObserved(
     const nav_msgs::msg::Odometry::ConstSharedPtr &msg) {
   (void)msg;
+  status_code_manager_.markOdom(now());
   watchdog_.markOdom(now());
   perf_stats_.observeOdom();
 }
@@ -194,48 +197,58 @@ void PassableAreaNode::onOdomObserved(
 void PassableAreaNode::onSynced(
     const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg,
     const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg) {
+  status_code_manager_.markSynced(now());
   watchdog_.markSynced(now());
   auto start = std::chrono::steady_clock::now();
 
-  passable_area::core::PointCloud cloud;
-  passable_area::core::Pose3D pose;
-  if (!point_converter_.fromRos(*cloud_msg, cloud)) {
-    logWarnThrottle(2000, "pointcloud_ros_convert_failed",
-                    "PointCloud2 conversion failed");
-    return;
+  try {
+    passable_area::core::PointCloud cloud;
+    passable_area::core::Pose3D pose;
+    if (!point_converter_.fromRos(*cloud_msg, cloud)) {
+      status_code_manager_.markOutputFailure();
+      logWarnThrottle(2000, "pointcloud_ros_convert_failed",
+                      "PointCloud2 conversion failed");
+      return;
+    }
+    if (!odom_converter_.fromRos(*odom_msg, pose)) {
+      status_code_manager_.markOutputFailure();
+      logWarnThrottle(2000, "odom_ros_convert_failed",
+                      "Odometry conversion failed");
+      return;
+    }
+
+    passable_area::core::FrameInput input;
+    input.stamp = rclcpp::Time(cloud_msg->header.stamp).nanoseconds();
+    input.base_pose_in_odom = pose;
+    input.input_cloud_in_base = std::move(cloud);
+
+    const auto output = processor_.update(input);
+    if (!output.valid) {
+      status_code_manager_.markOutputFailure();
+      logWarnThrottle(2000, "processor_dropped_frame",
+                      "Processor dropped frame");
+      return;
+    }
+
+    std_msgs::msg::Header base_gravity_header;
+    base_gravity_header.stamp = cloud_msg->header.stamp;
+    base_gravity_header.frame_id = config_.base_gravity_frame;
+    result_publishers_.publish(output, base_gravity_header);
+    debug_publishers_.publish(output, base_gravity_header);
+    publishBaseGravityTransform(pose, cloud_msg->header.stamp);
+    status_code_manager_.markOutputSuccess();
+
+    const double ms = std::chrono::duration<double, std::milli>(
+                          std::chrono::steady_clock::now() - start)
+                          .count();
+    perf_stats_.record(ms);
+  } catch (const std::exception &e) {
+    status_code_manager_.markFatalRuntimeException(e.what());
+    logError("Unhandled exception in synced callback: %s", e.what());
+  } catch (...) {
+    status_code_manager_.markFatalRuntimeException("unknown exception");
+    logError("Unhandled non-std exception in synced callback");
   }
-  if (!odom_converter_.fromRos(*odom_msg, pose)) {
-    logWarnThrottle(2000, "odom_ros_convert_failed",
-                    "Odometry conversion failed");
-    return;
-  }
-
-  passable_area::core::FrameInput input;
-  input.stamp = rclcpp::Time(cloud_msg->header.stamp).nanoseconds();
-  input.base_pose_in_odom = pose;
-  input.input_cloud_in_base = std::move(cloud);
-
-  const auto output = processor_.update(input);
-  if (!output.valid) {
-    logWarnThrottle(2000, "processor_dropped_frame", "Processor dropped frame");
-    return;
-  }
-
-  std_msgs::msg::Header odom_header;
-  odom_header.stamp = cloud_msg->header.stamp;
-  odom_header.frame_id = config_.odom_frame;
-
-  std_msgs::msg::Header base_gravity_header;
-  base_gravity_header.stamp = cloud_msg->header.stamp;
-  base_gravity_header.frame_id = config_.base_gravity_frame;
-  result_publishers_.publish(output, base_gravity_header);
-  debug_publishers_.publish(output, base_gravity_header);
-  publishBaseGravityTransform(pose, cloud_msg->header.stamp);
-
-  const double ms = std::chrono::duration<double, std::milli>(
-                        std::chrono::steady_clock::now() - start)
-                        .count();
-  perf_stats_.record(ms);
 }
 
 void PassableAreaNode::publishBaseGravityTransform(

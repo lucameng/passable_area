@@ -19,6 +19,7 @@ struct RosTopicConfig {
   std::string obstacle_points_topic = "/terrain_obstacle_points";
   std::string unknown_mask_topic = "/terrain_debug/unknown_mask";
   std::string observability_topic = "/terrain_debug/observability";
+  std::string status_code_topic = "/passable_area/status_code";
 };
 
 struct RosNodeParams {

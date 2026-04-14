@@ -9,6 +9,7 @@ passable_area:
       support_points_topic: "/terrain_debug/support_points"
       unknown_mask_topic: "/terrain_debug/unknown_mask"
       observability_topic: "/terrain_debug/observability"
+      status_code_topic: "/passable_area/status_code"
     debug:
       publish_grid_map: true
       publish_points: true
