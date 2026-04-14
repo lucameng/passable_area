@@ -1,3 +1,126 @@
+## [1.0.0] - 2026-04-14
+
+### 🚀 Features
+
+- Make passable status code topic configurable
+- Level raw input clouds with odometry before passability
+- Sync cloud and odometry with ExactTime for gravity leveling
+- Separate odom mapping frame from base_gravity debug outputs
+- Publish odom to base_gravity transform for debug outputs
+- Add base_gravity debug cloud from preprocessed odom samples
+- Add body-box filtering and local map cropping in preprocessing
+- Publish all raw points from obstacle cells in debug cloud
+- Clear dynamic obstacle overhead faster after ground is reobserved
+- Publish map outputs as robot-centric base_gravity grids
+- Add bag-level false obstacle analysis to offline replay
+- Gate obstacle formation with local upper-support neighborhoods
+- Filter terrain obstacle points to upper obstacle band by 0.2m
+- Add anchored stair-mix obstacle filtering
+- Add PCL dependency and link libraries to build targets
+- Add warm-up windowed start-offset support for false-obstacle replay
+- Implement neighbor consensus and validation utilities for elevated support surface estimation
+- Add base_link max height gate for obstacle point publishing
+- Size up max_step_up/down and min_clearance params
+- Add rosbag2_storage dependency and support cross-version storage options in offline_replay tool
+- Expand false obstacle analyzer with additional cell diagnostic metrics and support for effective elevation tracking
+- Integrate dr_logger with ROS fallback for passable_area runtime logging
+- Add runtime status code reporting for passable_area
+- Log subscribed and output topics on startup
+
+### 🐛 Bug Fixes
+
+- Harden PointCloud2 layout validation before PCL conversion
+- Shift traversal cost layer with explicit float unknown sentinel
+- Fix watchdog timebase and stabilize dual-view map semantics
+- Correct frame semantics for dual-view processing and debug outputs
+- Align grid_map layer orientation with robot-centric outputs
+- Gate debug obstacle points on configurable strong evidence threshold
+- Warm up missed-obstacle replay and add unsupported-wall regression test
+- Ignore stale support anchors for wall-only obstacle cells
+- Ignore wall-like anchors with shallow upper bands
+- Boost evidence for wall-like obstacle cells
+- Scale wall-like obstacle evidence gain by cell geometry
+- Add conditional support for rosidl_target_interfaces to maintain compatibility with different ROS 2 versions
+- Fix Foxy/Humble build compatibility for offline replay and tests
+- Reject below-robot ground layer mixes with minimal neighbor support
+- Reject below-robot upstair ground layer mixes
+- Decouple downstairs ground-mix from upstair trend checks
+- Log initial input waiting state immediately
+
+### 💼 Other
+
+- Replace deprecated rosidl_target_interfaces usage
+
+### 🚜 Refactor
+
+- Rebuild module with core/interfaces architecture and new traversability pipeline
+- Complete new pipeline baseline with replay and e2e benchmark
+- Split preprocessed cloud into base and gravity views
+- Remove fixed rear blind sector from observability
+- Promote obstacle points config and default topic to runtime interface
+- Improve test readability and standardize rosbag2 reader initialization in offline replay tool
+- Modularize terrain support rejection logic and add non-collinear pattern detection for upper support cells
+- Revert effective support elevation path while keep analyzer diagnostics
+- Unify anchor validity and below-robot explanation gates
+- Preserve stale-anchor filtering and split raw vs adjusted upper-support states
+- Internalize effective support ref and make legacy upper-support semantics explicit
+- Remove redundant common header files and update internal include paths
+- Move aligned support from pre-veto to explanation stage
+- Require explicit keep verdict for obstacle candidates
+- Tighten anchor authority for pre-trigger leak suppression
+- Gate pre-trigger leak suppression by anchor authority
+- Flatten benchmarks and simplify ros interface layout
+
+### 📚 Documentation
+
+- Add doc of current algorithm scheme
+- Add user guide for false obstacle offline analysis output
+- Reorganize test assets and add test guide
+- Document layered support logic in PolarFrontend
+- Update algorithm scheme and add code walk-through doc
+- Add polar frontend fused refactor plan
+
+### ⚡ Performance
+
+- Share robot-centric resampling across published map outputs
+
+### 🎨 Styling
+
+- Apply consistent clang-format styling across the codebase
+
+### 🧪 Testing
+
+- Load offline replay bag config from params file
+- Format false obstacle replay output into readable frame blocks
+- Polish false obstacle report text contrast and wording
+- Rename suspicious frame summary labels and add rear dropout count
+- Align report section headers with card width
+- Report hotspot min and max obstacle point height in false obstacle analysis
+- Report bag-relative start offset for false obstacle frames
+- Add batch obstacle benchmark script and manifest
+- Add 2 bags of upstairs scenario to benchmark
+- Split offline benchmark and add timing metrics
+- Add wall and below-robot obstacle regressions
+- Add roi-based missed-obstacle analysis for terrain obstacle points
+- Add downstairs bag which just resolved
+- Add rosbag2_mtbf_x30_upstair_passage to offline benchmark configuration
+
+### ⚙️ Miscellaneous Tasks
+
+- Make passable_area output topics configurable via YAML
+- Remove duplicated debug params from main config
+- Adjust map boundary and body filter params
+- Add rviz config for terrain debug only
+- Update service launch target and remove redundant pass.launch.py file
+- Add three new test bags to offline benchmark configuration
+- Add new benchmark bag configurations to offline_benchmark_bags.yaml
+- Decrease bags from benchmark for last revert
+- Decrease obstacle_points_min_height in order to preserve the integrity of the obstacle point cloud
+- Add comments to each function in polar frontend
+- Expose neighbor-gate evidence in offline analysis
+- Clarify facade evidence naming and demote legacy reject display
+- Add shlibs.local override for log4cplus packaging dependency
+
 ## [0.0.7] - 2026-03-16
 
 ### 🚀 Features
