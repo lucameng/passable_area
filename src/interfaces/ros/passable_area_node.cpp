@@ -3,9 +3,15 @@
 #include "passable_area/core/utils/math_utils.hpp"
 
 #include <chrono>
+#include <cstdarg>
 
 namespace passable_area::interfaces::ros {
 namespace {
+
+constexpr const char *kDefaultDrLoggerName = "passable_area";
+constexpr const char *kDefaultDrLoggerLogPath = "/var/opt/robot/log";
+constexpr const char *kDefaultDrLoggerPropertiesPath =
+    "/var/opt/robot/conf/log.properties";
 
 Eigen::Quaternionf YawOnlyQuaternion(const Eigen::Quaternionf &orientation) {
   return Eigen::Quaternionf(
@@ -19,11 +25,12 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
     : Node("passable_area", options),
       node_params_(RosParamLoader{}.load(*this)), config_(node_params_.config),
       processor_(config_), topic_config_(node_params_.topics) {
+  initDrLogger();
   result_publishers_.initialize(*this, topic_config_);
   debug_publishers_.initialize(*this, topic_config_, config_.debug);
   watchdog_.initialize(*this, topic_config_.input_cloud_topic,
-                       topic_config_.odom_topic);
-  perf_stats_.initialize(*this);
+                       topic_config_.odom_topic, node_logger_);
+  perf_stats_.initialize(*this, node_logger_);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
   const auto sensor_qos = rclcpp::SensorDataQoS();
@@ -40,6 +47,134 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
   sync_->registerCallback(std::bind(&PassableAreaNode::onSynced, this,
                                     std::placeholders::_1,
                                     std::placeholders::_2));
+}
+
+bool PassableAreaNode::initDrLogger() {
+  const auto options =
+      resolveDrLoggerOptions(kDefaultDrLoggerName, kDefaultDrLoggerLogPath,
+                             kDefaultDrLoggerPropertiesPath);
+  log_bridge_ = std::make_shared<LogBridge>(options);
+  node_logger_ = std::make_shared<NodeLogger>(
+      log_bridge_,
+      [this](NodeLogger::Level level, const std::string &message) {
+        switch (level) {
+        case NodeLogger::Level::kDebug:
+          RCLCPP_DEBUG(get_logger(), "%s", message.c_str());
+          break;
+        case NodeLogger::Level::kInfo:
+          RCLCPP_INFO(get_logger(), "%s", message.c_str());
+          break;
+        case NodeLogger::Level::kWarn:
+          RCLCPP_WARN(get_logger(), "%s", message.c_str());
+          break;
+        case NodeLogger::Level::kError:
+          RCLCPP_ERROR(get_logger(), "%s", message.c_str());
+          break;
+        case NodeLogger::Level::kFatal:
+          RCLCPP_FATAL(get_logger(), "%s", message.c_str());
+          break;
+        }
+      },
+      [this]() { return get_clock()->now().seconds(); });
+
+  std::string error_message;
+  const bool dr_enabled = log_bridge_->init(error_message);
+  if (!dr_enabled && !error_message.empty()) {
+    RCLCPP_ERROR(get_logger(),
+                 "DrLogger init failed, fallback to ROS-only logging: %s",
+                 error_message.c_str());
+    return false;
+  }
+  if (!dr_enabled) {
+    RCLCPP_INFO(get_logger(),
+                "DrLogger disabled by env %s, using ROS-only logging.",
+                "PASSABLE_DR_LOGGER_ENABLE");
+    return false;
+  }
+  node_logger_->log(NodeLogger::Level::kInfo,
+                    "DrLogger enabled, ROS sink disabled.");
+  return true;
+}
+
+void PassableAreaNode::logDebug(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  if (node_logger_) {
+    node_logger_->logV(NodeLogger::Level::kDebug, format, args);
+    va_end(args);
+    return;
+  }
+  const std::string message = formatLogMessage(format, args);
+  va_end(args);
+  RCLCPP_DEBUG(get_logger(), "%s", message.c_str());
+}
+
+void PassableAreaNode::logInfo(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  if (node_logger_) {
+    node_logger_->logV(NodeLogger::Level::kInfo, format, args);
+    va_end(args);
+    return;
+  }
+  const std::string message = formatLogMessage(format, args);
+  va_end(args);
+  RCLCPP_INFO(get_logger(), "%s", message.c_str());
+}
+
+void PassableAreaNode::logWarn(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  if (node_logger_) {
+    node_logger_->logV(NodeLogger::Level::kWarn, format, args);
+    va_end(args);
+    return;
+  }
+  const std::string message = formatLogMessage(format, args);
+  va_end(args);
+  RCLCPP_WARN(get_logger(), "%s", message.c_str());
+}
+
+void PassableAreaNode::logWarnThrottle(uint64_t throttle_ms, const char *key,
+                                       const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  if (node_logger_) {
+    node_logger_->logWarnThrottleV(static_cast<double>(throttle_ms) / 1000.0,
+                                   key, format, args);
+    va_end(args);
+    return;
+  }
+  const std::string message = formatLogMessage(format, args);
+  va_end(args);
+  RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), throttle_ms, "%s",
+                       message.c_str());
+}
+
+void PassableAreaNode::logError(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  if (node_logger_) {
+    node_logger_->logV(NodeLogger::Level::kError, format, args);
+    va_end(args);
+    return;
+  }
+  const std::string message = formatLogMessage(format, args);
+  va_end(args);
+  RCLCPP_ERROR(get_logger(), "%s", message.c_str());
+}
+
+void PassableAreaNode::logFatal(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  if (node_logger_) {
+    node_logger_->logV(NodeLogger::Level::kFatal, format, args);
+    va_end(args);
+    return;
+  }
+  const std::string message = formatLogMessage(format, args);
+  va_end(args);
+  RCLCPP_FATAL(get_logger(), "%s", message.c_str());
 }
 
 void PassableAreaNode::onCloudObserved(
@@ -65,13 +200,13 @@ void PassableAreaNode::onSynced(
   passable_area::core::PointCloud cloud;
   passable_area::core::Pose3D pose;
   if (!point_converter_.fromRos(*cloud_msg, cloud)) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                         "PointCloud2 conversion failed");
+    logWarnThrottle(2000, "pointcloud_ros_convert_failed",
+                    "PointCloud2 conversion failed");
     return;
   }
   if (!odom_converter_.fromRos(*odom_msg, pose)) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                         "Odometry conversion failed");
+    logWarnThrottle(2000, "odom_ros_convert_failed",
+                    "Odometry conversion failed");
     return;
   }
 
@@ -82,8 +217,7 @@ void PassableAreaNode::onSynced(
 
   const auto output = processor_.update(input);
   if (!output.valid) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                         "Processor dropped frame");
+    logWarnThrottle(2000, "processor_dropped_frame", "Processor dropped frame");
     return;
   }
 

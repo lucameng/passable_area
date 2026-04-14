@@ -17,6 +17,21 @@ find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io)
 find_package(pcl_conversions REQUIRED)
+find_path(LOG4CPLUS_DR_INCLUDE_DIR
+  NAMES log4cplus_dr/dr_logger.hpp
+  DOC "Directory containing log4cplus_dr/dr_logger.hpp"
+)
+if(NOT LOG4CPLUS_DR_INCLUDE_DIR)
+  message(FATAL_ERROR
+    "Required header log4cplus_dr/dr_logger.hpp was not found. "
+    "Please install the development package resolved by rosdep key 'log4cplus'.")
+endif()
+find_library(LOG4CPLUS_LIBRARY NAMES log4cplus)
+if(NOT LOG4CPLUS_LIBRARY)
+  message(FATAL_ERROR
+    "Required library log4cplus was not found. "
+    "Please install the development package resolved by rosdep key 'log4cplus'.")
+endif()
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -58,11 +73,21 @@ target_link_libraries(passable_area_core ${OpenCV_LIBS})
 target_include_directories(passable_area_core PUBLIC include)
 ament_target_dependencies(passable_area_core Eigen3 OpenCV grid_map_core)
 
+add_library(log4cplus_dr_dependency INTERFACE)
+target_include_directories(log4cplus_dr_dependency INTERFACE
+  ${LOG4CPLUS_DR_INCLUDE_DIR}
+)
+target_link_libraries(log4cplus_dr_dependency INTERFACE
+  ${LOG4CPLUS_LIBRARY}
+)
+
 set(interface_sources
   src/interfaces/ros/converters/pointcloud_converter.cpp
   src/interfaces/ros/converters/odom_converter.cpp
   src/interfaces/ros/converters/output_converter.cpp
   src/interfaces/ros/ros_param_loader.cpp
+  src/interfaces/common/logging/log_bridge.cpp
+  src/interfaces/common/logging/node_logger.cpp
   src/interfaces/ros/runtime/result_publishers.cpp
   src/interfaces/ros/runtime/debug_publishers.cpp
   src/interfaces/ros/runtime/watchdog_manager.cpp
@@ -86,7 +111,11 @@ ament_target_dependencies(passable_area_ros
   tf2_ros
   visualization_msgs
 )
-target_link_libraries(passable_area_ros passable_area_core ${PCL_LIBRARIES})
+target_link_libraries(passable_area_ros
+  passable_area_core
+  ${PCL_LIBRARIES}
+  log4cplus_dr_dependency
+)
 
 if(COMMAND rosidl_get_typesupport_target)
   rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")

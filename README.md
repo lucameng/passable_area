@@ -72,6 +72,7 @@ Current debug point semantics:
 ## Layout
 - `include/passable_area/core`: ROS-free data types and processing modules
 - `include/passable_area/interfaces/ros`: converters, params, publishers, watchdog, node
+- `include/passable_area/interfaces/common/logging`: shared logging adapters for ROS and future non-ROS hosts
 - `src/core`: algorithm implementation
 - `src/interfaces/ros`: ROS integration
 - `msg/TerrainObservability.msg`: observability debug contract
@@ -108,6 +109,18 @@ Config is split across:
 - `config/debug.yaml`
 
 `config/passable_area.yaml` holds algorithm and preprocessing parameters. `config/debug.yaml` holds debug publishers and debug output topics.
+
+Runtime logging:
+- `passable_area` now supports `dr_logger` with ROS fallback
+- when `dr_logger` initializes successfully, messages are written only to `dr_logger`
+- when `dr_logger` is disabled or initialization fails, logging falls back to ROS-only
+- default `dr_logger` path: `/var/opt/robot/log`
+- default properties path: `/var/opt/robot/conf/log.properties`
+- environment overrides:
+  - `PASSABLE_DR_LOGGER_ENABLE`
+  - `PASSABLE_DR_LOGGER_NAME`
+  - `PASSABLE_DR_LOGGER_PATH`
+  - `PASSABLE_DR_LOGGER_PROPERTIES_PATH`
 
 Relevant debug controls:
 - `debug.publish_base_gravity_cloud`: enable publishing the full preprocessed algorithm cloud in `base_gravity_frame`
