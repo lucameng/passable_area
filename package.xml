@@ -27,6 +27,7 @@
   <build_depend>grid_map_core</build_depend>
   <build_depend>grid_map_msgs</build_depend>
   <build_depend>grid_map_ros</build_depend>
+  <build_depend>log4cplus</build_depend>
 
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>message_filters</exec_depend>
@@ -43,6 +44,7 @@
   <exec_depend>grid_map_core</exec_depend>
   <exec_depend>grid_map_msgs</exec_depend>
   <exec_depend>grid_map_ros</exec_depend>
+  <exec_depend>log4cplus</exec_depend>
 
   <member_of_group>rosidl_interface_packages</member_of_group>
 

@@ -1,9 +1,13 @@
 #include "passable_area/interfaces/ros/runtime/perf_stats.hpp"
 
+#include <utility>
+
 namespace passable_area::interfaces::ros {
 
-void PerfStats::initialize(rclcpp::Node &node) {
+void PerfStats::initialize(rclcpp::Node &node,
+                           std::shared_ptr<NodeLogger> node_logger) {
   node_ = &node;
+  node_logger_ = std::move(node_logger);
   window_start_ = node.now();
 }
 
@@ -25,11 +29,18 @@ void PerfStats::record(double processing_ms) {
   const double cloud_hz = cloud_count_ / std::max(window_sec, 1e-3);
   const double odom_hz = odom_count_ / std::max(window_sec, 1e-3);
   const double proc_hz = frame_count_ / std::max(window_sec, 1e-3);
-  RCLCPP_INFO(node_->get_logger(),
-              "perf window: input_hz(cloud/odom)=%.1f/%.1f frames=%d "
-              "avg=%.2fms max=%.2fms "
-              "rate=%.2fHz",
-              cloud_hz, odom_hz, frame_count_, avg_ms, max_ms_, proc_hz);
+  if (node_logger_) {
+    node_logger_->log(NodeLogger::Level::kInfo,
+                      "perf window: input_hz(cloud/odom)=%.1f/%.1f frames=%d "
+                      "avg=%.2fms max=%.2fms rate=%.2fHz",
+                      cloud_hz, odom_hz, frame_count_, avg_ms, max_ms_,
+                      proc_hz);
+  } else {
+    RCLCPP_INFO(node_->get_logger(),
+                "perf window: input_hz(cloud/odom)=%.1f/%.1f frames=%d "
+                "avg=%.2fms max=%.2fms rate=%.2fHz",
+                cloud_hz, odom_hz, frame_count_, avg_ms, max_ms_, proc_hz);
+  }
   window_start_ = now;
   cloud_count_ = 0;
   odom_count_ = 0;
