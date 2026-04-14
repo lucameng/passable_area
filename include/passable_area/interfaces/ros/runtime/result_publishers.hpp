@@ -1,9 +1,9 @@
-#ifndef PASSABLE_AREA_INTERFACES_ROS_PUBLISHERS_RESULT_PUBLISHERS_HPP_
-#define PASSABLE_AREA_INTERFACES_ROS_PUBLISHERS_RESULT_PUBLISHERS_HPP_
+#ifndef PASSABLE_AREA_INTERFACES_ROS_RUNTIME_RESULT_PUBLISHERS_HPP_
+#define PASSABLE_AREA_INTERFACES_ROS_RUNTIME_RESULT_PUBLISHERS_HPP_
 
 #include "passable_area/core/types/frame_types.hpp"
 #include "passable_area/interfaces/ros/converters/output_converter.hpp"
-#include "passable_area/interfaces/ros/params/ros_param_loader.hpp"
+#include "passable_area/interfaces/ros/ros_param_loader.hpp"
 
 #include <grid_map_msgs/msg/grid_map.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
@@ -14,7 +14,8 @@ namespace passable_area::interfaces::ros {
 class ResultPublishers {
 public:
   void initialize(rclcpp::Node &node, const RosTopicConfig &topics);
-  void publish(const passable_area::core::FrameOutput &output, const std_msgs::msg::Header &header);
+  void publish(const passable_area::core::FrameOutput &output,
+               const std_msgs::msg::Header &header);
 
 private:
   OutputConverter converter_;

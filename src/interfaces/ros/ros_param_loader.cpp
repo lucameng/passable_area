@@ -1,4 +1,4 @@
-#include "passable_area/interfaces/ros/params/ros_param_loader.hpp"
+#include "passable_area/interfaces/ros/ros_param_loader.hpp"
 
 namespace passable_area::interfaces::ros {
 

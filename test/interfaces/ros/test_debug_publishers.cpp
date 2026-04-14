@@ -1,5 +1,5 @@
 #include "passable_area/interfaces/ros/converters/output_converter.hpp"
-#include "passable_area/interfaces/ros/publishers/debug_publishers.hpp"
+#include "passable_area/interfaces/ros/runtime/debug_publishers.hpp"
 
 #include <gtest/gtest.h>
 

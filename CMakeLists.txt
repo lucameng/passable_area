@@ -62,12 +62,12 @@ set(interface_sources
   src/interfaces/ros/converters/pointcloud_converter.cpp
   src/interfaces/ros/converters/odom_converter.cpp
   src/interfaces/ros/converters/output_converter.cpp
-  src/interfaces/ros/params/ros_param_loader.cpp
-  src/interfaces/ros/publishers/result_publishers.cpp
-  src/interfaces/ros/publishers/debug_publishers.cpp
-  src/interfaces/ros/status/watchdog_manager.cpp
-  src/interfaces/ros/status/perf_stats.cpp
-  src/interfaces/ros/nodes/passable_area_node.cpp
+  src/interfaces/ros/ros_param_loader.cpp
+  src/interfaces/ros/runtime/result_publishers.cpp
+  src/interfaces/ros/runtime/debug_publishers.cpp
+  src/interfaces/ros/runtime/watchdog_manager.cpp
+  src/interfaces/ros/runtime/perf_stats.cpp
+  src/interfaces/ros/passable_area_node.cpp
 )
 
 add_library(passable_area_ros STATIC ${interface_sources})
@@ -101,7 +101,7 @@ target_link_libraries(passable_area_node passable_area_ros)
 ament_target_dependencies(passable_area_node rclcpp)
 
 # Manual core throughput benchmark. This is intentionally not part of ament gtests.
-add_executable(passable_area_benchmark benchmarks/core/benchmark_processor.cpp)
+add_executable(passable_area_benchmark benchmarks/benchmark_processor.cpp)
 target_include_directories(passable_area_benchmark PUBLIC include)
 target_link_libraries(passable_area_benchmark passable_area_core ${OpenCV_LIBS})
 ament_target_dependencies(passable_area_benchmark Eigen3 OpenCV grid_map_core)
@@ -131,7 +131,7 @@ ament_target_dependencies(passable_area_offline_replay
 )
 
 # Manual ROS end-to-end latency benchmark. This is intentionally not part of ament gtests.
-add_executable(passable_area_e2e_benchmark benchmarks/interfaces/ros/e2e_benchmark.cpp)
+add_executable(passable_area_e2e_benchmark benchmarks/benchmark_ros_e2e.cpp)
 target_include_directories(passable_area_e2e_benchmark PUBLIC include)
 target_link_libraries(passable_area_e2e_benchmark
   passable_area_ros

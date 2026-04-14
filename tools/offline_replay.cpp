@@ -1,6 +1,6 @@
 #include "passable_area/interfaces/ros/converters/odom_converter.hpp"
 #include "passable_area/interfaces/ros/converters/pointcloud_converter.hpp"
-#include "passable_area/interfaces/ros/params/ros_param_loader.hpp"
+#include "passable_area/interfaces/ros/ros_param_loader.hpp"
 #include "passable_area/passable_area.hpp"
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
 #include "passable_area/tools/miss_obstacle_analyzer.hpp"

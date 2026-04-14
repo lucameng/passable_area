@@ -38,7 +38,7 @@
 运行时入口在：
 
 - `src/passable_area/src/main/passable_area_node_main.cpp`
-- `src/passable_area/src/interfaces/ros/nodes/passable_area_node.cpp`
+- `src/passable_area/src/interfaces/ros/passable_area_node.cpp`
 
 节点类是 `passable_area::interfaces::ros::PassableAreaNode`。
 
@@ -47,7 +47,7 @@
 - 点云：`sensor_msgs/msg/PointCloud2`
 - 里程计：`nav_msgs/msg/Odometry`
 
-默认 topic 在 `src/passable_area/include/passable_area/interfaces/ros/params/ros_param_loader.hpp` 和配置文件里定义：
+默认 topic 在 `src/passable_area/include/passable_area/interfaces/ros/ros_param_loader.hpp` 和配置文件里定义：
 
 - 点云：`/LOC_BODY_POINTS`
 - 里程计：`/ODOM`
@@ -215,7 +215,7 @@
 
 构造函数在：
 
-- `src/passable_area/src/interfaces/ros/nodes/passable_area_node.cpp`
+- `src/passable_area/src/interfaces/ros/passable_area_node.cpp`
 
 初始化顺序大致是：
 
@@ -1114,7 +1114,7 @@ vertical_span > max_step_up * 0.75
 
 1. `src/passable_area/docs/algorithm_scheme.md`
 2. `src/passable_area/src/main/passable_area_node_main.cpp`
-3. `src/passable_area/src/interfaces/ros/nodes/passable_area_node.cpp`
+3. `src/passable_area/src/interfaces/ros/passable_area_node.cpp`
 4. `src/passable_area/src/core/processor.cpp`
 
 第一轮的目标不是看细节，而是回答这几个问题：
@@ -1172,8 +1172,8 @@ vertical_span > max_step_up * 0.75
 最后再看：
 
 1. `src/interfaces/ros/converters/output_converter.cpp`
-2. `src/interfaces/ros/publishers/result_publishers.cpp`
-3. `src/interfaces/ros/publishers/debug_publishers.cpp`
+2. `src/interfaces/ros/runtime/result_publishers.cpp`
+3. `src/interfaces/ros/runtime/debug_publishers.cpp`
 
 这一步最容易发现“文档理解”和“实际发布行为”之间的偏差，尤其是坐标系。
 

@@ -1,4 +1,4 @@
-#include "passable_area/interfaces/ros/publishers/debug_publishers.hpp"
+#include "passable_area/interfaces/ros/runtime/debug_publishers.hpp"
 
 namespace passable_area::interfaces::ros {
 

@@ -1,4 +1,4 @@
-#include "passable_area/interfaces/ros/nodes/passable_area_node.hpp"
+#include "passable_area/interfaces/ros/passable_area_node.hpp"
 
 #include "passable_area/core/utils/math_utils.hpp"
 

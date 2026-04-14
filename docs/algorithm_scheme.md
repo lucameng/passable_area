@@ -130,7 +130,7 @@ Processor::update(const FrameInput&) -> FrameOutput
 配置来源：
 
 - `src/passable_area/config/sensors.yaml`
-- `src/passable_area/include/passable_area/interfaces/ros/params/ros_param_loader.hpp`
+- `src/passable_area/include/passable_area/interfaces/ros/ros_param_loader.hpp`
 
 这两路输入通过 `message_filters::Synchronizer<ExactTime>` 严格同步。
 
@@ -1087,8 +1087,8 @@ colcon test --packages-select passable_area --event-handlers console_direct+
 
 可用工具：
 
-- `benchmarks/core/benchmark_processor.cpp`
-- `benchmarks/interfaces/ros/e2e_benchmark.cpp`
+- `benchmarks/benchmark_processor.cpp`
+- `benchmarks/benchmark_ros_e2e.cpp`
 - `tools/offline_replay.cpp`
 
 典型用途：

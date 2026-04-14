@@ -1,4 +1,4 @@
-#include "passable_area/interfaces/ros/publishers/result_publishers.hpp"
+#include "passable_area/interfaces/ros/runtime/result_publishers.hpp"
 
 namespace passable_area::interfaces::ros {
 
