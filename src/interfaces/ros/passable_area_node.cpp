@@ -184,6 +184,11 @@ void PassableAreaNode::logTopicConfiguration() {
   logInfo("input_cloud_topic: %s", topic_config_.input_cloud_topic.c_str());
   logInfo("odom_topic: %s", topic_config_.odom_topic.c_str());
   logInfo("sync_queue_size: %d", topic_config_.sync_queue_size);
+  logInfo("map_frame: %s", config_.map_frame.c_str());
+  logInfo("base_gravity_frame: %s", config_.base_gravity_frame.c_str());
+  logInfo("body_frame: %s", config_.body_frame.c_str());
+  logInfo("publish_map_to_base_gravity_tf: %s",
+          config_.debug.publish_map_to_base_gravity_tf ? "true" : "false");
   logInfo("===== Output Topics =====");
   logInfo("terrain_state_topic: %s", topic_config_.terrain_state_topic.c_str());
   logInfo("terrain_cost_topic: %s", topic_config_.terrain_cost_topic.c_str());
@@ -237,6 +242,22 @@ void PassableAreaNode::onSynced(
                       "Odometry conversion failed");
       return;
     }
+    if (!cloud_msg->header.frame_id.empty() &&
+        cloud_msg->header.frame_id != config_.body_frame) {
+      logWarnThrottle(
+          5000, "body_frame_input_mismatch",
+          "PointCloud2 header.frame_id is '%s' but passable_area expects "
+          "body_frame='%s'",
+          cloud_msg->header.frame_id.c_str(), config_.body_frame.c_str());
+    }
+    if (!odom_msg->header.frame_id.empty() &&
+        odom_msg->header.frame_id != config_.map_frame) {
+      logWarnThrottle(
+          5000, "map_frame_input_mismatch",
+          "Odometry header.frame_id is '%s' but passable_area interprets this "
+          "pose in map semantics with map_frame='%s'",
+          odom_msg->header.frame_id.c_str(), config_.map_frame.c_str());
+    }
 
     passable_area::core::FrameInput input;
     input.stamp = rclcpp::Time(cloud_msg->header.stamp).nanoseconds();
@@ -256,7 +277,9 @@ void PassableAreaNode::onSynced(
     base_gravity_header.frame_id = config_.base_gravity_frame;
     result_publishers_.publish(output, base_gravity_header);
     debug_publishers_.publish(output, base_gravity_header);
-    publishBaseGravityTransform(pose, cloud_msg->header.stamp);
+    if (config_.debug.publish_map_to_base_gravity_tf) {
+      publishMapToBaseGravityTransform(pose, cloud_msg->header.stamp);
+    }
     status_code_manager_.markOutputSuccess();
 
     const double ms = std::chrono::duration<double, std::milli>(
@@ -272,12 +295,12 @@ void PassableAreaNode::onSynced(
   }
 }
 
-void PassableAreaNode::publishBaseGravityTransform(
+void PassableAreaNode::publishMapToBaseGravityTransform(
     const passable_area::core::Pose3D &base_pose_in_odom,
     const builtin_interfaces::msg::Time &stamp) {
   geometry_msgs::msg::TransformStamped transform;
   transform.header.stamp = stamp;
-  transform.header.frame_id = config_.odom_frame;
+  transform.header.frame_id = config_.map_frame;
   transform.child_frame_id = config_.base_gravity_frame;
   transform.transform.translation.x = base_pose_in_odom.position.x();
   transform.transform.translation.y = base_pose_in_odom.position.y();

@@ -28,12 +28,16 @@
 
 namespace passable_area::interfaces::ros {
 
+class PassableAreaNodeTestAccess;
+
 class PassableAreaNode : public rclcpp::Node {
 public:
   explicit PassableAreaNode(
       const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 private:
+  friend class PassableAreaNodeTestAccess;
+
   using SyncPolicy =
       message_filters::sync_policies::ExactTime<sensor_msgs::msg::PointCloud2,
                                                 nav_msgs::msg::Odometry>;
@@ -52,7 +56,7 @@ private:
   void logError(const char *format, ...);
   void logFatal(const char *format, ...);
   void logTopicConfiguration();
-  void publishBaseGravityTransform(
+  void publishMapToBaseGravityTransform(
       const passable_area::core::Pose3D &base_pose_in_odom,
       const builtin_interfaces::msg::Time &stamp);
 

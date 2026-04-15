@@ -28,7 +28,7 @@
 它的核心特征是：
 
 - 输入是严格时间同步的点云和里程计
-- 内部维护一个对齐 `odom` 的局部栅格地图
+- 内部维护一个对齐 `map` 的局部栅格地图
 - 先在地图上建立支撑面、上层结构、观测覆盖和障碍证据
 - 再输出三态通行性和通行代价
 - 最终发布时，把内部结果重表达成以机器人为中心的 `base_gravity` 栅格
@@ -78,10 +78,10 @@ Processor::update(const FrameInput&) -> FrameOutput
 
 - ROS 参数加载
 - `PointCloud2` / `Odometry` 转换
-- cloud + odom 的 `ExactTime` 严格同步
+- cloud + `/ODOM` 的 `ExactTime` 严格同步
 - watchdog 和 perf stats
 - 发布 `terrain_state` / `terrain_cost` / `grid_map` / debug 点云 / `TerrainObservability`
-- 发布 `odom -> base_gravity` TF
+- 可选发布 `map -> base_gravity` TF
 
 ### 3.3 运行时入口
 
@@ -154,7 +154,7 @@ Processor::update(const FrameInput&) -> FrameOutput
 
 TF：
 
-- `odom_frame -> base_gravity_frame`
+- `map_frame -> base_gravity_frame`，默认关闭
 
 ### 5.3 `terrain_state` 语义
 
@@ -196,10 +196,10 @@ TF：
 当前实现默认依赖以下前提：
 
 - 输入点云在 `body_frame`，默认 `base_link`
-- 里程计姿态可用于 `base_link -> odom` 的完整 6DoF 变换
-- `odom` 足够连续，适合作为局部地图累积系
-- `odom` 在高度语义上可作为重力参考
-- 输入 cloud 和 odom 时间严格同步
+- `/ODOM` 提供的姿态消息当前以 `map` 作为 `header.frame_id`
+- `map` 足够连续，适合作为局部地图累积系
+- `map` 在高度语义上可作为重力参考
+- 输入 cloud 和 `/ODOM` 时间严格同步
 
 ---
 
@@ -208,7 +208,7 @@ TF：
 当前系统里最重要的三个坐标系是：
 
 - `base_link`
-- `odom`
+- `map`
 - `base_gravity`
 
 ### 6.1 `base_link`
@@ -223,12 +223,12 @@ TF：
 - 原始观测
 - 观测性与扇区语义分析
 
-### 6.2 `odom`
+### 6.2 `map`
 
 定义：
 
-- 外部 `/ODOM` 提供的局部连续父坐标系
-- 当前实现把它当作内部建图和跨帧累积坐标系
+- 外部 `/ODOM` 提供的实际父坐标系，当前系统里它的 `header.frame_id` 是 `map`
+- 当前实现把这套 `map` 语义当作内部建图和跨帧累积坐标系
 
 用途：
 
@@ -236,6 +236,11 @@ TF：
 - `odom_samples`
 - `LocalTerrainMap`
 - 各种内部地图层
+
+说明：
+
+- `cloud_in_odom` / `odom_samples` / `base_pose_in_odom` 仍是历史字段名
+- 本次修正后，这些字段的数值语义统一按 `map` 理解
 
 ### 6.3 `base_gravity`
 
@@ -255,37 +260,37 @@ TF：
 
 当前代码里：
 
-- **内部主处理在 `odom` 中进行**
+- **内部主处理在 `map` 中进行**
 - **对外发布的 `terrain_state` / `terrain_cost` / `grid_map` 会重采样成 `base_gravity` 机器人中心栅格**
 
 这点来自：
 
 - `PassableAreaNode::onSynced()` 向发布器传入的是 `base_gravity_header`
-- `OutputConverter::toMapOutputs()` 显式执行了从内部 `odom` 地图到 robot-centric `base_gravity` 栅格的重采样
+- `OutputConverter::toMapOutputs()` 显式执行了从内部 `map` 地图到 robot-centric `base_gravity` 栅格的重采样
 
 因此要区分：
 
-- 内部地图语义：`odom`
+- 内部地图语义：`map`
 - 最终发布语义：`base_gravity`
 
 ### 6.5 变换关系
 
-#### `base_link -> odom`
+#### `base_link -> map`
 
 在 `FramePreprocessor` 中完成：
 
-`p_odom = R(odom<-base) * p_base + t(odom<-base)`
+`p_map = R(map<-base) * p_base + t(map<-base)`
 
 来源：
 
-- 位置：`base_pose_in_odom.position`
-- 姿态：`base_pose_in_odom.orientation`
+- 位置：`base_pose_in_odom.position`（历史字段名，语义已是 `map`）
+- 姿态：`base_pose_in_odom.orientation`（历史字段名，语义已是 `map`）
 
-#### `odom -> base_gravity`
+#### `map -> base_gravity`
 
 用于调试点云和输出重表达：
 
-1. 减去机器人在 `odom` 下的位置
+1. 减去机器人在 `map` 下的位置
 2. 只保留 yaw 旋转
 3. 不保留 roll / pitch
 
@@ -298,7 +303,7 @@ TF：
 
 因为 `base_gravity` 是 robot-centric 坐标系，点会随着机器人运动而改变坐标，不能稳定地做跨帧地图累计。
 
-内部主处理使用 `odom` 的原因是：
+内部主处理使用 `map` 的原因是：
 
 - 同一环境位置在连续帧中仍然落在稳定栅格
 - support / obstacle / coverage 可以跨帧累积
@@ -877,16 +882,16 @@ obstacle 更新：
 
 ### 11.4 `base_gravity` TF
 
-当前节点会发布：
+当前节点在参数打开时会发布：
 
-- `odom_frame -> base_gravity_frame`
+- `map_frame -> base_gravity_frame`
 
 定义：
 
 - 平移直接使用当前 `base_pose_in_odom.position`
 - 旋转只保留 yaw
 
-这保证 RViz 在 `odom` 固定系下也能正确显示围绕机器人中心的 debug 点云和地图。
+这保证 RViz 在 `map` 固定系下也能正确显示围绕机器人中心的 debug 点云和地图。
 
 ---
 
@@ -946,9 +951,10 @@ obstacle 更新：
 
 ### 12.6 坐标系参数
 
-- `odom_frame`
+- `map_frame`
 - `base_gravity_frame`
 - `body_frame`
+- `debug.publish_map_to_base_gravity_tf`
 
 ### 12.7 预处理参数
 
@@ -1045,7 +1051,7 @@ obstacle 更新：
 
 - `support_height`、`support_anchor`、`support_ref`、`effective_support_ref` 不要混淆
 - `vertical_span` 只是 suspicious trigger，不是障碍最终判定
-- 内部地图是 `odom`，对外发布结果是 `base_gravity`
+- 内部地图是 `map`，对外发布结果是 `base_gravity`
 - 前端条件耦合很强，改一个阈值可能连带影响楼梯解释和假障碍抑制
 
 ---
@@ -1117,7 +1123,7 @@ ros2 topic info /terrain_debug/base_gravity_cloud
 3. TF 是否正确
 
 ```bash
-ros2 run tf2_ros tf2_echo odom base_gravity
+ros2 run tf2_ros tf2_echo map base_gravity
 ```
 
 4. debug frame 是否正确
@@ -1172,15 +1178,16 @@ source install/setup.bash
 - `/terrain_cost`
 - `/terrain_debug/grid_map`
 
-### 17.2 看 `odom` 下的相对关系
+### 17.2 看 `map` 下的相对关系
 
 设置：
 
-- `Fixed Frame = odom`
+- `Fixed Frame = map`
 
 前提：
 
-- 节点已发布 `odom -> base_gravity` TF
+- 节点已打开 `debug.publish_map_to_base_gravity_tf`
+- 节点已发布 `map -> base_gravity` TF
 
 适合观察：
 
@@ -1204,7 +1211,7 @@ source install/setup.bash
 - 为什么 `vertical_span` 只能做 suspicious trigger
 - 为什么需要 `effective_support_ref`
 - 为什么 `UNKNOWN` 的优先级这么高
-- 为什么内部在 `odom` 建图，但最终发布为 `base_gravity` 机器人中心地图
+- 为什么内部在 `map` 建图，但最终发布为 `base_gravity` 机器人中心地图
 
 如果后续要改算法行为，最需要确认的三个问题是：
 

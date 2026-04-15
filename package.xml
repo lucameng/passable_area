@@ -46,6 +46,8 @@
   <exec_depend>grid_map_ros</exec_depend>
   <exec_depend>log4cplus</exec_depend>
 
+  <test_depend>tf2_msgs</test_depend>
+
   <member_of_group>rosidl_interface_packages</member_of_group>
 
   <export>

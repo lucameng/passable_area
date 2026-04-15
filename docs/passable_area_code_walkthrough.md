@@ -7,7 +7,7 @@
 它更像是一个**高频、局部、带短时记忆的地形可通行判定器**：
 
 - 输入是一帧严格同步的 `PointCloud2` 和 `Odometry`
-- 内部在 `odom` 坐标系里维护一个随机器人平移的局部栅格地图
+- 内部在 `map` 坐标系里维护一个随机器人平移的局部栅格地图
 - 每一帧会尝试从点云里恢复“支撑面 / 上方结构 / 可观测性 / 障碍证据”
 - 再把每个栅格判成三态：
   - `PASSABLE`
@@ -71,11 +71,11 @@
 - 保留机器人完整姿态
 - 主要用于本帧观测性判断和“从机器人视角看哪个方向缺点”
 
-#### `odom`
+#### `map`
 
-- 外部里程计提供的局部连续坐标系
+- 外部 `/ODOM` 实际提供的局部连续坐标系；当前系统里其 `header.frame_id` 是 `map`
 - 用于内部局部地图、跨帧累积、栅格索引
-- `FramePreprocessor` 会把点从 `base_link` 变换到 `odom`
+- `FramePreprocessor` 会把点从 `base_link` 变换到这套 `map` 语义
 
 #### `base_gravity`
 
@@ -85,7 +85,14 @@
 
 这里有一个非常重要的点：
 
-**内部算法主处理在 `odom` 中进行，但公开发布出来的地图结果会被重采样成 `base_gravity` 机器人中心栅格。**
+**内部算法主处理在 `map` 中进行，但公开发布出来的地图结果会被重采样成 `base_gravity` 机器人中心栅格。**
+
+当前代码里仍保留一些历史字段名：
+- `base_pose_in_odom`
+- `cloud_in_odom`
+- `odom_samples`
+
+这些符号还没有在本次改动里全量重命名，但其数值语义已经统一按 `map` 理解。
 
 这个点和 `algorithm_scheme.md` 里的部分表述并不完全一致，后面会专门展开。
 
@@ -136,11 +143,11 @@
 - `unknown_mask`：当前 `UNKNOWN` 栅格的点表达
 - `observability`：每个扇区的观测状态
 
-另外节点还会发布一个 TF：
+另外节点在参数打开时会发布一个 TF：
 
-- `odom -> base_gravity`
+- `map -> base_gravity`
 
-发布逻辑在 `PassableAreaNode::publishBaseGravityTransform()`。
+发布逻辑在 `PassableAreaNode::publishMapToBaseGravityTransform()`。
 
 ---
 
@@ -824,12 +831,12 @@ vertical_span > max_step_up * 0.75
 
 1. 以 `FrameOutput.base_pose_in_odom` 为当前机器人位姿
 2. 构造一个以机器人为中心、朝向跟随 yaw 的 `base_gravity` 栅格
-3. 对这个机器人中心栅格的每个 cell，反查内部 `odom` 地图对应的 source cell
+3. 对这个机器人中心栅格的每个 cell，反查内部 `map` 地图对应的 source cell
 4. 重采样 `passability / traversal_cost / 各种 debug layer`
 
 因此：
 
-- 内部地图是 `odom` 语义
+- 内部地图是 `map` 语义
 - 对外 `OccupancyGrid` / `GridMap` 是 `base_gravity` 语义
 
 ### 6.2 这和 `algorithm_scheme.md` 的差异
@@ -840,7 +847,7 @@ vertical_span > max_step_up * 0.75
 - `terrain_cost`
 - `grid_map`
 
-仍然直接在 `odom` 下发布。
+仍然直接在内部连续地图坐标系下发布。
 
 **实际代码不是这样。**
 
@@ -850,9 +857,9 @@ vertical_span > max_step_up * 0.75
 
 所以如果你在 RViz 里看结果，应该按下面理解：
 
-- 内部计算和累积：`odom`
+- 内部计算和累积：`map`
 - 对外地图表达：`base_gravity`
-- TF：`odom -> base_gravity`
+- TF：参数打开时发布 `map -> base_gravity`
 
 ### 6.3 `GridMap` 里有哪些 layer
 
@@ -1289,12 +1296,12 @@ vertical_span > max_step_up * 0.75
 
 这是最重要的一条差异。
 
-`algorithm_scheme.md` 对内部 `odom` 地图描述是对的，但如果读者顺着文档以为发布的 `terrain_state / terrain_cost / grid_map` 还是原始 `odom` 栅格，那会和实际代码不符。
+`algorithm_scheme.md` 对内部连续地图的描述是对的，但如果读者顺着文档以为发布的 `terrain_state / terrain_cost / grid_map` 还是原始 `map` 栅格，那会和实际代码不符。
 
 实际代码里：
 
 - `PassableAreaNode::onSynced()` 发布时传的是 `base_gravity_header`
-- `OutputConverter` 会做 `odom -> base_gravity` 的重采样
+- `OutputConverter` 会做 `map -> base_gravity` 的重采样
 
 所以这部分必须以代码为准。
 

@@ -1,6 +1,33 @@
 #include "passable_area/interfaces/ros/ros_param_loader.hpp"
 
+#include <optional>
+
 namespace passable_area::interfaces::ros {
+namespace {
+
+std::optional<std::string>
+FindStringParameterOverride(const rclcpp::Node &node, const std::string &name) {
+  for (const auto &parameter : node.get_node_options().parameter_overrides()) {
+    if (parameter.get_name() == name &&
+        parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
+      return parameter.as_string();
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<bool> FindBoolParameterOverride(const rclcpp::Node &node,
+                                              const std::string &name) {
+  for (const auto &parameter : node.get_node_options().parameter_overrides()) {
+    if (parameter.get_name() == name &&
+        parameter.get_type() == rclcpp::ParameterType::PARAMETER_BOOL) {
+      return parameter.as_bool();
+    }
+  }
+  return std::nullopt;
+}
+
+} // namespace
 
 RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
   RosNodeParams params;
@@ -94,7 +121,15 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       node.declare_parameter("preprocess.crop_to_map.xy_margin",
                              config.preprocess.crop_to_map.xy_margin);
 
-  config.odom_frame = node.declare_parameter("odom_frame", config.odom_frame);
+  config.map_frame = node.declare_parameter("map_frame", config.map_frame);
+  if (const auto legacy_odom_frame =
+          FindStringParameterOverride(node, "odom_frame");
+      legacy_odom_frame && !FindStringParameterOverride(node, "map_frame")) {
+    config.map_frame = *legacy_odom_frame;
+    RCLCPP_WARN(node.get_logger(),
+                "Parameter 'odom_frame' is deprecated and interpreted as "
+                "'map_frame'. Update your config to use 'map_frame'.");
+  }
   config.base_gravity_frame =
       node.declare_parameter("base_gravity_frame", config.base_gravity_frame);
   config.body_frame = node.declare_parameter("body_frame", config.body_frame);
@@ -107,6 +142,19 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
                              config.debug.publish_base_gravity_cloud);
   config.debug.publish_observability = node.declare_parameter(
       "debug.publish_observability", config.debug.publish_observability);
+  config.debug.publish_map_to_base_gravity_tf =
+      node.declare_parameter("debug.publish_map_to_base_gravity_tf",
+                             config.debug.publish_map_to_base_gravity_tf);
+  if (const auto legacy_publish_tf =
+          FindBoolParameterOverride(node, "publish_map_to_base_gravity_tf");
+      legacy_publish_tf &&
+      !FindBoolParameterOverride(node, "debug.publish_map_to_base_gravity_tf")) {
+    config.debug.publish_map_to_base_gravity_tf = *legacy_publish_tf;
+    RCLCPP_WARN(node.get_logger(),
+                "Parameter 'publish_map_to_base_gravity_tf' is deprecated and "
+                "interpreted as 'debug.publish_map_to_base_gravity_tf'. "
+                "Update your config to use 'debug.publish_map_to_base_gravity_tf'.");
+  }
   topics.input_cloud_topic =
       node.declare_parameter("input_cloud_topic", topics.input_cloud_topic);
   topics.odom_topic = node.declare_parameter("odom_topic", topics.odom_topic);

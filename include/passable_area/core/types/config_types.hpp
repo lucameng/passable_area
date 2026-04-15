@@ -72,6 +72,7 @@ struct DebugConfig {
   bool publish_points = true;
   bool publish_base_gravity_cloud = false;
   bool publish_observability = true;
+  bool publish_map_to_base_gravity_tf = false;
 };
 
 struct Config {
@@ -84,7 +85,7 @@ struct Config {
   float obstacle_points_min_evidence = 0.4f;
   float obstacle_points_min_height = 0.20f;
   float obstacle_points_max_height_in_base_link = 0.20f;
-  std::string odom_frame = "odom";
+  std::string map_frame = "map";
   std::string base_gravity_frame = "base_gravity";
   std::string body_frame = "base_link";
 };

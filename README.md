@@ -8,7 +8,7 @@
   - `/ODOM` (`nav_msgs/msg/Odometry`)
 - The preprocessor now produces two explicit views from the synchronized input cloud:
   - `cloud_in_base`: body-centric view for observability and sector semantics after body-box noise removal and local crop
-  - `cloud_in_odom`: internal local-map view for mapping, features, and traversability
+  - `cloud_in_odom`: historical field name for the internal local-map view; its numeric parent-frame semantics are now `map`
 - Outputs are:
   - `/terrain_state` (`nav_msgs/msg/OccupancyGrid`)
   - `/terrain_cost` (`nav_msgs/msg/OccupancyGrid`)
@@ -44,17 +44,24 @@ The current implementation already supports:
 `FrameObservabilityEstimator` only consumes `cloud_in_base`. It derives front/rear coverage and dropout semantics directly from body-frame sector coverage.
 Rear-sector conservatism is now driven only by `rear_dropout / MissingByDropout`; there is no fixed rear blind sector.
 
-`PolarFrontend` keeps body-centric observability semantics separate from odom-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use odom-view samples.
+`PolarFrontend` keeps body-centric observability semantics separate from map-centric map projection: sector logic is derived from base-view samples, while candidate aggregation and map indexing use the internal map-view samples.
 Obstacle formation is additionally guarded by local structure: a single-cell vertical span only marks the cell as suspicious, and the cell is promoted to an obstacle only when its fixed 3x3 neighborhood contains enough upper-support cells.
 For layered below-robot cells, `PolarFrontend` may temporarily lift a frontend-local `effective_support_ref` for the current cell explanation when the upper layer is better supported by neighboring anchored support than the lower layer; this does not rewrite map `support_height` and does not participate in ascending stair-trend counting.
 
 Frame semantics are intentionally split:
-- `odom_frame`: internal local mapping frame used by map indexing and all core terrain reasoning
+- `map_frame`: external parent frame used by synchronized pose input, TF parent naming, and all documented local-map semantics
 - `base_gravity_frame`: robot-centric gravity frame used by debug point clouds; origin is the current robot pose, roll/pitch are removed, yaw is preserved
+
+Internal historical names are intentionally not fully renamed in this patch:
+- `base_pose_in_odom`
+- `cloud_in_odom`
+- `odom_samples`
+
+Those identifiers still carry `*_in_odom` suffixes inside `core`, but their numeric parent-frame semantics now match `map_frame`.
 
 Published map semantics are intentionally split from internal map semantics:
 - `grid_map`, `terrain_state`, and `terrain_cost` are published as robot-centric `base_gravity` views
-- internal map storage and all core outputs remain in `odom`
+- internal map storage and all core outputs remain in the continuous local `map` frame
 
 Preprocessing semantics are intentionally split as well:
 - `preprocess.body_filter.*` is interpreted in `base_link`
@@ -67,7 +74,7 @@ Current debug point semantics:
 - `/terrain_obstacle_points`: real input samples that land in obstacle cells whose `obstacle_evidence` is already high enough and whose height is at least `obstacle_points_min_height` relative to the cell support reference, not as an absolute z threshold, expressed in `base_gravity_frame`
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
 - these point outputs are intended to align directly with the robot-centric `grid_map`, `terrain_state`, and `terrain_cost` views in RViz
-- `TerrainObservability.odom_point_count`: number of samples in the internal `cloud_in_odom` mapping view
+- `TerrainObservability.odom_point_count`: historical field name; counts samples in the internal map-view cloud (`cloud_in_odom`)
 - `/terrain_debug/observability`: non-geometric debug summary that still uses the same `base_gravity` debug header context
 
 ## Layout
@@ -137,6 +144,7 @@ Runtime logging:
 Relevant debug controls:
 - `debug.publish_base_gravity_cloud`: enable publishing the full preprocessed algorithm cloud in `base_gravity_frame`
 - `output.base_gravity_cloud_topic`: topic name for that cloud
+- `debug.publish_map_to_base_gravity_tf`: whether to publish `map_frame -> base_gravity_frame`; default `false`
 
 Relevant preprocessing controls:
 - `preprocess.body_filter.*`: reject points inside a configured `base_link` box, intended for body-interior noise

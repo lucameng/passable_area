@@ -30,6 +30,8 @@ enum class SupportAnchorAuthority : uint8_t {
 
 struct FrameInput {
   Timestamp stamp = 0;
+  // Historical field name. The numeric pose semantics now follow the external
+  // map frame even though core code still uses the legacy *_in_odom suffix.
   Pose3D base_pose_in_odom;
   PointCloud input_cloud_in_base;
   bool processing_enabled = true;
@@ -37,13 +39,16 @@ struct FrameInput {
 
 struct OdomPointSample {
   Point3f point_in_base;
+  // Historical field name. The numeric coordinates now live in map semantics.
   Point3f point_in_odom;
 };
 
 struct ProcessedFrame {
   Timestamp stamp = 0;
+  // Historical field name retained to avoid broad algorithm churn in this pass.
   Pose3D base_pose_in_odom;
   PointCloud cloud_in_base;
+  // Historical field names retained; these points are interpreted in map.
   PointCloud cloud_in_odom;
   std::vector<OdomPointSample> odom_samples;
   bool processing_enabled = true;
@@ -77,7 +82,9 @@ inline CellDebugPoint MakeCellDebugPointWithoutSource(const Point3f &point) {
 
 struct FrameOutput {
   Timestamp stamp = 0;
-  // Publish-context only. Internal map semantics remain defined by origin/resolution/layers in odom.
+  // Publish-context only. Internal map semantics remain defined by
+  // origin/resolution/layers in map; the field keeps its historical name to
+  // avoid broad internal renames in this pass.
   Pose3D base_pose_in_odom;
   int rows = 0;
   int cols = 0;

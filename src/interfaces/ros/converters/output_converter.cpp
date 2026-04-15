@@ -50,7 +50,7 @@ Eigen::Vector2f CellCenter(const RobotCentricGeometry &geometry, int row,
           (static_cast<float>(row) + 0.5f) * geometry.resolution);
 }
 
-bool OdomCellIndexForBaseGravityCell(
+bool MapCellIndexForBaseGravityCell(
     const passable_area::core::FrameOutput &output,
     const RobotCentricGeometry &geometry, int row, int col, int &source_index) {
   const Eigen::Vector2f point_in_base_gravity = CellCenter(geometry, row, col);
@@ -58,16 +58,18 @@ bool OdomCellIndexForBaseGravityCell(
       output.base_pose_in_odom.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
-  const float odom_x = output.base_pose_in_odom.position.x() +
-                       cos_yaw * point_in_base_gravity.x() -
-                       sin_yaw * point_in_base_gravity.y();
-  const float odom_y = output.base_pose_in_odom.position.y() +
-                       sin_yaw * point_in_base_gravity.x() +
-                       cos_yaw * point_in_base_gravity.y();
+  // output.base_pose_in_odom keeps a historical name; its numeric parent-frame
+  // semantics follow map after the map-frame cleanup.
+  const float map_x = output.base_pose_in_odom.position.x() +
+                      cos_yaw * point_in_base_gravity.x() -
+                      sin_yaw * point_in_base_gravity.y();
+  const float map_y = output.base_pose_in_odom.position.y() +
+                      sin_yaw * point_in_base_gravity.x() +
+                      cos_yaw * point_in_base_gravity.y();
   const int source_col = static_cast<int>(
-      std::floor((odom_x - output.origin.x()) / output.resolution));
+      std::floor((map_x - output.origin.x()) / output.resolution));
   const int source_row = static_cast<int>(
-      std::floor((odom_y - output.origin.y()) / output.resolution));
+      std::floor((map_y - output.origin.y()) / output.resolution));
   if (source_row < 0 || source_row >= output.rows || source_col < 0 ||
       source_col >= output.cols) {
     return false;
@@ -89,8 +91,8 @@ MakeResamplingPlan(const passable_area::core::FrameOutput &output) {
   for (int row = 0; row < plan.geometry.rows; ++row) {
     for (int col = 0; col < plan.geometry.cols; ++col) {
       const int target_index = row * plan.geometry.cols + col;
-      OdomCellIndexForBaseGravityCell(output, plan.geometry, row, col,
-                                      plan.source_indices[target_index]);
+      MapCellIndexForBaseGravityCell(output, plan.geometry, row, col,
+                                     plan.source_indices[target_index]);
 
       const auto position = CellCenter(plan.geometry, row, col);
       grid_map::Index index;

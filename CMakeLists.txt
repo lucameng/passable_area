@@ -39,6 +39,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
 set(msg_files
@@ -287,6 +288,58 @@ if(BUILD_TESTING)
       target_link_libraries(test_status_code_manager ${cpp_typesupport_target})
     else()
       rosidl_target_interfaces(test_status_code_manager
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
+  endif()
+
+  ament_add_gtest(test_ros_param_loader
+    test/interfaces/ros/test_ros_param_loader.cpp
+  )
+  if(TARGET test_ros_param_loader)
+    target_include_directories(test_ros_param_loader PUBLIC include)
+    target_link_libraries(test_ros_param_loader
+      passable_area_ros
+      passable_area_core
+      ${OpenCV_LIBS}
+    )
+    ament_target_dependencies(test_ros_param_loader
+      Eigen3
+      OpenCV
+      rclcpp
+      std_msgs
+    )
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_ros_param_loader ${cpp_typesupport_target})
+    else()
+      rosidl_target_interfaces(test_ros_param_loader
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
+  endif()
+
+  ament_add_gtest(test_passable_area_node_frames
+    test/interfaces/ros/test_passable_area_node_frames.cpp
+  )
+  if(TARGET test_passable_area_node_frames)
+    target_include_directories(test_passable_area_node_frames PUBLIC include)
+    target_link_libraries(test_passable_area_node_frames
+      passable_area_ros
+      passable_area_core
+      ${OpenCV_LIBS}
+    )
+    ament_target_dependencies(test_passable_area_node_frames
+      Eigen3
+      OpenCV
+      nav_msgs
+      pcl_conversions
+      rclcpp
+      sensor_msgs
+      std_msgs
+      tf2_msgs
+    )
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_passable_area_node_frames ${cpp_typesupport_target})
+    else()
+      rosidl_target_interfaces(test_passable_area_node_frames
         ${PROJECT_NAME} "rosidl_typesupport_cpp")
     endif()
   endif()
