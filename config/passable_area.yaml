@@ -18,6 +18,8 @@ passable_area:
     sector_count: 72
     min_points_per_sector: 12
     support_persistence_frames: 5
+    confirmed_facade_obstacle_evidence_gain_scale: 3.6
+    confirmed_facade_obstacle_min_evidence: 0.35
     obstacle_clear_observed_decay: 0.2
     obstacle_clear_partial_decay_scale: 0.35
     obstacle_height_clear_threshold: 0.25

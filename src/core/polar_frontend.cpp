@@ -63,27 +63,6 @@ struct FacadeEvidence {
   }
 };
 
-// 解决 wall-like 高跨度 cell 在 confirm 后证据涨得太慢的
-// case。做法不是改主链判定，而是在已经确认的 obstacle
-// 上按跨度/点数/邻域支撑数给一个增益。
-float ComputeWallLikeObstacleGainScale(const CellStats &stats,
-                                       float vertical_span,
-                                       float relative_upper_z,
-                                       int neighbor_upper_support_count) {
-  if (stats.count < 10 || vertical_span < 0.5f || relative_upper_z < 0.0f) {
-    return 1.0f;
-  }
-
-  const float count_bonus = std::clamp(
-      (static_cast<float>(stats.count) - 10.0f) * 0.02f, 0.0f, 0.55f);
-  const float span_bonus =
-      std::clamp((vertical_span - 0.5f) * 0.5f, 0.0f, 0.2f);
-  const float neighbor_bonus = std::clamp(
-      (static_cast<float>(neighbor_upper_support_count) - 2.0f) * 0.1f, 0.0f,
-      0.2f);
-  return 1.0f + count_bonus + span_bonus + neighbor_bonus;
-}
-
 // 解决代表角落在 -pi/pi 边界附近时扇区索引跳变的 case。
 // 做法是把角度统一规约到 [-pi, pi]，避免 observability 分桶不稳定。
 float NormalizeAngle(float angle) {
@@ -1212,16 +1191,19 @@ void EvaluateCandidates(
     output.explanation_decision[static_cast<size_t>(cell)] =
         static_cast<uint8_t>(keep_decision);
 
-    const float wall_like_gain_scale =
-        workspace.sub_support_leak_count == 0U
-            ? ComputeWallLikeObstacleGainScale(workspace.filtered_stats,
-                                               vertical_span, relative_upper_z,
-                                               support_count)
-            : 1.0f;
+    const int confirmed_facade_support_count_threshold =
+        std::max(config.geometry.min_neighbor_upper_support_cells + 1, 3);
+    const ObstacleCandidateSemantic semantic =
+        workspace.sub_support_leak_count == 0U &&
+                facade_evidence.lower_upper_coexisting &&
+                relative_upper_z >= 0.0f &&
+                support_count >= confirmed_facade_support_count_threshold
+            ? ObstacleCandidateSemantic::kConfirmedFacade
+            : ObstacleCandidateSemantic::kDefault;
     output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
     output.obstacle_candidates.push_back(ObstacleCandidate{
         cell, workspace.filtered_stats.max_z,
-        std::clamp(vertical_span, 0.0f, 1.0f), wall_like_gain_scale});
+        std::clamp(vertical_span, 0.0f, 1.0f), semantic});
   }
 }
 

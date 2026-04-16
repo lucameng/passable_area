@@ -13,6 +13,31 @@ void ClearObstacleLayer(TerrainLayers &layers, int cell) {
   layers.overhead_confidence[cell] = 0.0f;
 }
 
+float ObstacleEvidenceGainScaleForSemantic(const ObstacleCandidate &candidate,
+                                           const Config &config) {
+  switch (candidate.semantic) {
+  case ObstacleCandidateSemantic::kConfirmedFacade:
+    return std::max(
+        1.0f,
+        config.persistence.confirmed_facade_obstacle_evidence_gain_scale);
+  case ObstacleCandidateSemantic::kDefault:
+  default:
+    return 1.0f;
+  }
+}
+
+float ObstacleEvidenceForSemantic(const ObstacleCandidate &candidate,
+                                  const Config &config) {
+  switch (candidate.semantic) {
+  case ObstacleCandidateSemantic::kConfirmedFacade:
+    return std::max(candidate.evidence,
+                    config.persistence.confirmed_facade_obstacle_min_evidence);
+  case ObstacleCandidateSemantic::kDefault:
+  default:
+    return candidate.evidence;
+  }
+}
+
 } // namespace
 
 std::vector<int>
@@ -63,14 +88,17 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
 
   for (const auto &candidate : frontend_output.obstacle_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
-    const float evidence_gain = config_.persistence.obstacle_evidence_gain *
-                                std::max(1.0f, candidate.gain_scale);
+    const float evidence_gain =
+        config_.persistence.obstacle_evidence_gain *
+        ObstacleEvidenceGainScaleForSemantic(candidate, config_);
+    const float candidate_evidence =
+        ObstacleEvidenceForSemantic(candidate, config_);
     layers.overhead_height[candidate.cell] = candidate.z;
     layers.overhead_confidence[candidate.cell] = std::clamp(
         layers.overhead_confidence[candidate.cell] + evidence_gain, 0.0f, 1.0f);
     layers.obstacle_evidence[candidate.cell] =
         std::clamp(layers.obstacle_evidence[candidate.cell] +
-                       evidence_gain * candidate.evidence,
+                       evidence_gain * candidate_evidence,
                    0.0f, 1.0f);
     layers.coverage_confidence[candidate.cell] = std::max(
         layers.coverage_confidence[candidate.cell], sector.coverage_confidence);

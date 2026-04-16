@@ -8,6 +8,11 @@
 
 namespace passable_area::core {
 
+enum class ObstacleCandidateSemantic : uint8_t {
+  kDefault = 0U,
+  kConfirmedFacade = 1U,
+};
+
 struct SupportCandidate {
   int cell = -1;
   float z = 0.0f;
@@ -18,7 +23,7 @@ struct ObstacleCandidate {
   int cell = -1;
   float z = 0.0f;
   float evidence = 0.0f;
-  float gain_scale = 1.0f;
+  ObstacleCandidateSemantic semantic = ObstacleCandidateSemantic::kDefault;
 };
 
 struct AmbiguousCandidate {

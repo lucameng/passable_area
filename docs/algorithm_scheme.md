@@ -939,6 +939,8 @@ obstacle 更新：
 ### 12.4 持续性参数
 
 - `support_persistence_frames`
+- `confirmed_facade_obstacle_evidence_gain_scale`
+- `confirmed_facade_obstacle_min_evidence`
 - `obstacle_clear_observed_decay`
 - `obstacle_clear_partial_decay_scale`
 - `obstacle_height_clear_threshold`

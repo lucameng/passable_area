@@ -87,6 +87,14 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
   config.persistence.support_persistence_frames =
       node.declare_parameter("support_persistence_frames",
                              config.persistence.support_persistence_frames);
+  config.persistence.confirmed_facade_obstacle_evidence_gain_scale =
+      node.declare_parameter(
+          "confirmed_facade_obstacle_evidence_gain_scale",
+          config.persistence.confirmed_facade_obstacle_evidence_gain_scale);
+  config.persistence.confirmed_facade_obstacle_min_evidence =
+      node.declare_parameter(
+          "confirmed_facade_obstacle_min_evidence",
+          config.persistence.confirmed_facade_obstacle_min_evidence);
   config.persistence.obstacle_clear_observed_decay =
       node.declare_parameter("obstacle_clear_observed_decay",
                              config.persistence.obstacle_clear_observed_decay);
