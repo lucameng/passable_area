@@ -722,19 +722,67 @@ TEST(ProcessorTest,
 
   const auto frame = MakeProcessedFrame({
       {{0.25f, 0.25f, 0.00f}, {0.25f, 0.25f, 0.00f}},
+      {{0.25f, 0.25f, 0.02f}, {0.25f, 0.25f, 0.02f}},
       {{0.25f, 0.25f, 0.38f}, {0.25f, 0.25f, 0.38f}},
+      {{0.25f, 0.25f, 0.40f}, {0.25f, 0.25f, 0.40f}},
       {{0.45f, 0.25f, 0.00f}, {0.45f, 0.25f, 0.00f}},
+      {{0.45f, 0.25f, 0.02f}, {0.45f, 0.25f, 0.02f}},
       {{0.45f, 0.25f, 0.36f}, {0.45f, 0.25f, 0.36f}},
+      {{0.45f, 0.25f, 0.38f}, {0.45f, 0.25f, 0.38f}},
       {{0.25f, 0.45f, 0.00f}, {0.25f, 0.45f, 0.00f}},
+      {{0.25f, 0.45f, 0.02f}, {0.25f, 0.45f, 0.02f}},
       {{0.25f, 0.45f, 0.37f}, {0.25f, 0.45f, 0.37f}},
-      {{0.45f, 0.45f, 0.00f}, {0.45f, 0.45f, 0.00f}},
-      {{0.45f, 0.45f, 0.39f}, {0.45f, 0.45f, 0.39f}},
+      {{0.25f, 0.45f, 0.39f}, {0.25f, 0.45f, 0.39f}},
   });
 
   const auto output = frontend.run(frame, observability, map);
 
   int primary_cell = -1;
   ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  const auto it = std::find_if(
+      output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
+      [primary_cell](const auto &candidate) {
+        return candidate.cell == primary_cell;
+      });
+  ASSERT_NE(it, output.obstacle_candidates.end());
+  EXPECT_EQ(it->semantic,
+            passable_area::core::ObstacleCandidateSemantic::kConfirmedFacade);
+}
+
+TEST(ProcessorTest,
+     PolarFrontendMarksTwoNeighborFacadeCandidatesAsConfirmedFacade) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(
+      static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 0.00f}, {0.25f, 0.25f, 0.00f}},
+      {{0.25f, 0.25f, 0.02f}, {0.25f, 0.25f, 0.02f}},
+      {{0.25f, 0.25f, 0.35f}, {0.25f, 0.25f, 0.35f}},
+      {{0.25f, 0.25f, 0.37f}, {0.25f, 0.25f, 0.37f}},
+      {{0.45f, 0.25f, 0.00f}, {0.45f, 0.25f, 0.00f}},
+      {{0.45f, 0.25f, 0.02f}, {0.45f, 0.25f, 0.02f}},
+      {{0.45f, 0.25f, 0.34f}, {0.45f, 0.25f, 0.34f}},
+      {{0.45f, 0.25f, 0.36f}, {0.45f, 0.25f, 0.36f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  int primary_cell = -1;
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
+            2);
   const auto it = std::find_if(
       output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
       [primary_cell](const auto &candidate) {

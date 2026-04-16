@@ -1191,10 +1191,11 @@ void EvaluateCandidates(
     output.explanation_decision[static_cast<size_t>(cell)] =
         static_cast<uint8_t>(keep_decision);
 
+    const bool dense_facade_cell = workspace.filtered_stats.count >= 4;
     const int confirmed_facade_support_count_threshold =
-        std::max(config.geometry.min_neighbor_upper_support_cells + 1, 3);
+        std::max(config.geometry.min_neighbor_upper_support_cells, 2);
     const ObstacleCandidateSemantic semantic =
-        workspace.sub_support_leak_count == 0U &&
+        dense_facade_cell && workspace.sub_support_leak_count == 0U &&
                 facade_evidence.lower_upper_coexisting &&
                 relative_upper_z >= 0.0f &&
                 support_count >= confirmed_facade_support_count_threshold
