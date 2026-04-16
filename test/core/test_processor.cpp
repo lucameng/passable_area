@@ -570,9 +570,9 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
   forward.base_pose_in_map.position = Eigen::Vector3f::Zero();
   forward.cloud_in_base = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
   forward.cloud_in_map = {{0.25f, 0.25f, 0.0f},
-                           {0.25f, 0.25f, 0.2f},
-                           {-0.25f, 0.25f, 0.0f},
-                           {-0.25f, 0.25f, 0.2f}};
+                          {0.25f, 0.25f, 0.2f},
+                          {-0.25f, 0.25f, 0.0f},
+                          {-0.25f, 0.25f, 0.2f}};
   forward.map_samples.push_back(passable_area::core::MapPointSample{
       {1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.0f}});
   forward.map_samples.push_back(passable_area::core::MapPointSample{
@@ -739,11 +739,11 @@ TEST(ProcessorTest,
 
   int primary_cell = -1;
   ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
-  const auto it = std::find_if(
-      output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
-      [primary_cell](const auto &candidate) {
-        return candidate.cell == primary_cell;
-      });
+  const auto it = std::find_if(output.obstacle_candidates.begin(),
+                               output.obstacle_candidates.end(),
+                               [primary_cell](const auto &candidate) {
+                                 return candidate.cell == primary_cell;
+                               });
   ASSERT_NE(it, output.obstacle_candidates.end());
   EXPECT_EQ(it->semantic,
             passable_area::core::ObstacleCandidateSemantic::kConfirmedFacade);
@@ -781,16 +781,58 @@ TEST(ProcessorTest,
 
   int primary_cell = -1;
   ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
-            2);
-  const auto it = std::find_if(
-      output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
-      [primary_cell](const auto &candidate) {
-        return candidate.cell == primary_cell;
-      });
+  ASSERT_EQ(
+      output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
+      2);
+  const auto it = std::find_if(output.obstacle_candidates.begin(),
+                               output.obstacle_candidates.end(),
+                               [primary_cell](const auto &candidate) {
+                                 return candidate.cell == primary_cell;
+                               });
   ASSERT_NE(it, output.obstacle_candidates.end());
   EXPECT_EQ(it->semantic,
             passable_area::core::ObstacleCandidateSemantic::kConfirmedFacade);
+}
+
+TEST(ProcessorTest,
+     PolarFrontendKeepsSparseTwoNeighborFacadeCandidatesAsDefaultSemantic) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(
+      static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  const auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 0.00f}, {0.25f, 0.25f, 0.00f}},
+      {{0.25f, 0.25f, 0.35f}, {0.25f, 0.25f, 0.35f}},
+      {{0.45f, 0.25f, 0.00f}, {0.45f, 0.25f, 0.00f}},
+      {{0.45f, 0.25f, 0.34f}, {0.45f, 0.25f, 0.34f}},
+  });
+
+  const auto output = frontend.run(frame, observability, map);
+
+  int primary_cell = -1;
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_EQ(
+      output.neighbor_upper_support_count[static_cast<size_t>(primary_cell)],
+      2);
+  const auto it = std::find_if(output.obstacle_candidates.begin(),
+                               output.obstacle_candidates.end(),
+                               [primary_cell](const auto &candidate) {
+                                 return candidate.cell == primary_cell;
+                               });
+  ASSERT_NE(it, output.obstacle_candidates.end());
+  EXPECT_EQ(it->semantic,
+            passable_area::core::ObstacleCandidateSemantic::kDefault);
 }
 
 TEST(ProcessorTest,
@@ -1173,11 +1215,11 @@ TEST(
         return candidate.cell == primary_cell;
       });
   EXPECT_EQ(primary_cell_candidate_count, 1);
-  const auto it = std::find_if(
-      output.obstacle_candidates.begin(), output.obstacle_candidates.end(),
-      [primary_cell](const auto &candidate) {
-        return candidate.cell == primary_cell;
-      });
+  const auto it = std::find_if(output.obstacle_candidates.begin(),
+                               output.obstacle_candidates.end(),
+                               [primary_cell](const auto &candidate) {
+                                 return candidate.cell == primary_cell;
+                               });
   ASSERT_NE(it, output.obstacle_candidates.end());
   EXPECT_EQ(it->semantic,
             passable_area::core::ObstacleCandidateSemantic::kDefault);
@@ -1737,8 +1779,9 @@ TEST(ProcessorTest,
   EXPECT_EQ(primary_cell_candidate_count, 0);
 }
 
-TEST(ProcessorTest,
-     PolarFrontendRejectsBelowRobotStairMixFromObservationWithoutLeakExecution) {
+TEST(
+    ProcessorTest,
+    PolarFrontendRejectsBelowRobotStairMixFromObservationWithoutLeakExecution) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
   config.geometry.min_neighbor_upper_support_cells = 2;
@@ -2950,7 +2993,7 @@ TEST(ProcessorTest,
   config.map.resolution = 1.0f;
   config.observability.sector_count = 4;
   config.persistence.confirmed_facade_obstacle_evidence_gain_scale = 3.6f;
-  config.persistence.confirmed_facade_obstacle_min_evidence = 0.35f;
+  config.persistence.confirmed_facade_obstacle_min_evidence = 0.45f;
   config.persistence.obstacle_height_clear_threshold = 0.1f;
 
   LocalTerrainMap map(config);
@@ -2970,17 +3013,17 @@ TEST(ProcessorTest,
   const auto dirty = updater.update(frontend_output, observability, map);
 
   ASSERT_FALSE(dirty.empty());
-  EXPECT_NEAR(map.layers().obstacle_evidence[3],
-              config.persistence.obstacle_evidence_gain *
-                  config.persistence
-                      .confirmed_facade_obstacle_evidence_gain_scale *
-                  config.persistence.confirmed_facade_obstacle_min_evidence,
-              1e-5f);
-  EXPECT_NEAR(map.layers().overhead_confidence[3],
-              config.persistence.obstacle_evidence_gain *
-                  config.persistence
-                      .confirmed_facade_obstacle_evidence_gain_scale,
-              1e-5f);
+  EXPECT_NEAR(
+      map.layers().obstacle_evidence[3],
+      config.persistence.obstacle_evidence_gain *
+          config.persistence.confirmed_facade_obstacle_evidence_gain_scale *
+          config.persistence.confirmed_facade_obstacle_min_evidence,
+      1e-5f);
+  EXPECT_NEAR(
+      map.layers().overhead_confidence[3],
+      config.persistence.obstacle_evidence_gain *
+          config.persistence.confirmed_facade_obstacle_evidence_gain_scale,
+      1e-5f);
 }
 
 TEST(ProcessorTest,
@@ -2991,7 +3034,7 @@ TEST(ProcessorTest,
   config.map.resolution = 1.0f;
   config.observability.sector_count = 4;
   config.persistence.confirmed_facade_obstacle_evidence_gain_scale = 3.6f;
-  config.persistence.confirmed_facade_obstacle_min_evidence = 0.35f;
+  config.persistence.confirmed_facade_obstacle_min_evidence = 0.45f;
   config.persistence.obstacle_height_clear_threshold = 0.1f;
 
   LocalTerrainMap map(config);
