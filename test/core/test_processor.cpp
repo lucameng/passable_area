@@ -187,6 +187,60 @@ FrameInput MakeUnsupportedWallFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeFacadeStripFrame(float x, int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (float y : {-0.05f, 0.15f, 0.35f}) {
+    input.input_cloud_in_base.push_back({x, y, 0.0f});
+    input.input_cloud_in_base.push_back({x, y, 0.22f});
+    input.input_cloud_in_base.push_back({x, y, 0.42f});
+  }
+  return input;
+}
+
+FrameInput MakeSparseFacadeUpperSamplesFrame(float x, int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (float y : {-0.05f, 0.15f, 0.35f}) {
+    input.input_cloud_in_base.push_back({x, y, 0.42f});
+  }
+  return input;
+}
+
+FrameInput MakeAsymmetricFacadePairFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (float y : {-0.05f, 0.15f, 0.35f}) {
+    input.input_cloud_in_base.push_back({0.55f, y, 0.0f});
+    input.input_cloud_in_base.push_back({0.55f, y, 0.22f});
+    input.input_cloud_in_base.push_back({0.55f, y, 0.42f});
+    input.input_cloud_in_base.push_back({0.65f, y, 0.0f});
+    input.input_cloud_in_base.push_back({0.65f, y, 0.16f});
+    input.input_cloud_in_base.push_back({0.65f, y, 0.32f});
+  }
+  return input;
+}
+
+FrameInput MakeSparseFacadePairFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (float y : {-0.05f, 0.15f, 0.35f}) {
+    input.input_cloud_in_base.push_back({0.55f, y, 0.0f});
+    input.input_cloud_in_base.push_back({0.55f, y, 0.22f});
+    input.input_cloud_in_base.push_back({0.55f, y, 0.42f});
+    input.input_cloud_in_base.push_back({0.65f, y, 0.32f});
+  }
+  return input;
+}
+
 FrameInput MakePitchedObstacleColumnFrame(const Eigen::Quaternionf &orientation,
                                           float obstacle_height_in_base,
                                           int stamp = 1) {
@@ -3448,6 +3502,80 @@ TEST(ProcessorTest, WallWithoutGroundSupportStillPublishesObstaclePoints) {
     EXPECT_NEAR(point.point.y, 0.25f, 0.15f);
     EXPECT_GT(point.point.z, 0.35f);
   }
+}
+
+TEST(ProcessorTest,
+     ObstaclePointsPublishFromAdjacentConfirmedObstacleSourceCells) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 0.2f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 12;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.35f;
+  config.obstacle_points_min_height = 0.15f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeAsymmetricFacadePairFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeAsymmetricFacadePairFrame(100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeAsymmetricFacadePairFrame(200000001)).valid);
+  const auto output =
+      processor.update(MakeAsymmetricFacadePairFrame(300000001));
+  ASSERT_TRUE(output.valid);
+  ASSERT_FALSE(output.obstacle_points.empty());
+  const int strong_left_cell = CellIndex(output, 0.55f, 0.15f);
+  const int weak_right_cell = CellIndex(output, 0.65f, 0.15f);
+  ASSERT_GE(strong_left_cell, 0);
+  ASSERT_GE(weak_right_cell, 0);
+  ASSERT_GT(output.obstacle_evidence[strong_left_cell],
+            config.obstacle_points_min_evidence);
+  ASSERT_LT(output.obstacle_evidence[weak_right_cell],
+            config.obstacle_points_min_evidence);
+
+  bool found_adjacent_source_binding = false;
+  for (const auto &point : output.obstacle_points) {
+    if (point.point.x < 0.6f) {
+      continue;
+    }
+    const int sample_cell = CellIndex(output, point.point.x, point.point.y);
+    if (sample_cell != point.source_cell) {
+      found_adjacent_source_binding = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_adjacent_source_binding);
+}
+
+TEST(ProcessorTest,
+     ObstaclePointsRejectSparseNearbySamplesWithoutConfirmedObstacleStructure) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 0.2f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 12;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.35f;
+  config.obstacle_points_min_height = 0.15f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeSparseFacadePairFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeSparseFacadePairFrame(100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeSparseFacadePairFrame(200000001)).valid);
+  const auto output = processor.update(MakeSparseFacadePairFrame(300000001));
+  ASSERT_TRUE(output.valid);
+
+  bool found_sparse_right_publish = false;
+  for (const auto &point : output.obstacle_points) {
+    if (point.point.x > 0.6f) {
+      found_sparse_right_publish = true;
+      break;
+    }
+  }
+  EXPECT_FALSE(found_sparse_right_publish);
 }
 
 TEST(ProcessorTest, DynamicObstacleClearsAfterObservedGroundReturns) {

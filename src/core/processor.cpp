@@ -10,7 +10,7 @@ namespace passable_area::core {
 namespace {
 
 Point3f TransformMapPointToBaseGravity(const Point3f &point_in_map,
-                                        const Pose3D &base_pose_in_map) {
+                                       const Pose3D &base_pose_in_map) {
   const float yaw = YawFromQuaternion(base_pose_in_map.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
@@ -33,6 +33,94 @@ bool PassesObstaclePointPublishHeightGates(
              support_ref + config.obstacle_points_min_height &&
          sample.point_in_base.z <=
              config.obstacle_points_max_height_in_base_link;
+}
+
+float LookupObstacleSupportRef(
+    int cell, const passable_area::core::TerrainLayers &layers,
+    const std::unordered_map<int, float> &fallback_support_ref_by_cell) {
+  if (std::isfinite(layers.support_height[cell])) {
+    return layers.support_height[cell];
+  }
+  const auto it = fallback_support_ref_by_cell.find(cell);
+  return it != fallback_support_ref_by_cell.end()
+             ? it->second
+             : std::numeric_limits<float>::infinity();
+}
+
+bool IsCurrentFrameConfirmedObstacleSource(
+    int cell, const passable_area::core::FrontendOutput &frontend_output) {
+  return frontend_output.obstacle_candidate_cell[cell] != 0U &&
+         frontend_output.obstacle_local_triggered[cell] != 0U &&
+         frontend_output.obstacle_upper_patch_confirmed[cell] != 0U &&
+         frontend_output.obstacle_explanation_rejected[cell] == 0U;
+}
+
+int ResolveObstaclePointSourceCell(
+    int sample_cell, const passable_area::core::MapPointSample &sample,
+    const passable_area::core::LocalTerrainMap &map,
+    const passable_area::core::TerrainLayers &layers,
+    const passable_area::core::FrontendOutput &frontend_output,
+    const std::unordered_map<int, float> &fallback_support_ref_by_cell,
+    const passable_area::core::Config &config, float support_tolerance) {
+  const float direct_support_ref = LookupObstacleSupportRef(
+      sample_cell, layers, fallback_support_ref_by_cell);
+  if (layers.obstacle_evidence[sample_cell] >=
+          config.obstacle_points_min_evidence &&
+      PassesObstaclePointPublishHeightGates(sample, direct_support_ref,
+                                            config)) {
+    return sample_cell;
+  }
+
+  if (!IsCurrentFrameConfirmedObstacleSource(sample_cell, frontend_output)) {
+    return -1;
+  }
+
+  const int cols = map.cols();
+  const int rows = map.rows();
+  const int sample_row = sample_cell / cols;
+  const int sample_col = sample_cell % cols;
+  const float sample_support_ref = LookupObstacleSupportRef(
+      sample_cell, layers, fallback_support_ref_by_cell);
+
+  int best_cell = -1;
+  float best_evidence = -std::numeric_limits<float>::infinity();
+  for (int d_row = -1; d_row <= 1; ++d_row) {
+    const int neighbor_row = sample_row + d_row;
+    if (neighbor_row < 0 || neighbor_row >= rows) {
+      continue;
+    }
+    for (int d_col = -1; d_col <= 1; ++d_col) {
+      const int neighbor_col = sample_col + d_col;
+      if (neighbor_col < 0 || neighbor_col >= cols) {
+        continue;
+      }
+      const int neighbor_cell = neighbor_row * cols + neighbor_col;
+      if (neighbor_cell == sample_cell ||
+          layers.obstacle_evidence[neighbor_cell] <
+              config.obstacle_points_min_evidence) {
+        continue;
+      }
+
+      const float neighbor_support_ref = LookupObstacleSupportRef(
+          neighbor_cell, layers, fallback_support_ref_by_cell);
+      if (!PassesObstaclePointPublishHeightGates(sample, neighbor_support_ref,
+                                                 config)) {
+        continue;
+      }
+      if (std::isfinite(sample_support_ref) &&
+          std::isfinite(neighbor_support_ref) &&
+          !IsNear(sample_support_ref, neighbor_support_ref,
+                  support_tolerance)) {
+        continue;
+      }
+
+      if (layers.obstacle_evidence[neighbor_cell] > best_evidence) {
+        best_cell = neighbor_cell;
+        best_evidence = layers.obstacle_evidence[neighbor_cell];
+      }
+    }
+  }
+  return best_cell;
 }
 
 } // namespace
@@ -149,8 +237,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
 
   for (const auto &sample : frame.map_samples) {
     int cell = -1;
-    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y,
-                          cell)) {
+    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
     if (layers.obstacle_evidence[cell] < config_.obstacle_points_min_evidence ||
@@ -172,8 +259,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
     }
 
     int cell = -1;
-    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y,
-                          cell)) {
+    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
 
@@ -186,20 +272,14 @@ Processor::buildOutput(const ProcessedFrame &frame,
                              cell));
     }
 
-    float support_ref = layers.support_height[cell];
-    if (!std::isfinite(support_ref)) {
-      const auto it = fallback_support_ref_by_cell.find(cell);
-      support_ref = it != fallback_support_ref_by_cell.end()
-                        ? it->second
-                        : std::numeric_limits<float>::infinity();
-    }
-    if (layers.obstacle_evidence[cell] >=
-            config_.obstacle_points_min_evidence &&
-        PassesObstaclePointPublishHeightGates(sample, support_ref, config_)) {
+    const int source_cell = ResolveObstaclePointSourceCell(
+        cell, sample, map_, layers, frontend_output,
+        fallback_support_ref_by_cell, config_, support_tolerance);
+    if (source_cell >= 0) {
       output.obstacle_points.push_back(
           MakeCellDebugPoint(TransformMapPointToBaseGravity(
                                  sample.point_in_map, frame.base_pose_in_map),
-                             cell));
+                             source_cell));
     }
   }
 
@@ -212,7 +292,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
                           : 0.0f;
       output.unknown_points.push_back(MakeCellDebugPoint(
           TransformMapPointToBaseGravity(Point3f{xy.x(), xy.y(), z},
-                                          frame.base_pose_in_map),
+                                         frame.base_pose_in_map),
           cell));
     }
   }
