@@ -38,7 +38,7 @@ bool PassesObstaclePointPublishHeightGates(
 }
 
 passable_area::core::Point3f
-TransformOdomPointToBaseGravity(float x, float y, float z,
+TransformMapPointToBaseGravity(float x, float y, float z,
                                 const passable_area::core::Pose3D &pose) {
   const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
   const float cos_yaw = std::cos(yaw);
@@ -50,12 +50,12 @@ TransformOdomPointToBaseGravity(float x, float y, float z,
                                       z - pose.position.z()};
 }
 
-int CellIndex(const passable_area::core::FrameOutput &output, float odom_x,
-              float odom_y) {
+int CellIndex(const passable_area::core::FrameOutput &output, float map_x,
+              float map_y) {
   const int col = static_cast<int>(
-      std::floor((odom_x - output.origin.x()) / output.resolution));
+      std::floor((map_x - output.origin.x()) / output.resolution));
   const int row = static_cast<int>(
-      std::floor((odom_y - output.origin.y()) / output.resolution));
+      std::floor((map_y - output.origin.y()) / output.resolution));
   if (row < 0 || row >= output.rows || col < 0 || col >= output.cols) {
     return -1;
   }
@@ -96,17 +96,17 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     const passable_area::core::FrameOutput &output,
     const passable_area::core::ProcessedFrame &processed_frame) const {
   std::unordered_map<int, RoiSampleStats> sample_stats_by_cell;
-  sample_stats_by_cell.reserve(processed_frame.odom_samples.size() / 8U + 1U);
+  sample_stats_by_cell.reserve(processed_frame.map_samples.size() / 8U + 1U);
 
   int roi_sample_count = 0;
   int roi_obstacle_point_count = 0;
   std::unordered_set<int> roi_obstacle_point_source_cells;
   roi_obstacle_point_source_cells.reserve(output.obstacle_points.size());
 
-  for (const auto &sample : processed_frame.odom_samples) {
-    const auto point_in_base_gravity = TransformOdomPointToBaseGravity(
-        sample.point_in_odom.x, sample.point_in_odom.y, sample.point_in_odom.z,
-        output.base_pose_in_odom);
+  for (const auto &sample : processed_frame.map_samples) {
+    const auto point_in_base_gravity = TransformMapPointToBaseGravity(
+        sample.point_in_map.x, sample.point_in_map.y, sample.point_in_map.z,
+        output.base_pose_in_map);
     if (!IsInsideDetectionBox(analysis_config_.detection_box,
                               point_in_base_gravity.x,
                               point_in_base_gravity.y)) {
@@ -114,14 +114,14 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     }
     ++roi_sample_count;
     const int cell =
-        CellIndex(output, sample.point_in_odom.x, sample.point_in_odom.y);
+        CellIndex(output, sample.point_in_map.x, sample.point_in_map.y);
     if (cell < 0) {
       continue;
     }
     auto &stats = sample_stats_by_cell[cell];
     ++stats.sample_count;
-    stats.min_z = std::min(stats.min_z, sample.point_in_odom.z);
-    stats.max_z = std::max(stats.max_z, sample.point_in_odom.z);
+    stats.min_z = std::min(stats.min_z, sample.point_in_map.z);
+    stats.max_z = std::max(stats.max_z, sample.point_in_map.z);
     stats.min_relative_z =
         std::min(stats.min_relative_z, point_in_base_gravity.z);
     stats.max_relative_z =
@@ -167,13 +167,13 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
 
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
-      const float odom_x = output.origin.x() +
+      const float map_x = output.origin.x() +
                            (static_cast<float>(col) + 0.5f) * output.resolution;
-      const float odom_y = output.origin.y() +
+      const float map_y = output.origin.y() +
                            (static_cast<float>(row) + 0.5f) * output.resolution;
-      const auto point_in_base_gravity = TransformOdomPointToBaseGravity(
-          odom_x, odom_y, output.support_height[row * output.cols + col],
-          output.base_pose_in_odom);
+      const auto point_in_base_gravity = TransformMapPointToBaseGravity(
+          map_x, map_y, output.support_height[row * output.cols + col],
+          output.base_pose_in_map);
       if (!IsInsideDetectionBox(analysis_config_.detection_box,
                                 point_in_base_gravity.x,
                                 point_in_base_gravity.y)) {

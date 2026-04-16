@@ -95,8 +95,8 @@ passable_area::core::Config MakeConfig() {
 FrameInput MakeBaseFrame(int64_t stamp) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   return input;
 }
 
@@ -1266,7 +1266,7 @@ RunBagReplay(const std::string &bag_path,
     }
     FrameInput input;
     input.stamp = stamp;
-    input.base_pose_in_odom = pose;
+    input.base_pose_in_map = pose;
     input.input_cloud_in_base = std::move(cloud);
     input_point_count_samples.push_back(
         static_cast<double>(input.input_cloud_in_base.size()));
@@ -1463,7 +1463,7 @@ RunFalseObstacleReplay(const FalseObstacleReplayArgs &args) {
     }
     FrameInput input;
     input.stamp = stamp;
-    input.base_pose_in_odom = pose;
+    input.base_pose_in_map = pose;
     input.input_cloud_in_base = std::move(cloud);
     const auto output = processor.update(input);
     if (!output.valid) {
@@ -1590,7 +1590,7 @@ RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
     }
     FrameInput input;
     input.stamp = stamp;
-    input.base_pose_in_odom = pose;
+    input.base_pose_in_map = pose;
     input.input_cloud_in_base = cloud;
 
     ProcessedFrame processed_frame;
@@ -1634,9 +1634,9 @@ void PrintRoiFrameInspection(
   int roi_sample_count = 0;
   float roi_sample_min_z = std::numeric_limits<float>::infinity();
   float roi_sample_max_z = -std::numeric_limits<float>::infinity();
-  for (const auto &sample : processed_frame.odom_samples) {
-    const float dx = sample.point_in_odom.x - base_pose.position.x();
-    const float dy = sample.point_in_odom.y - base_pose.position.y();
+  for (const auto &sample : processed_frame.map_samples) {
+    const float dx = sample.point_in_map.x - base_pose.position.x();
+    const float dy = sample.point_in_map.y - base_pose.position.y();
     const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
     const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
     if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
@@ -1644,7 +1644,7 @@ void PrintRoiFrameInspection(
       continue;
     }
     ++roi_sample_count;
-    const float relative_z = sample.point_in_odom.z - base_pose.position.z();
+    const float relative_z = sample.point_in_map.z - base_pose.position.z();
     roi_sample_min_z = std::min(roi_sample_min_z, relative_z);
     roi_sample_max_z = std::max(roi_sample_max_z, relative_z);
   }
@@ -1672,19 +1672,19 @@ void PrintRoiFrameInspection(
   std::vector<float> roi_sample_max_z_by_cell(
       static_cast<size_t>(output.rows * output.cols),
       -std::numeric_limits<float>::infinity());
-  for (const auto &sample : processed_frame.odom_samples) {
+  for (const auto &sample : processed_frame.map_samples) {
     const float fx =
-        (sample.point_in_odom.x - output.origin.x()) / output.resolution;
+        (sample.point_in_map.x - output.origin.x()) / output.resolution;
     const float fy =
-        (sample.point_in_odom.y - output.origin.y()) / output.resolution;
+        (sample.point_in_map.y - output.origin.y()) / output.resolution;
     const int col = static_cast<int>(std::floor(fx));
     const int row = static_cast<int>(std::floor(fy));
     if (row < 0 || row >= output.rows || col < 0 || col >= output.cols) {
       continue;
     }
     const int cell = row * output.cols + col;
-    const float dx = sample.point_in_odom.x - base_pose.position.x();
-    const float dy = sample.point_in_odom.y - base_pose.position.y();
+    const float dx = sample.point_in_map.x - base_pose.position.x();
+    const float dy = sample.point_in_map.y - base_pose.position.y();
     const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
     const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
     if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
@@ -1694,19 +1694,19 @@ void PrintRoiFrameInspection(
     ++roi_sample_count_by_cell[static_cast<size_t>(cell)];
     roi_sample_min_z_by_cell[static_cast<size_t>(cell)] =
         std::min(roi_sample_min_z_by_cell[static_cast<size_t>(cell)],
-                 sample.point_in_odom.z);
+                 sample.point_in_map.z);
     roi_sample_max_z_by_cell[static_cast<size_t>(cell)] =
         std::max(roi_sample_max_z_by_cell[static_cast<size_t>(cell)],
-                 sample.point_in_odom.z);
+                 sample.point_in_map.z);
   }
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
-      const float odom_x = output.origin.x() +
+      const float map_x = output.origin.x() +
                            (static_cast<float>(col) + 0.5f) * output.resolution;
-      const float odom_y = output.origin.y() +
+      const float map_y = output.origin.y() +
                            (static_cast<float>(row) + 0.5f) * output.resolution;
-      const float dx = odom_x - base_pose.position.x();
-      const float dy = odom_y - base_pose.position.y();
+      const float dx = map_x - base_pose.position.x();
+      const float dy = map_y - base_pose.position.y();
       const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
       const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
       if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
@@ -1748,12 +1748,12 @@ void PrintRoiFrameInspection(
 
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
-      const float odom_x = output.origin.x() +
+      const float map_x = output.origin.x() +
                            (static_cast<float>(col) + 0.5f) * output.resolution;
-      const float odom_y = output.origin.y() +
+      const float map_y = output.origin.y() +
                            (static_cast<float>(row) + 0.5f) * output.resolution;
-      const float dx = odom_x - base_pose.position.x();
-      const float dy = odom_y - base_pose.position.y();
+      const float dx = map_x - base_pose.position.x();
+      const float dy = map_y - base_pose.position.y();
       const float base_gravity_x = cos_yaw * dx + sin_yaw * dy;
       const float base_gravity_y = -sin_yaw * dx + cos_yaw * dy;
       if (base_gravity_x < args.roi_x_min || base_gravity_x > args.roi_x_max ||
@@ -1763,7 +1763,7 @@ void PrintRoiFrameInspection(
       const int idx = row * output.cols + col;
       std::cout
           << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
-          << " odom_x=" << odom_x << " odom_y=" << odom_y << " sample_count="
+          << " map_x=" << map_x << " map_y=" << map_y << " sample_count="
           << roi_sample_count_by_cell[static_cast<size_t>(idx)]
           << " sample_min_z="
           << roi_sample_min_z_by_cell[static_cast<size_t>(idx)]
@@ -1900,7 +1900,7 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
     }
     FrameInput input;
     input.stamp = stamp;
-    input.base_pose_in_odom = pose;
+    input.base_pose_in_map = pose;
     input.input_cloud_in_base = std::move(cloud);
     passable_area::core::ProcessedFrame processed_frame;
     if (!preprocessor.process(input, processed_frame)) {

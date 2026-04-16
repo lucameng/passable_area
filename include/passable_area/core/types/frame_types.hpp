@@ -31,26 +31,26 @@ enum class SupportAnchorAuthority : uint8_t {
 struct FrameInput {
   Timestamp stamp = 0;
   // Historical field name. The numeric pose semantics now follow the external
-  // map frame even though core code still uses the legacy *_in_odom suffix.
-  Pose3D base_pose_in_odom;
+  // map frame even though core code still uses the legacy *_in_map suffix.
+  Pose3D base_pose_in_map;
   PointCloud input_cloud_in_base;
   bool processing_enabled = true;
 };
 
-struct OdomPointSample {
+struct MapPointSample {
   Point3f point_in_base;
   // Historical field name. The numeric coordinates now live in map semantics.
-  Point3f point_in_odom;
+  Point3f point_in_map;
 };
 
 struct ProcessedFrame {
   Timestamp stamp = 0;
   // Historical field name retained to avoid broad algorithm churn in this pass.
-  Pose3D base_pose_in_odom;
+  Pose3D base_pose_in_map;
   PointCloud cloud_in_base;
   // Historical field names retained; these points are interpreted in map.
-  PointCloud cloud_in_odom;
-  std::vector<OdomPointSample> odom_samples;
+  PointCloud cloud_in_map;
+  std::vector<MapPointSample> map_samples;
   bool processing_enabled = true;
 };
 
@@ -63,7 +63,7 @@ struct FrameObservability {
   bool frame_partial = false;
   bool rear_dropout = false;
   uint32_t base_point_count = 0;
-  uint32_t odom_point_count = 0;
+  uint32_t map_point_count = 0;
   std::vector<SectorObservability> sectors;
 };
 
@@ -85,13 +85,13 @@ struct FrameOutput {
   // Publish-context only. Internal map semantics remain defined by
   // origin/resolution/layers in map; the field keeps its historical name to
   // avoid broad internal renames in this pass.
-  Pose3D base_pose_in_odom;
+  Pose3D base_pose_in_map;
   int rows = 0;
   int cols = 0;
   float resolution = 0.1f;
   Eigen::Vector2f origin = Eigen::Vector2f::Zero();
   uint32_t base_point_count = 0;
-  uint32_t odom_point_count = 0;
+  uint32_t map_point_count = 0;
   std::vector<int8_t> passability;
   std::vector<int8_t> traversal_cost;
   std::vector<float> support_height;

@@ -116,11 +116,11 @@ void LocalTerrainMap::shiftLayers(int row_shift, int col_shift) {
              static_cast<uint16_t>(0));
 }
 
-void LocalTerrainMap::recenter(const Eigen::Vector2f &base_xy_in_odom) {
+void LocalTerrainMap::recenter(const Eigen::Vector2f &base_xy_in_map) {
   const float resolution = config_.map.resolution;
   const Eigen::Vector2f snapped_center(
-      std::round(base_xy_in_odom.x() / resolution) * resolution,
-      std::round(base_xy_in_odom.y() / resolution) * resolution);
+      std::round(base_xy_in_map.x() / resolution) * resolution,
+      std::round(base_xy_in_map.y() / resolution) * resolution);
 
   if (size() > 0) {
     const Eigen::Vector2f delta = snapped_center - center_;
@@ -134,7 +134,7 @@ void LocalTerrainMap::recenter(const Eigen::Vector2f &base_xy_in_odom) {
   origin_.y() = center_.y() - 0.5f * config_.map.width;
 }
 
-bool LocalTerrainMap::odomToIndex(float x, float y, int &index) const {
+bool LocalTerrainMap::mapToIndex(float x, float y, int &index) const {
   const int col =
       static_cast<int>(std::floor((x - origin_.x()) / config_.map.resolution));
   const int row =
@@ -146,7 +146,7 @@ bool LocalTerrainMap::odomToIndex(float x, float y, int &index) const {
   return true;
 }
 
-Eigen::Vector2f LocalTerrainMap::indexToOdom(int index) const {
+Eigen::Vector2f LocalTerrainMap::indexToMap(int index) const {
   const int row = index / cols_;
   const int col = index % cols_;
   return Eigen::Vector2f(

@@ -181,7 +181,7 @@ TF：
 - `bool rear_dropout`
 - `uint16 sector_count`
 - `uint32 base_point_count`
-- `uint32 odom_point_count`
+- `uint32 map_point_count`
 - `uint8[] sector_states`
 - `float32[] sector_coverage_confidence`
 
@@ -232,14 +232,14 @@ TF：
 
 用途：
 
-- `cloud_in_odom`
-- `odom_samples`
+- `cloud_in_map`
+- `map_samples`
 - `LocalTerrainMap`
 - 各种内部地图层
 
 说明：
 
-- `cloud_in_odom` / `odom_samples` / `base_pose_in_odom` 仍是历史字段名
+- `cloud_in_map` / `map_samples` / `base_pose_in_map` 仍是历史字段名
 - 本次修正后，这些字段的数值语义统一按 `map` 理解
 
 ### 6.3 `base_gravity`
@@ -283,8 +283,8 @@ TF：
 
 来源：
 
-- 位置：`base_pose_in_odom.position`（历史字段名，语义已是 `map`）
-- 姿态：`base_pose_in_odom.orientation`（历史字段名，语义已是 `map`）
+- 位置：`base_pose_in_map.position`（历史字段名，语义已是 `map`）
+- 姿态：`base_pose_in_map.orientation`（历史字段名，语义已是 `map`）
 
 #### `map -> base_gravity`
 
@@ -322,7 +322,7 @@ TF：
 关键字段：
 
 - `stamp`
-- `base_pose_in_odom`
+- `base_pose_in_map`
 - `input_cloud_in_base`
 - `processing_enabled`
 
@@ -335,15 +335,15 @@ TF：
 关键字段：
 
 - `stamp`
-- `base_pose_in_odom`
+- `base_pose_in_map`
 - `cloud_in_base`
-- `cloud_in_odom`
-- `odom_samples`
+- `cloud_in_map`
+- `map_samples`
 
 其中：
 
 - `cloud_in_base` 用于观测性分析
-- `cloud_in_odom` 和 `odom_samples` 用于建图与几何推理
+- `cloud_in_map` 和 `map_samples` 用于建图与几何推理
 
 ### 7.3 `FrameObservability`
 
@@ -352,7 +352,7 @@ TF：
 - `frame_partial`
 - `rear_dropout`
 - `base_point_count`
-- `odom_point_count`
+- `map_point_count`
 - `sectors`
 
 作用：
@@ -397,13 +397,13 @@ TF：
 
 作用：
 
-- 维护一个在 `odom` 中随机器人平移的局部二维栅格地图
+- 维护一个在 `map` 中随机器人平移的局部二维栅格地图
 
 关键接口：
 
 - `recenter()`
-- `odomToIndex()`
-- `indexToOdom()`
+- `mapToIndex()`
+- `indexToMap()`
 - `ageCells()`
 
 ### 7.6 `TerrainLayers`
@@ -448,7 +448,7 @@ TF：
 - 重置输出结构并复制位姿
 - 对输入点做有限值检查
 - 在 `base_link` 下按 `preprocess.body_filter.*` 剔除车体内部点
-- 用 `base_pose_in_odom` 把点从 `base_link` 变换到 `odom`
+- 用 `base_pose_in_map` 把点从 `base_link` 变换到 `map`
 - 按当前局部地图窗口裁剪
 - 用相对机器人高度窗口过滤 z
 - 按配置做体素降采样
@@ -456,17 +456,17 @@ TF：
 输出保留三份关键表达：
 
 - `cloud_in_base`
-- `cloud_in_odom`
-- `odom_samples`
+- `cloud_in_map`
+- `map_samples`
 
 实现特点：
 
 - `cloud_in_base` 保留给观测性分析
-- `cloud_in_odom` / `odom_samples` 保留给建图与前端解释
+- `cloud_in_map` / `map_samples` 保留给建图与前端解释
 - z 裁剪使用：
 
 ```cpp
-relative_z = point_in_odom.z - base_pose_in_odom.position.z()
+relative_z = point_in_map.z - base_pose_in_map.position.z()
 ```
 
 这意味着高度窗口是相对当前机器人高度解释的。
@@ -505,7 +505,7 @@ relative_z = point_in_odom.z - base_pose_in_odom.position.z()
 
 职责：
 
-- 基于 `odom_samples` 逐 cell 聚合当前帧点
+- 基于 `map_samples` 逐 cell 聚合当前帧点
 - 推导本帧支撑候选、障碍候选和解释辅助层
 
 输出：
@@ -795,7 +795,7 @@ obstacle 更新：
 语义：
 
 - 当前实际参与主链的预处理后点云
-- 来源是 `odom_samples`
+- 来源是 `map_samples`
 - 再显式转换到 `base_gravity`
 
 用途：
@@ -888,7 +888,7 @@ obstacle 更新：
 
 定义：
 
-- 平移直接使用当前 `base_pose_in_odom.position`
+- 平移直接使用当前 `base_pose_in_map.position`
 - 旋转只保留 yaw
 
 这保证 RViz 在 `map` 固定系下也能正确显示围绕机器人中心的 debug 点云和地图。
@@ -1205,7 +1205,7 @@ source install/setup.bash
 
 顺着这条主线去理解，就能把下面这些设计连起来：
 
-- 为什么同时保留 `cloud_in_base` 和 `cloud_in_odom`
+- 为什么同时保留 `cloud_in_base` 和 `cloud_in_map`
 - 为什么要先做 `FrameObservabilityEstimator`
 - 为什么 support 和 obstacle 都用证据累积
 - 为什么 `vertical_span` 只能做 suspicious trigger

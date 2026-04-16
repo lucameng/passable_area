@@ -35,8 +35,8 @@ FrameOutput MakeOutput() {
   output.cols = 3;
   output.resolution = 1.0f;
   output.origin = Eigen::Vector2f(-1.5f, -1.5f);
-  output.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  output.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  output.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  output.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   output.obstacle_evidence.assign(9, 0.0f);
   output.clearance.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(9, 1.0f);
@@ -253,8 +253,8 @@ TEST(FalseObstacleAnalyzerTest,
   output.cols = 1;
   output.resolution = 0.1f;
   output.origin = Eigen::Vector2f(-0.05f, -0.05f);
-  output.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  output.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  output.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  output.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   output.obstacle_evidence.assign(1, 0.0f);
   output.clearance.assign(1, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(1, 1.0f);

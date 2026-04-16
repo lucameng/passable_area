@@ -20,8 +20,8 @@ FrameOutput MakeOutput(float yaw_rad = 0.0f) {
   output.cols = 3;
   output.resolution = 1.0f;
   output.origin = Eigen::Vector2f(-1.5f, -1.5f);
-  output.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  output.base_pose_in_odom.orientation =
+  output.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  output.base_pose_in_map.orientation =
       Eigen::Quaternionf(Eigen::AngleAxisf(yaw_rad, Eigen::Vector3f::UnitZ()));
   output.passability.assign(9, static_cast<int8_t>(PassabilityState::kUnknown));
   output.traversal_cost.assign(9, -1);

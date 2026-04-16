@@ -42,12 +42,12 @@ bool IsInsideDetectionBox(const FalseObstacleDetectionBox &box, float x,
   return x >= box.x_min && x <= box.x_max && y >= box.y_min && y <= box.y_max;
 }
 
-int CellIndex(const passable_area::core::FrameOutput &output, float odom_x,
-              float odom_y) {
+int CellIndex(const passable_area::core::FrameOutput &output, float map_x,
+              float map_y) {
   const int col = static_cast<int>(
-      std::floor((odom_x - output.origin.x()) / output.resolution));
+      std::floor((map_x - output.origin.x()) / output.resolution));
   const int row = static_cast<int>(
-      std::floor((odom_y - output.origin.y()) / output.resolution));
+      std::floor((map_y - output.origin.y()) / output.resolution));
   if (row < 0 || row >= output.rows || col < 0 || col >= output.cols) {
     return -1;
   }
@@ -55,7 +55,7 @@ int CellIndex(const passable_area::core::FrameOutput &output, float odom_x,
 }
 
 passable_area::core::Point3f
-TransformOdomPointToBaseGravity(float x, float y,
+TransformMapPointToBaseGravity(float x, float y,
                                 const passable_area::core::Pose3D &pose) {
   const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
   const float cos_yaw = std::cos(yaw);
@@ -67,7 +67,7 @@ TransformOdomPointToBaseGravity(float x, float y,
 }
 
 passable_area::core::Point3f
-TransformBaseGravityPointToOdom(float x, float y,
+TransformBaseGravityPointToMap(float x, float y,
                                 const passable_area::core::Pose3D &pose) {
   const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
   const float cos_yaw = std::cos(yaw);
@@ -181,12 +181,12 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
     }
     const int row = static_cast<int>(cell) / output.cols;
     const int col = static_cast<int>(cell) % output.cols;
-    const float odom_x = output.origin.x() +
+    const float map_x = output.origin.x() +
                          (static_cast<float>(col) + 0.5f) * output.resolution;
-    const float odom_y = output.origin.y() +
+    const float map_y = output.origin.y() +
                          (static_cast<float>(row) + 0.5f) * output.resolution;
-    const auto point_in_base_gravity = TransformOdomPointToBaseGravity(
-        odom_x, odom_y, output.base_pose_in_odom);
+    const auto point_in_base_gravity = TransformMapPointToBaseGravity(
+        map_x, map_y, output.base_pose_in_map);
     if (IsInsideDetectionBox(analysis_config_.detection_box,
                              point_in_base_gravity.x,
                              point_in_base_gravity.y)) {
@@ -397,9 +397,9 @@ FalseObstacleAnalyzer::lookupLocalContext(
     }
   }
 
-  const auto point_in_odom =
-      TransformBaseGravityPointToOdom(x, y, output.base_pose_in_odom);
-  const int center_cell = CellIndex(output, point_in_odom.x, point_in_odom.y);
+  const auto point_in_map =
+      TransformBaseGravityPointToMap(x, y, output.base_pose_in_map);
+  const int center_cell = CellIndex(output, point_in_map.x, point_in_map.y);
   if (center_cell >= 0) {
     context.has_grid_values = true;
     context.center_cell = center_cell;

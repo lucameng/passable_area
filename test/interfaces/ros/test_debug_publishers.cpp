@@ -46,8 +46,8 @@ FrameOutput MakeDebugOutput() {
   output.cols = 3;
   output.resolution = 1.0f;
   output.origin = Eigen::Vector2f(-1.5f, -1.5f);
-  output.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  output.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  output.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  output.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   output.passability.assign(9, static_cast<int8_t>(PassabilityState::kUnknown));
   output.traversal_cost.assign(9, -1);
   output.support_height.assign(9, 0.0f);

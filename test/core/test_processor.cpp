@@ -31,8 +31,8 @@ using passable_area::core::SupportState;
 FrameInput MakeFlatFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.2f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.2f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
@@ -44,8 +44,8 @@ FrameInput MakeFlatFrame(int stamp = 1) {
 FrameInput MakeRampFrame(float slope, int stamp = 1) {
   passable_area::core::FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.2f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.2f) {
       input.input_cloud_in_base.push_back({x, y, slope * x});
@@ -57,8 +57,8 @@ FrameInput MakeRampFrame(float slope, int stamp = 1) {
 FrameInput MakeStairFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   for (float x = -1.0f; x <= 1.0f; x += 0.08f) {
     const float z = 0.08f * std::floor((x + 1.0f) / 0.4f);
     for (float y = -1.0f; y <= 1.0f; y += 0.08f) {
@@ -81,8 +81,8 @@ FrameInput MakeLowCeilingFrame(float ceiling_height, int stamp = 1) {
 FrameInput MakeFrontOnlyFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   for (float x = 0.0f; x <= 1.2f; x += 0.1f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.1f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
@@ -123,8 +123,8 @@ FrameInput MakeLocalHoleFrame(int stamp = 1) {
 FrameInput MakeSparseFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   int counter = 0;
   for (float x = -1.0f; x <= 1.0f; x += 0.08f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.08f) {
@@ -140,8 +140,8 @@ FrameInput MakeForwardStripFrame(const Eigen::Quaternionf &orientation,
                                  int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = orientation.normalized();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = orientation.normalized();
   for (float x = 0.4f; x <= 1.2f; x += 0.08f) {
     for (float y = -0.12f; y <= 0.12f; y += 0.06f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
@@ -153,8 +153,8 @@ FrameInput MakeForwardStripFrame(const Eigen::Quaternionf &orientation,
 FrameInput MakeObstacleColumnFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {
       {0.25f, 0.25f, 0.0f},  {0.25f, 0.25f, 0.12f},  {0.25f, 0.25f, 0.30f},
       {-0.25f, 0.25f, 0.0f}, {-0.25f, 0.25f, 0.12f}, {-0.25f, 0.25f, 0.30f},
@@ -165,8 +165,8 @@ FrameInput MakeObstacleColumnFrame(int stamp = 1) {
 FrameInput MakeWallWithBaseNoiseFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {
       {0.25f, 0.25f, 0.0f},   {0.25f, 0.25f, 0.05f},  {0.25f, 0.25f, 0.25f},
       {0.25f, 0.25f, 0.45f},  {-0.25f, 0.25f, 0.0f},  {-0.25f, 0.25f, 0.05f},
@@ -178,8 +178,8 @@ FrameInput MakeWallWithBaseNoiseFrame(int stamp = 1) {
 FrameInput MakeUnsupportedWallFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {
       {0.25f, 0.25f, 0.25f},  {0.25f, 0.25f, 0.45f},  {0.25f, 0.25f, 0.65f},
       {-0.25f, 0.25f, 0.25f}, {-0.25f, 0.25f, 0.45f}, {-0.25f, 0.25f, 0.65f},
@@ -192,8 +192,8 @@ FrameInput MakePitchedObstacleColumnFrame(const Eigen::Quaternionf &orientation,
                                           int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = orientation.normalized();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = orientation.normalized();
   input.input_cloud_in_base = {
       {0.55f, -0.25f, 0.0f},
       {0.55f, -0.25f, obstacle_height_in_base},
@@ -209,8 +209,8 @@ FrameInput MakePitchedObstacleStackFrame(const Eigen::Quaternionf &orientation,
                                          int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = orientation.normalized();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = orientation.normalized();
   input.input_cloud_in_base = {
       {0.55f, -0.25f, 0.0f},
       {0.55f, -0.25f, lower_obstacle_height_in_base},
@@ -223,16 +223,16 @@ FrameInput MakePitchedObstacleStackFrame(const Eigen::Quaternionf &orientation,
 }
 
 ProcessedFrame MakeProcessedFrame(
-    const std::vector<passable_area::core::OdomPointSample> &samples) {
+    const std::vector<passable_area::core::MapPointSample> &samples) {
   ProcessedFrame frame;
-  frame.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  frame.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
-  frame.odom_samples = samples;
+  frame.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  frame.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  frame.map_samples = samples;
   frame.cloud_in_base.reserve(samples.size());
-  frame.cloud_in_odom.reserve(samples.size());
+  frame.cloud_in_map.reserve(samples.size());
   for (const auto &sample : samples) {
     frame.cloud_in_base.push_back(sample.point_in_base);
-    frame.cloud_in_odom.push_back(sample.point_in_odom);
+    frame.cloud_in_map.push_back(sample.point_in_map);
   }
   return frame;
 }
@@ -240,8 +240,8 @@ ProcessedFrame MakeProcessedFrame(
 FrameInput MakeDynamicObstacleCellFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {
       {0.25f, 0.25f, 0.0f},  {0.25f, 0.25f, 0.18f},  {0.25f, 0.25f, 0.45f},
       {-0.25f, 0.25f, 0.0f}, {-0.25f, 0.25f, 0.18f}, {-0.25f, 0.25f, 0.45f},
@@ -252,8 +252,8 @@ FrameInput MakeDynamicObstacleCellFrame(int stamp = 1) {
 FrameInput MakeGroundOnlyCellFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {
       {0.25f, 0.25f, 0.0f},  {0.28f, 0.22f, 0.0f},  {0.22f, 0.28f, 0.0f},
       {-0.25f, 0.25f, 0.0f}, {-0.22f, 0.22f, 0.0f}, {-0.28f, 0.28f, 0.0f},
@@ -264,8 +264,8 @@ FrameInput MakeGroundOnlyCellFrame(int stamp = 1) {
 FrameInput MakeRearObstacleCellFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {
       {-0.8f, 0.8f, 0.0f}, {-0.8f, 0.8f, 0.18f}, {-0.8f, 0.8f, 0.45f},
       {-0.6f, 0.8f, 0.0f}, {-0.6f, 0.8f, 0.18f}, {-0.6f, 0.8f, 0.45f},
@@ -330,14 +330,14 @@ TEST(PreprocessorTest, BodyFilterRemovesPointsInsideConfiguredBaseLinkBox) {
 
   FrameInput input;
   input.stamp = 1;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {{0.0f, 0.0f, 0.0f}, {0.6f, 0.0f, 0.0f}};
 
   ProcessedFrame output;
   ASSERT_TRUE(preprocessor.process(input, output));
   ASSERT_EQ(output.cloud_in_base.size(), 1U);
-  ASSERT_EQ(output.cloud_in_odom.size(), 1U);
+  ASSERT_EQ(output.cloud_in_map.size(), 1U);
   EXPECT_FLOAT_EQ(output.cloud_in_base.front().x, 0.6f);
 }
 
@@ -349,14 +349,14 @@ TEST(PreprocessorTest, CropToMapRemovesPointsOutsideLocalMapWindow) {
 
   FrameInput input;
   input.stamp = 1;
-  input.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {{0.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}};
 
   ProcessedFrame output;
   ASSERT_TRUE(preprocessor.process(input, output));
   ASSERT_EQ(output.cloud_in_base.size(), 1U);
-  ASSERT_EQ(output.cloud_in_odom.size(), 1U);
+  ASSERT_EQ(output.cloud_in_map.size(), 1U);
   EXPECT_FLOAT_EQ(output.cloud_in_base.front().x, 0.0f);
 }
 
@@ -370,15 +370,15 @@ TEST(PreprocessorTest, CropToMapUsesRobotRelativeHeightForZWindow) {
 
   FrameInput input;
   input.stamp = 1;
-  input.base_pose_in_odom.position = Eigen::Vector3f(0.0f, 0.0f, 1.0f);
-  input.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  input.base_pose_in_map.position = Eigen::Vector3f(0.0f, 0.0f, 1.0f);
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   input.input_cloud_in_base = {{0.6f, 0.0f, 0.2f}, {0.8f, 0.0f, 0.7f}};
 
   ProcessedFrame output;
   ASSERT_TRUE(preprocessor.process(input, output));
   ASSERT_EQ(output.cloud_in_base.size(), 1U);
-  ASSERT_EQ(output.cloud_in_odom.size(), 1U);
-  EXPECT_NEAR(output.cloud_in_odom.front().z, 1.2f, 1e-5f);
+  ASSERT_EQ(output.cloud_in_map.size(), 1U);
+  EXPECT_NEAR(output.cloud_in_map.front().z, 1.2f, 1e-5f);
 }
 
 TEST(ProcessorTest, MissingCoverageLeavesUnknownCells) {
@@ -566,23 +566,23 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
   }
 
   ProcessedFrame forward;
-  forward.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
-  forward.base_pose_in_odom.position = Eigen::Vector3f::Zero();
+  forward.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  forward.base_pose_in_map.position = Eigen::Vector3f::Zero();
   forward.cloud_in_base = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
-  forward.cloud_in_odom = {{0.25f, 0.25f, 0.0f},
+  forward.cloud_in_map = {{0.25f, 0.25f, 0.0f},
                            {0.25f, 0.25f, 0.2f},
                            {-0.25f, 0.25f, 0.0f},
                            {-0.25f, 0.25f, 0.2f}};
-  forward.odom_samples.push_back(passable_area::core::OdomPointSample{
+  forward.map_samples.push_back(passable_area::core::MapPointSample{
       {1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.0f}});
-  forward.odom_samples.push_back(passable_area::core::OdomPointSample{
+  forward.map_samples.push_back(passable_area::core::MapPointSample{
       {-1.0f, 1.0f, 0.0f}, {0.25f, 0.25f, 0.2f}});
-  forward.odom_samples.push_back(passable_area::core::OdomPointSample{
+  forward.map_samples.push_back(passable_area::core::MapPointSample{
       {1.0f, 0.0f, 0.0f}, {-0.25f, 0.25f, 0.0f}});
-  forward.odom_samples.push_back(passable_area::core::OdomPointSample{
+  forward.map_samples.push_back(passable_area::core::MapPointSample{
       {1.0f, 0.0f, 0.2f}, {-0.25f, 0.25f, 0.2f}});
   ProcessedFrame reversed = forward;
-  std::reverse(reversed.odom_samples.begin(), reversed.odom_samples.end());
+  std::reverse(reversed.map_samples.begin(), reversed.map_samples.end());
 
   const auto forward_output = frontend.run(forward, observability, map);
   const auto reversed_output = frontend.run(reversed, observability, map);
@@ -636,7 +636,7 @@ TEST(ProcessorTest,
   const auto output = frontend.run(frame, observability, map);
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   EXPECT_TRUE(output.obstacle_candidates.empty());
   EXPECT_EQ(output.obstacle_local_triggered[static_cast<size_t>(cell)], 1U);
   EXPECT_EQ(output.obstacle_upper_patch_confirmed[static_cast<size_t>(cell)],
@@ -678,7 +678,7 @@ TEST(ProcessorTest,
   const auto output = frontend.run(frame, observability, map);
 
   int primary_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
   ASSERT_EQ(output.obstacle_candidates.size(), 2U);
   EXPECT_EQ(output.obstacle_local_triggered[static_cast<size_t>(primary_cell)],
             1U);
@@ -731,7 +731,7 @@ TEST(ProcessorTest,
   const auto output = frontend.run(frame, observability, map);
 
   int primary_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(primary_cell)], 0U);
   EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(primary_cell)], 0U);
   const auto primary_cell_candidate_count = std::count_if(
@@ -759,7 +759,7 @@ TEST(ProcessorTest, PolarFrontendUsesFrameMinZWhenHistoricalSupportIsMissing) {
   }
 
   int supported_neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, supported_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, supported_neighbor));
   map.layers().support_height[static_cast<size_t>(supported_neighbor)] = 0.0f;
 
   const auto frame = MakeProcessedFrame({
@@ -772,7 +772,7 @@ TEST(ProcessorTest, PolarFrontendUsesFrameMinZWhenHistoricalSupportIsMissing) {
   const auto output = frontend.run(frame, observability, map);
 
   int fallback_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, fallback_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, fallback_cell));
   EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(fallback_cell)], 1U);
   EXPECT_EQ(
       output.neighbor_upper_support_count[static_cast<size_t>(fallback_cell)],
@@ -798,7 +798,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.5f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -858,7 +858,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -903,8 +903,8 @@ TEST(ProcessorTest,
 
   int cell = -1;
   int neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -959,8 +959,8 @@ TEST(ProcessorTest,
 
   int cell = -1;
   int neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1024,8 +1024,8 @@ TEST(
 
   int primary_cell = -1;
   int neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -1106,8 +1106,8 @@ TEST(ProcessorTest,
 
   int cell = -1;
   int neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1186,7 +1186,7 @@ TEST(
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.5f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1226,7 +1226,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = -1.0f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.5f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1279,7 +1279,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.00f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.5f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1330,7 +1330,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.00f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.5f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1392,7 +1392,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1451,10 +1451,10 @@ TEST(ProcessorTest,
   int left_ground_cell = -1;
   int right_ground_cell = -1;
   int front_ground_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_ground_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_ground_cell));
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, front_ground_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.05f, 0.25f, left_ground_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, right_ground_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.45f, front_ground_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = 0.0f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -1532,7 +1532,7 @@ TEST(ProcessorTest,
   }
 
   int cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
   map.layers().support_height[static_cast<size_t>(cell)] = 0.05f;
   map.layers().support_confidence[static_cast<size_t>(cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(cell)] =
@@ -1577,9 +1577,9 @@ TEST(ProcessorTest,
   int primary_cell = -1;
   int neighbor_cell = -1;
   int diagonal_neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.90f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -1660,9 +1660,9 @@ TEST(ProcessorTest,
   int primary_cell = -1;
   int neighbor_cell = -1;
   int diagonal_neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.90f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.05f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -1733,9 +1733,9 @@ TEST(ProcessorTest,
   int primary_cell = -1;
   int neighbor_cell = -1;
   int diagonal_neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.90f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -1796,8 +1796,8 @@ TEST(
 
   int primary_cell = -1;
   int neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.45f, neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.68f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -1857,9 +1857,9 @@ TEST(
   int primary_cell = -1;
   int upper_support_neighbor_cell = -1;
   int aligned_neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, upper_support_neighbor_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, aligned_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, upper_support_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, aligned_neighbor_cell));
   ASSERT_NE(primary_cell, upper_support_neighbor_cell);
   ASSERT_NE(primary_cell, aligned_neighbor_cell);
   ASSERT_NE(upper_support_neighbor_cell, aligned_neighbor_cell);
@@ -1962,9 +1962,9 @@ TEST(
   int primary_cell = -1;
   int upper_support_neighbor_cell = -1;
   int aligned_neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, upper_support_neighbor_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, aligned_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, upper_support_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, aligned_neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.68f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2044,10 +2044,10 @@ TEST(
   int front_left_cell = -1;
   int front_center_cell = -1;
   int front_right_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.05f, 0.45f, front_left_cell));
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, front_center_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, front_right_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.05f, 0.45f, front_left_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.45f, front_center_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, front_right_cell));
   ASSERT_NE(front_left_cell, front_center_cell);
   ASSERT_NE(front_left_cell, front_right_cell);
   ASSERT_NE(front_center_cell, front_right_cell);
@@ -2120,10 +2120,10 @@ TEST(
   int left_cell = -1;
   int right_cell = -1;
   int front_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_cell));
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.45f, front_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.05f, 0.25f, left_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, right_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.45f, front_cell));
   ASSERT_NE(left_cell, right_cell);
   ASSERT_NE(left_cell, front_cell);
   ASSERT_NE(right_cell, front_cell);
@@ -2189,7 +2189,7 @@ TEST(ProcessorTest,
   }
 
   int primary_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
 
   const auto frame = MakeProcessedFrame({
       {{0.25f, 0.25f, -0.68f}, {0.25f, 0.25f, -0.68f}},
@@ -2243,7 +2243,7 @@ TEST(
   }
 
   int primary_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.64f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2299,9 +2299,9 @@ TEST(ProcessorTest, PolarFrontendKeepsBelowRobotObstacleOnUpstairSupportTrend) {
   int primary_cell = -1;
   int left_up_cell = -1;
   int right_up_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.15f, 0.45f, left_up_cell));
-  ASSERT_TRUE(map.odomToIndex(0.35f, 0.45f, right_up_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.15f, 0.45f, left_up_cell));
+  ASSERT_TRUE(map.mapToIndex(0.35f, 0.45f, right_up_cell));
 
   const auto frame = MakeProcessedFrame({
       {{0.25f, 0.25f, -0.72f}, {0.25f, 0.25f, -0.72f}},
@@ -2358,9 +2358,9 @@ TEST(ProcessorTest,
   int primary_cell = -1;
   int left_up_cell = -1;
   int right_up_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.15f, 0.45f, left_up_cell));
-  ASSERT_TRUE(map.odomToIndex(0.35f, 0.45f, right_up_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.15f, 0.45f, left_up_cell));
+  ASSERT_TRUE(map.mapToIndex(0.35f, 0.45f, right_up_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.64f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2421,10 +2421,10 @@ TEST(
   int left_neighbor = -1;
   int right_neighbor = -1;
   int diagonal_neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_neighbor));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_neighbor));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.05f, 0.25f, left_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, right_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, diagonal_neighbor));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.82f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2494,10 +2494,10 @@ TEST(ProcessorTest,
   int left_neighbor = -1;
   int right_neighbor = -1;
   int diagonal_neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_neighbor));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_neighbor));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.05f, 0.25f, left_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, right_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, diagonal_neighbor));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.82f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2576,7 +2576,7 @@ TEST(ProcessorTest, PolarFrontendLegacyUpperSupportCellAliasesAdjustedMask) {
   }
 
   int primary_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.82f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2623,9 +2623,9 @@ TEST(
   int primary_cell = -1;
   int left_neighbor = -1;
   int right_neighbor = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.05f, 0.25f, left_neighbor));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, right_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.05f, 0.25f, left_neighbor));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, right_neighbor));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.82f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2687,9 +2687,9 @@ TEST(ProcessorTest,
   int primary_cell = -1;
   int left_up_cell = -1;
   int right_up_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.15f, 0.45f, left_up_cell));
-  ASSERT_TRUE(map.odomToIndex(0.35f, 0.45f, right_up_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.15f, 0.45f, left_up_cell));
+  ASSERT_TRUE(map.mapToIndex(0.35f, 0.45f, right_up_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.64f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2754,9 +2754,9 @@ TEST(ProcessorTest,
   int primary_cell = -1;
   int neighbor_cell = -1;
   int diagonal_neighbor_cell = -1;
-  ASSERT_TRUE(map.odomToIndex(0.25f, 0.25f, primary_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.25f, neighbor_cell));
-  ASSERT_TRUE(map.odomToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.25f, neighbor_cell));
+  ASSERT_TRUE(map.mapToIndex(0.45f, 0.45f, diagonal_neighbor_cell));
   map.layers().support_height[static_cast<size_t>(primary_cell)] = -0.90f;
   map.layers().support_confidence[static_cast<size_t>(primary_cell)] = 0.6f;
   map.layers().support_state[static_cast<size_t>(primary_cell)] =
@@ -2803,7 +2803,7 @@ TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
   LocalTerrainMap map(config);
 
   int original_index = -1;
-  ASSERT_TRUE(map.odomToIndex(0.5f, 0.5f, original_index));
+  ASSERT_TRUE(map.mapToIndex(0.5f, 0.5f, original_index));
   map.layers().support_confidence[original_index] = 0.75f;
   map.layers().support_state[original_index] =
       static_cast<uint8_t>(SupportState::kPersistent);
@@ -2811,7 +2811,7 @@ TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
   map.recenter(Eigen::Vector2f(1.0f, 0.0f));
 
   int shifted_index = -1;
-  ASSERT_TRUE(map.odomToIndex(0.5f, 0.5f, shifted_index));
+  ASSERT_TRUE(map.mapToIndex(0.5f, 0.5f, shifted_index));
   EXPECT_NE(original_index, shifted_index);
   EXPECT_FLOAT_EQ(map.layers().support_confidence[shifted_index], 0.75f);
   EXPECT_EQ(map.layers().support_state[shifted_index],
@@ -3049,7 +3049,7 @@ TEST(ProcessorTest,
   ASSERT_TRUE(preprocessor.process(input, preprocessed));
 
   bool found_publishable_source_sample = false;
-  for (const auto &sample : preprocessed.odom_samples) {
+  for (const auto &sample : preprocessed.map_samples) {
     if (std::abs(sample.point_in_base.x - 0.55f) < 1e-5f &&
         std::abs(sample.point_in_base.y - 0.25f) < 1e-5f &&
         std::abs(sample.point_in_base.z - 0.18f) < 1e-5f) {

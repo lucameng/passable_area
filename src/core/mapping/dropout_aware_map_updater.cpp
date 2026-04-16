@@ -28,7 +28,7 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
   std::vector<uint8_t> touched_obstacle(map.size(), 0);
 
   const auto sector_state_for_cell = [&](int cell) {
-    const auto cell_center = map.indexToOdom(cell);
+    const auto cell_center = map.indexToMap(cell);
     const float angle = std::atan2(cell_center.y() - map.center().y(),
                                    cell_center.x() - map.center().x());
     const float normalized = angle + static_cast<float>(M_PI);

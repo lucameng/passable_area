@@ -15,7 +15,7 @@ class LocalTerrainMap {
 public:
   explicit LocalTerrainMap(const Config &config);
 
-  void recenter(const Eigen::Vector2f &base_xy_in_odom);
+  void recenter(const Eigen::Vector2f &base_xy_in_map);
   int rows() const { return rows_; }
   int cols() const { return cols_; }
   float resolution() const { return config_.map.resolution; }
@@ -25,8 +25,8 @@ public:
   void setFramePeriodSec(float frame_period_sec) { frame_period_sec_ = frame_period_sec; }
   float framePeriodSec() const { return frame_period_sec_; }
 
-  bool odomToIndex(float x, float y, int &index) const;
-  Eigen::Vector2f indexToOdom(int index) const;
+  bool mapToIndex(float x, float y, int &index) const;
+  Eigen::Vector2f indexToMap(int index) const;
   TerrainLayers &layers() { return layers_; }
   const TerrainLayers &layers() const { return layers_; }
   void ageCells();

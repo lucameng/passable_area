@@ -40,8 +40,8 @@ FrameOutput MakeOutput() {
   output.cols = 3;
   output.resolution = 1.0f;
   output.origin = Eigen::Vector2f(-1.5f, -1.5f);
-  output.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  output.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  output.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  output.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   output.obstacle_evidence.assign(9, 0.0f);
   output.clearance.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(9, 1.0f);
@@ -87,10 +87,10 @@ FrameOutput MakeOutput() {
 
 ProcessedFrame MakeProcessedFrame(std::initializer_list<Point3f> points) {
   ProcessedFrame frame;
-  frame.base_pose_in_odom.position = Eigen::Vector3f::Zero();
-  frame.base_pose_in_odom.orientation = Eigen::Quaternionf::Identity();
+  frame.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  frame.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   for (const auto &point : points) {
-    frame.odom_samples.push_back({point, point});
+    frame.map_samples.push_back({point, point});
   }
   return frame;
 }
