@@ -3505,7 +3505,7 @@ TEST(ProcessorTest, WallWithoutGroundSupportStillPublishesObstaclePoints) {
 }
 
 TEST(ProcessorTest,
-     ObstaclePointsPublishFromAdjacentConfirmedObstacleSourceCells) {
+     ObstaclePointsDoNotBorrowAdjacentCellEvidenceForPublication) {
   auto config = MakeConfig();
   config.map.length = 2.0f;
   config.map.width = 2.0f;
@@ -3524,7 +3524,6 @@ TEST(ProcessorTest,
   const auto output =
       processor.update(MakeAsymmetricFacadePairFrame(300000001));
   ASSERT_TRUE(output.valid);
-  ASSERT_FALSE(output.obstacle_points.empty());
   const int strong_left_cell = CellIndex(output, 0.55f, 0.15f);
   const int weak_right_cell = CellIndex(output, 0.65f, 0.15f);
   ASSERT_GE(strong_left_cell, 0);
@@ -3533,19 +3532,23 @@ TEST(ProcessorTest,
             config.obstacle_points_min_evidence);
   ASSERT_LT(output.obstacle_evidence[weak_right_cell],
             config.obstacle_points_min_evidence);
+  ASSERT_NE(output.obstacle_candidate_cell[weak_right_cell], 0U);
+  ASSERT_NE(output.obstacle_local_triggered[weak_right_cell], 0U);
+  ASSERT_NE(output.obstacle_upper_patch_confirmed[weak_right_cell], 0U);
+  ASSERT_EQ(output.obstacle_explanation_rejected[weak_right_cell], 0U);
 
-  bool found_adjacent_source_binding = false;
+  bool found_publish_from_weak_right_cell = false;
   for (const auto &point : output.obstacle_points) {
     if (point.point.x < 0.6f) {
       continue;
     }
     const int sample_cell = CellIndex(output, point.point.x, point.point.y);
-    if (sample_cell != point.source_cell) {
-      found_adjacent_source_binding = true;
+    if (sample_cell == weak_right_cell) {
+      found_publish_from_weak_right_cell = true;
       break;
     }
   }
-  EXPECT_TRUE(found_adjacent_source_binding);
+  EXPECT_FALSE(found_publish_from_weak_right_cell);
 }
 
 TEST(ProcessorTest,
