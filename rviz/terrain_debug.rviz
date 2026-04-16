@@ -5,8 +5,8 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Gravity Cloud1
         - /Terrain Obstacles1
+        - /Accumulate Obstacles1
       Splitter Ratio: 0.5
     Tree Height: 787
   - Class: rviz_common/Selection
@@ -109,12 +109,12 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 0.056904375553131104
+      Max Intensity: 0.2230970412492752
       Min Color: 0; 0; 0
-      Min Intensity: -1.4974522590637207
+      Min Intensity: -0.5405459403991699
       Name: Terrain Obstacles
       Position Transformer: XYZ
       Selectable: true
@@ -128,6 +128,40 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /terrain_obstacle_points
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: z
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 0.23256154358386993
+      Min Color: 0; 0; 0
+      Min Intensity: -0.8511175513267517
+      Name: Accumulate Obstacles
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05000000074505806
+      Style: Spheres
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /accumulate_cloud/obstacle_points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
