@@ -63,6 +63,24 @@ struct FacadeEvidence {
   }
 };
 
+// Resolve explanation precedence between below-robot mixed-support rejection
+// and explicit facade-like obstacle structure. A stair-mix explanation is meant
+// for structure that stays clearly below the robot envelope; once the same cell
+// also forms a local lower/upper facade profile and its upper return climbs
+// back above that below-robot band, obstacle interpretation should remain
+// eligible instead of being pre-empted.
+bool ShouldPreferFacadeObstacleInterpretation(
+    FrontendExplanationDecision reject_decision,
+    const FacadeEvidence &facade_evidence, float relative_upper_z,
+    float upper_height_threshold, float support_reobserve_tolerance) {
+  const float near_robot_upper_band_floor =
+      -(upper_height_threshold + support_reobserve_tolerance);
+  return reject_decision == FrontendExplanationDecision::kBelowRobotStairMix &&
+         facade_evidence.lower_upper_coexisting &&
+         std::isfinite(relative_upper_z) &&
+         relative_upper_z >= near_robot_upper_band_floor;
+}
+
 // 解决代表角落在 -pi/pi 边界附近时扇区索引跳变的 case。
 // 做法是把角度统一规约到 [-pi, pi]，避免 observability 分桶不稳定。
 float NormalizeAngle(float angle) {
@@ -599,8 +617,7 @@ GroupSampleIndicesByCell(const ProcessedFrame &frame,
        ++sample_index) {
     const auto &sample = frame.map_samples[sample_index];
     int cell = -1;
-    if (!map.mapToIndex(sample.point_in_map.x, sample.point_in_map.y,
-                         cell)) {
+    if (!map.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
     sample_indices_by_cell[static_cast<size_t>(cell)].push_back(sample_index);
@@ -1035,8 +1052,7 @@ void BuildExplanationInputs(
             has_support_anchor,
             support_anchor - frame.base_pose_in_map.position.z(),
             workspace.support_ref - frame.base_pose_in_map.position.z(),
-            effective_support_candidate_z -
-                frame.base_pose_in_map.position.z(),
+            effective_support_candidate_z - frame.base_pose_in_map.position.z(),
             effective_support_candidate_z - workspace.support_ref,
             workspace.upper_band_count, workspace.anchor_reobserve_count,
             candidate_reobserve_count, upper_layer_neighbor_match_count,
@@ -1151,6 +1167,17 @@ void EvaluateCandidates(
         workspace.support_ref - frame.base_pose_in_map.position.z();
     const float relative_upper_z =
         workspace.filtered_stats.max_z - frame.base_pose_in_map.position.z();
+    const FacadeEvidence facade_evidence = BuildFacadeEvidence(
+        cell, frame, map, layers, config, sample_indices_by_cell,
+        cell_workspaces, aligned_neighbor_support_count);
+    output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] =
+        facade_evidence.lower_upper_coexisting ? 1U : 0U;
+    output
+        .facade_upper_edge_aligned_with_supported_neighbors[static_cast<size_t>(
+            cell)] =
+        facade_evidence.upper_edge_aligned_with_supported_neighbors ? 1U : 0U;
+    const FrontendExplanationDecision keep_decision =
+        ClassifyExplanationKeepDecision(facade_evidence);
     const FrontendExplanationDecision reject_decision =
         ClassifyExplanationRejectDecision(
             has_support_anchor,
@@ -1163,7 +1190,12 @@ void EvaluateCandidates(
             config.geometry.max_step_up,
             workspace.anchor_below_observation_count,
             workspace.stale_lower_anchor_mix);
-    if (reject_decision != FrontendExplanationDecision::kNone) {
+    if (reject_decision != FrontendExplanationDecision::kNone &&
+        !(keep_decision != FrontendExplanationDecision::kNone &&
+          ShouldPreferFacadeObstacleInterpretation(
+              reject_decision, facade_evidence, relative_upper_z,
+              config.geometry.upper_min_height_above_support,
+              config.geometry.support_anchor_reobserve_tolerance))) {
       output.explanation_decision[static_cast<size_t>(cell)] =
           static_cast<uint8_t>(reject_decision);
       output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)] =
@@ -1171,18 +1203,6 @@ void EvaluateCandidates(
       output.obstacle_explanation_rejected[static_cast<size_t>(cell)] = 1U;
       continue;
     }
-
-    const FacadeEvidence facade_evidence = BuildFacadeEvidence(
-        cell, frame, map, layers, config, sample_indices_by_cell,
-        cell_workspaces, aligned_neighbor_support_count);
-    output.facade_lower_upper_coexisting[static_cast<size_t>(cell)] =
-        facade_evidence.lower_upper_coexisting ? 1U : 0U;
-    output
-        .facade_upper_edge_aligned_with_supported_neighbors[static_cast<size_t>(
-            cell)] =
-        facade_evidence.upper_edge_aligned_with_supported_neighbors ? 1U : 0U;
-    const FrontendExplanationDecision keep_decision =
-        ClassifyExplanationKeepDecision(facade_evidence);
     if (keep_decision == FrontendExplanationDecision::kNone) {
       output.explanation_decision[static_cast<size_t>(cell)] =
           static_cast<uint8_t>(FrontendExplanationDecision::kNone);
@@ -1202,9 +1222,9 @@ void EvaluateCandidates(
             ? ObstacleCandidateSemantic::kConfirmedFacade
             : ObstacleCandidateSemantic::kDefault;
     output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
-    output.obstacle_candidates.push_back(ObstacleCandidate{
-        cell, workspace.filtered_stats.max_z,
-        std::clamp(vertical_span, 0.0f, 1.0f), semantic});
+    output.obstacle_candidates.push_back(
+        ObstacleCandidate{cell, workspace.filtered_stats.max_z,
+                          std::clamp(vertical_span, 0.0f, 1.0f), semantic});
   }
 }
 
