@@ -509,6 +509,32 @@ ClassifyExplanationKeepDecision(const FacadeEvidence &facade_evidence) {
                                : FrontendExplanationDecision::kNone;
 }
 
+// Keep the confirmed-facade semantic narrowly scoped to obstacle structure that
+// is both facade-like and publishable in the current robot envelope.
+// Below-robot layered mixes can still be kept as obstacles by the explanation
+// system, but they should not receive the stronger confirmed-facade semantic
+// unless their lower/support reference stays within the step-down envelope and
+// their upper return clearly rises into the robot-height band.
+bool IsConfirmedFacadeSemanticCandidate(const CellWorkspace &workspace,
+                                        const FacadeEvidence &facade_evidence,
+                                        float relative_support_ref,
+                                        float relative_upper_z,
+                                        int support_count,
+                                        const Config &config) {
+  const bool dense_facade_cell = workspace.filtered_stats.count >= 4;
+  const int confirmed_facade_support_count_threshold =
+      std::max(config.geometry.min_neighbor_upper_support_cells, 2);
+  const float min_publishable_facade_support_ref =
+      -config.geometry.max_step_down;
+  const float min_publishable_facade_upper_z =
+      config.geometry.upper_min_height_above_support;
+  return dense_facade_cell && workspace.sub_support_leak_count == 0U &&
+         facade_evidence.lower_upper_coexisting &&
+         relative_support_ref >= min_publishable_facade_support_ref &&
+         relative_upper_z >= min_publishable_facade_upper_z &&
+         support_count >= confirmed_facade_support_count_threshold;
+}
+
 FacadeEvidence BuildFacadeEvidence(
     int cell, const ProcessedFrame &frame, const LocalTerrainMap &map,
     const TerrainLayers &layers, const Config &config,
@@ -1211,14 +1237,10 @@ void EvaluateCandidates(
     output.explanation_decision[static_cast<size_t>(cell)] =
         static_cast<uint8_t>(keep_decision);
 
-    const bool dense_facade_cell = workspace.filtered_stats.count >= 4;
-    const int confirmed_facade_support_count_threshold =
-        std::max(config.geometry.min_neighbor_upper_support_cells, 2);
     const ObstacleCandidateSemantic semantic =
-        dense_facade_cell && workspace.sub_support_leak_count == 0U &&
-                facade_evidence.lower_upper_coexisting &&
-                relative_upper_z >= 0.0f &&
-                support_count >= confirmed_facade_support_count_threshold
+        IsConfirmedFacadeSemanticCandidate(
+            workspace, facade_evidence, relative_support_ref, relative_upper_z,
+            support_count, config)
             ? ObstacleCandidateSemantic::kConfirmedFacade
             : ObstacleCandidateSemantic::kDefault;
     output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;

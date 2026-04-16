@@ -890,6 +890,59 @@ TEST(ProcessorTest,
 }
 
 TEST(ProcessorTest,
+     PolarFrontendKeepsBelowRobotOverheadCoverAsDefaultSemantic) {
+  auto config = MakeConfig();
+  config.geometry.upper_min_height_above_support = 0.2f;
+  config.geometry.max_step_down = 0.38f;
+  config.geometry.min_neighbor_upper_support_cells = 2;
+  PolarFrontend frontend(config);
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+
+  FrameObservability observability;
+  observability.sectors.resize(
+      static_cast<size_t>(config.observability.sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+
+  auto frame = MakeProcessedFrame({
+      {{0.25f, 0.25f, 1.28f}, {0.25f, 0.25f, 1.28f}},
+      {{0.25f, 0.25f, 1.30f}, {0.25f, 0.25f, 1.30f}},
+      {{0.25f, 0.25f, 2.04f}, {0.25f, 0.25f, 2.04f}},
+      {{0.25f, 0.25f, 2.05f}, {0.25f, 0.25f, 2.05f}},
+      {{0.45f, 0.25f, 1.29f}, {0.45f, 0.25f, 1.29f}},
+      {{0.45f, 0.25f, 1.31f}, {0.45f, 0.25f, 1.31f}},
+      {{0.45f, 0.25f, 2.03f}, {0.45f, 0.25f, 2.03f}},
+      {{0.45f, 0.25f, 2.05f}, {0.45f, 0.25f, 2.05f}},
+  });
+  frame.base_pose_in_map.position = Eigen::Vector3f(0.0f, 0.0f, 1.855f);
+
+  const auto output = frontend.run(frame, observability, map);
+
+  int primary_cell = -1;
+  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, primary_cell));
+  ASSERT_NE(
+      output.obstacle_upper_patch_confirmed[static_cast<size_t>(primary_cell)],
+      0U);
+  ASSERT_NE(
+      output.facade_lower_upper_coexisting[static_cast<size_t>(primary_cell)],
+      0U);
+  const auto it = std::find_if(output.obstacle_candidates.begin(),
+                               output.obstacle_candidates.end(),
+                               [primary_cell](const auto &candidate) {
+                                 return candidate.cell == primary_cell;
+                               });
+  ASSERT_NE(it, output.obstacle_candidates.end());
+  EXPECT_EQ(static_cast<FrontendExplanationDecision>(
+                output.explanation_decision[static_cast<size_t>(primary_cell)]),
+            FrontendExplanationDecision::kKeepAsObstacle);
+  EXPECT_EQ(it->semantic,
+            passable_area::core::ObstacleCandidateSemantic::kDefault);
+}
+
+TEST(ProcessorTest,
      PolarFrontendDoesNotUseNeighborUpperSupportAsSuspiciousTrigger) {
   auto config = MakeConfig();
   config.geometry.upper_min_height_above_support = 0.2f;
