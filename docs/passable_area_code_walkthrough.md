@@ -87,12 +87,10 @@
 
 **内部算法主处理在 `map` 中进行，但公开发布出来的地图结果会被重采样成 `base_gravity` 机器人中心栅格。**
 
-当前代码里仍保留一些历史字段名：
-- `base_pose_in_odom`
-- `cloud_in_odom`
-- `odom_samples`
-
-这些符号还没有在本次改动里全量重命名，但其数值语义已经统一按 `map` 理解。
+当前核心数据表达已经统一为：
+- `base_pose_in_map`
+- `cloud_in_map`
+- `map_samples`
 
 这个点和 `algorithm_scheme.md` 里的部分表述并不完全一致，后面会专门展开。
 
@@ -286,37 +284,37 @@ buildOutput(...)
 
 - `FrameInput`
   - 时间戳
-  - `base_pose_in_odom`
+  - `base_pose_in_map`
   - 原始点云 `input_cloud_in_base`
 
 #### 它的输出
 
 - `ProcessedFrame`
   - `cloud_in_base`
-  - `cloud_in_odom`
-  - `odom_samples`
+  - `cloud_in_map`
+  - `map_samples`
 
 #### 它做了什么
 
 1. 过滤非法点
 2. 可选机身包围盒过滤 `body_filter`
-3. 用 `base_pose_in_odom` 把点从 `base_link` 变换到 `odom`
+3. 用 `base_pose_in_map` 把点从 `base_link` 变换到 `map`
 4. 可选按地图范围裁剪 `crop_to_map`
 5. 可选体素降采样
 
-#### 为什么会同时保留 `cloud_in_base` 和 `cloud_in_odom`
+#### 为什么会同时保留 `cloud_in_base` 和 `cloud_in_map`
 
 这是这套实现里一个非常关键的设计：
 
 - `cloud_in_base` 用来做观测性分析，因为“前后左右是否掉点”应该站在机器人自身视角看
-- `cloud_in_odom` 用来做地图更新，因为跨帧累积必须放在相对稳定的参考系里
+- `cloud_in_map` 用来做地图更新，因为跨帧累积必须放在相对稳定的参考系里
 
-#### `odom_samples` 的作用
+#### `map_samples` 的作用
 
-`odom_samples` 不是多余拷贝，它把一一对应关系保留下来了：
+`map_samples` 不是多余拷贝，它把一一对应关系保留下来了：
 
 - `point_in_base`
-- `point_in_odom`
+- `point_in_map`
 
 后续很多调试输出会同时利用这两种表达。
 
@@ -329,7 +327,7 @@ buildOutput(...)
 预处理之后，`Processor` 会先让局部地图跟着机器人位置移动：
 
 ```cpp
-map_.recenter(preprocessed.base_pose_in_odom.position.head<2>())
+map_.recenter(preprocessed.base_pose_in_map.position.head<2>())
 ```
 
 这个地图的关键特点是：
@@ -437,7 +435,7 @@ map_.recenter(preprocessed.base_pose_in_odom.position.head<2>())
 
 对于每个 `odom_sample`：
 
-1. 根据 `point_in_odom.x/y` 找到地图 cell
+1. 根据 `point_in_map.x/y` 找到地图 cell
 2. 把该 cell 对应的样本索引存下来
 
 之后每个 cell 都会有一组属于自己的样本点。
@@ -796,7 +794,7 @@ vertical_span > max_step_up * 0.75
 
 #### 5.8.2 生成调试点云
 
-`buildOutput()` 会从 `odom_samples` 和地图层里生成：
+`buildOutput()` 会从 `map_samples` 和地图层里生成：
 
 - `base_gravity_cloud_points`
 - `support_points`
@@ -825,11 +823,11 @@ vertical_span > max_step_up * 0.75
 
 ### 6.1 一个非常关键的事实：最终地图会重采样成机器人中心地图
 
-`OutputConverter::toMapOutputs()` 不会直接把内部 `odom` 栅格原样发布。
+`OutputConverter::toMapOutputs()` 不会直接把内部 `map` 栅格原样发布。
 
 它会：
 
-1. 以 `FrameOutput.base_pose_in_odom` 为当前机器人位姿
+1. 以 `FrameOutput.base_pose_in_map` 为当前机器人位姿
 2. 构造一个以机器人为中心、朝向跟随 yaw 的 `base_gravity` 栅格
 3. 对这个机器人中心栅格的每个 cell，反查内部 `map` 地图对应的 source cell
 4. 重采样 `passability / traversal_cost / 各种 debug layer`
@@ -853,7 +851,7 @@ vertical_span > max_step_up * 0.75
 
 从 `PassableAreaNode::onSynced()` 可以看到，发布时传给 `result_publishers_` 和 `debug_publishers_` 的 header 都是 `base_gravity_header`，而且 `OutputConverter` 也显式做了 robot-centric resampling。
 
-甚至 `onSynced()` 里还创建了一个 `odom_header`，但当前代码并没有使用它。
+甚至 `onSynced()` 里还创建了一个 `map_header`，但当前代码并没有使用它。
 
 所以如果你在 RViz 里看结果，应该按下面理解：
 
@@ -901,7 +899,7 @@ vertical_span > max_step_up * 0.75
 关键字段：
 
 - `stamp`
-- `base_pose_in_odom`
+- `base_pose_in_map`
 - `input_cloud_in_base`
 - `processing_enabled`
 
@@ -918,8 +916,8 @@ vertical_span > max_step_up * 0.75
 关键字段：
 
 - `cloud_in_base`
-- `cloud_in_odom`
-- `odom_samples`
+- `cloud_in_map`
+- `map_samples`
 
 理解重点：
 
@@ -951,13 +949,13 @@ vertical_span > max_step_up * 0.75
 
 作用：
 
-- 在 `odom` 中维护一个随机器人移动的局部地图
+- 在 `map` 中维护一个随机器人移动的局部地图
 
 关键能力：
 
 - `recenter()`
-- `odomToIndex()`
-- `indexToOdom()`
+- `mapToIndex()`
+- `indexToMap()`
 - `ageCells()`
 
 理解重点：
@@ -1323,7 +1321,7 @@ vertical_span > max_step_up * 0.75
 
 沿着这条主线去读，很多实现细节就顺了：
 
-- 为什么先保留 `cloud_in_base` 和 `cloud_in_odom` 两种视图
+- 为什么先保留 `cloud_in_base` 和 `cloud_in_map` 两种视图
 - 为什么观测性要单独估计
 - 为什么 support 要有 confidence / persistence
 - 为什么 `vertical_span` 只能做 suspicious trigger

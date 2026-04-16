@@ -55,15 +55,15 @@ bool MapCellIndexForBaseGravityCell(
     const RobotCentricGeometry &geometry, int row, int col, int &source_index) {
   const Eigen::Vector2f point_in_base_gravity = CellCenter(geometry, row, col);
   const float yaw = passable_area::core::YawFromQuaternion(
-      output.base_pose_in_odom.orientation);
+      output.base_pose_in_map.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
-  // output.base_pose_in_odom keeps a historical name; its numeric parent-frame
+  // output.base_pose_in_map keeps a historical name; its numeric parent-frame
   // semantics follow map after the map-frame cleanup.
-  const float map_x = output.base_pose_in_odom.position.x() +
+  const float map_x = output.base_pose_in_map.position.x() +
                       cos_yaw * point_in_base_gravity.x() -
                       sin_yaw * point_in_base_gravity.y();
-  const float map_y = output.base_pose_in_odom.position.y() +
+  const float map_y = output.base_pose_in_map.position.y() +
                       sin_yaw * point_in_base_gravity.x() +
                       cos_yaw * point_in_base_gravity.y();
   const int source_col = static_cast<int>(

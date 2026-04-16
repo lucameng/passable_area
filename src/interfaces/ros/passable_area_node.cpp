@@ -261,7 +261,7 @@ void PassableAreaNode::onSynced(
 
     passable_area::core::FrameInput input;
     input.stamp = rclcpp::Time(cloud_msg->header.stamp).nanoseconds();
-    input.base_pose_in_odom = pose;
+    input.base_pose_in_map = pose;
     input.input_cloud_in_base = std::move(cloud);
 
     const auto output = processor_.update(input);
@@ -296,18 +296,18 @@ void PassableAreaNode::onSynced(
 }
 
 void PassableAreaNode::publishMapToBaseGravityTransform(
-    const passable_area::core::Pose3D &base_pose_in_odom,
+    const passable_area::core::Pose3D &base_pose_in_map,
     const builtin_interfaces::msg::Time &stamp) {
   geometry_msgs::msg::TransformStamped transform;
   transform.header.stamp = stamp;
   transform.header.frame_id = config_.map_frame;
   transform.child_frame_id = config_.base_gravity_frame;
-  transform.transform.translation.x = base_pose_in_odom.position.x();
-  transform.transform.translation.y = base_pose_in_odom.position.y();
-  transform.transform.translation.z = base_pose_in_odom.position.z();
+  transform.transform.translation.x = base_pose_in_map.position.x();
+  transform.transform.translation.y = base_pose_in_map.position.y();
+  transform.transform.translation.z = base_pose_in_map.position.z();
 
   const Eigen::Quaternionf yaw_only =
-      YawOnlyQuaternion(base_pose_in_odom.orientation);
+      YawOnlyQuaternion(base_pose_in_map.orientation);
   transform.transform.rotation.x = yaw_only.x();
   transform.transform.rotation.y = yaw_only.y();
   transform.transform.rotation.z = yaw_only.z();

@@ -26,7 +26,7 @@ FrameObservabilityEstimator::estimate(const ProcessedFrame &frame) const {
   FrameObservability result;
   result.sectors.resize(config_.observability.sector_count);
   result.base_point_count = static_cast<uint32_t>(frame.cloud_in_base.size());
-  result.odom_point_count = static_cast<uint32_t>(frame.cloud_in_odom.size());
+  result.map_point_count = static_cast<uint32_t>(frame.cloud_in_map.size());
   if (frame.cloud_in_base.empty()) {
     result.frame_partial = true;
     result.rear_dropout = true;

@@ -537,19 +537,19 @@ FacadeEvidence BuildFacadeEvidence(
   if (std::isfinite(workspace.support_ref)) {
     for (const size_t sample_index :
          sample_indices_by_cell[static_cast<size_t>(cell)]) {
-      const auto &sample = frame.odom_samples[sample_index];
+      const auto &sample = frame.map_samples[sample_index];
       if (has_support_anchor &&
-          sample.point_in_odom.z <
+          sample.point_in_map.z <
               support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
-      if (sample.point_in_odom.z <= lower_sample_ceiling) {
+      if (sample.point_in_map.z <= lower_sample_ceiling) {
         has_lower_structure_sample = true;
       }
-      if (sample.point_in_odom.z >= upper_band_floor) {
+      if (sample.point_in_map.z >= upper_band_floor) {
         has_upper_return = true;
         min_upper_return_z =
-            std::min(min_upper_return_z, sample.point_in_odom.z);
+            std::min(min_upper_return_z, sample.point_in_map.z);
       }
     }
     evidence.lower_upper_coexisting =
@@ -616,11 +616,11 @@ GroupSampleIndicesByCell(const ProcessedFrame &frame,
                          const LocalTerrainMap &map) {
   std::vector<std::vector<size_t>> sample_indices_by_cell(
       static_cast<size_t>(map.size()));
-  for (size_t sample_index = 0; sample_index < frame.odom_samples.size();
+  for (size_t sample_index = 0; sample_index < frame.map_samples.size();
        ++sample_index) {
-    const auto &sample = frame.odom_samples[sample_index];
+    const auto &sample = frame.map_samples[sample_index];
     int cell = -1;
-    if (!map.odomToIndex(sample.point_in_odom.x, sample.point_in_odom.y,
+    if (!map.mapToIndex(sample.point_in_map.x, sample.point_in_map.y,
                          cell)) {
       continue;
     }
@@ -657,7 +657,7 @@ void ResolveAnchors(
     auto &workspace = cell_workspaces[static_cast<size_t>(cell)];
     for (const size_t sample_index : sample_indices) {
       AccumulateCellStats(workspace.raw_stats,
-                          frame.odom_samples[sample_index].point_in_odom.z);
+                          frame.map_samples[sample_index].point_in_map.z);
     }
 
     const bool has_local_history_anchor =
@@ -677,23 +677,23 @@ void ResolveAnchors(
     workspace.support_anchor_candidate = resolved_anchor.z;
     workspace.anchor_validity = AnchorValidityDecision::kValid;
     for (const size_t sample_index : sample_indices) {
-      const auto &sample = frame.odom_samples[sample_index];
-      if (sample.point_in_odom.z <
+      const auto &sample = frame.map_samples[sample_index];
+      if (sample.point_in_map.z <
           resolved_anchor.z - config.geometry.sub_support_leak_tolerance) {
         ++workspace.below_anchor_count;
         SaturatingIncrement(workspace.anchor_below_observation_count);
         continue;
       }
-      if (sample.point_in_odom.z <=
+      if (sample.point_in_map.z <=
           resolved_anchor.z +
               config.geometry.support_anchor_reobserve_tolerance) {
         ++workspace.anchor_reobserve_count;
       }
-      if (sample.point_in_odom.z >=
+      if (sample.point_in_map.z >=
           resolved_anchor.z + config.geometry.upper_min_height_above_support) {
         ++workspace.upper_band_count;
         workspace.min_upper_band_z =
-            std::min(workspace.min_upper_band_z, sample.point_in_odom.z);
+            std::min(workspace.min_upper_band_z, sample.point_in_map.z);
       }
     }
   }
@@ -791,7 +791,7 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
   locally_triggered_cells.reserve(cell_workspaces.size() / 8U + 1U);
   const float sector_size = 2.0f * static_cast<float>(M_PI) /
                             static_cast<float>(observability.sectors.size());
-  const float yaw = YawFromQuaternion(frame.base_pose_in_odom.orientation);
+  const float yaw = YawFromQuaternion(frame.base_pose_in_map.orientation);
   const float suspicious_vertical_span = config.geometry.max_step_up * 0.75f;
 
   for (int cell = 0; cell < map.size(); ++cell) {
@@ -848,23 +848,23 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
                    static_cast<int>(std::numeric_limits<uint16_t>::max())));
 
     for (const size_t sample_index : sample_indices) {
-      const auto &sample = frame.odom_samples[sample_index];
+      const auto &sample = frame.map_samples[sample_index];
       const bool is_leak =
           workspace.anchor_leak_suppression_enabled &&
-          sample.point_in_odom.z <
+          sample.point_in_map.z <
               support_anchor - config.geometry.sub_support_leak_tolerance;
       if (is_leak) {
         SaturatingIncrement(workspace.sub_support_leak_count);
         continue;
       }
       if (workspace.anchor_validity == AnchorValidityDecision::kInvalidStale &&
-          sample.point_in_odom.z <=
+          sample.point_in_map.z <=
               support_anchor +
                   config.geometry.support_anchor_reobserve_tolerance) {
         SaturatingIncrement(workspace.stale_anchor_residual_filtered_count);
         continue;
       }
-      AccumulateCellStats(workspace.filtered_stats, sample.point_in_odom.z);
+      AccumulateCellStats(workspace.filtered_stats, sample.point_in_map.z);
     }
     workspace.trigger_stats = workspace.filtered_stats;
     output.sub_support_leak_count[static_cast<size_t>(cell)] =
@@ -890,10 +890,10 @@ std::vector<int> BuildLocalProfilesAndMarkTriggers(
     }
     workspace.has_stats = true;
 
-    const Eigen::Vector2f center = map.indexToOdom(cell);
+    const Eigen::Vector2f center = map.indexToMap(cell);
     const float representative_base_angle = NormalizeAngle(
-        std::atan2(center.y() - frame.base_pose_in_odom.position.y(),
-                   center.x() - frame.base_pose_in_odom.position.x()) -
+        std::atan2(center.y() - frame.base_pose_in_map.position.y(),
+                   center.x() - frame.base_pose_in_map.position.x()) -
         yaw);
     const int sector =
         std::clamp(static_cast<int>(std::floor(
@@ -952,13 +952,13 @@ void MarkUpperSupportCells(
     const bool has_support_anchor = std::isfinite(support_anchor);
     for (const size_t sample_index :
          sample_indices_by_cell[static_cast<size_t>(cell)]) {
-      const auto &sample = frame.odom_samples[sample_index];
+      const auto &sample = frame.map_samples[sample_index];
       if (has_support_anchor &&
-          sample.point_in_odom.z <
+          sample.point_in_map.z <
               support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
-      if (sample.point_in_odom.z >=
+      if (sample.point_in_map.z >=
           workspace.support_ref +
               config.geometry.upper_min_height_above_support) {
         output.raw_upper_support_cell[static_cast<size_t>(cell)] = 1U;
@@ -1028,12 +1028,12 @@ void BuildExplanationInputs(
     int candidate_reobserve_count = 0;
     for (const size_t sample_index :
          sample_indices_by_cell[static_cast<size_t>(cell)]) {
-      const auto &sample = frame.odom_samples[sample_index];
-      if (sample.point_in_odom.z <
+      const auto &sample = frame.map_samples[sample_index];
+      if (sample.point_in_map.z <
           support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
-      if (std::abs(sample.point_in_odom.z - effective_support_candidate_z) <=
+      if (std::abs(sample.point_in_map.z - effective_support_candidate_z) <=
           config.geometry.support_anchor_reobserve_tolerance) {
         ++candidate_reobserve_count;
       }
@@ -1054,10 +1054,10 @@ void BuildExplanationInputs(
     const bool use_elevated_effective_support_ref =
         ShouldUseElevatedEffectiveSupportRef(
             has_support_anchor,
-            support_anchor - frame.base_pose_in_odom.position.z(),
-            workspace.support_ref - frame.base_pose_in_odom.position.z(),
+            support_anchor - frame.base_pose_in_map.position.z(),
+            workspace.support_ref - frame.base_pose_in_map.position.z(),
             effective_support_candidate_z -
-                frame.base_pose_in_odom.position.z(),
+                frame.base_pose_in_map.position.z(),
             effective_support_candidate_z - workspace.support_ref,
             workspace.upper_band_count, workspace.anchor_reobserve_count,
             candidate_reobserve_count, upper_layer_neighbor_match_count,
@@ -1074,12 +1074,12 @@ void BuildExplanationInputs(
     bool has_elevated_upper_support = false;
     for (const size_t sample_index :
          sample_indices_by_cell[static_cast<size_t>(cell)]) {
-      const auto &sample = frame.odom_samples[sample_index];
-      if (sample.point_in_odom.z <
+      const auto &sample = frame.map_samples[sample_index];
+      if (sample.point_in_map.z <
           support_anchor - config.geometry.sub_support_leak_tolerance) {
         continue;
       }
-      if (sample.point_in_odom.z >=
+      if (sample.point_in_map.z >=
           effective_support_candidate_z +
               config.geometry.upper_min_height_above_support) {
         has_elevated_upper_support = true;
@@ -1169,13 +1169,13 @@ void EvaluateCandidates(
     const float vertical_span =
         workspace.filtered_stats.max_z - workspace.filtered_stats.min_z;
     const float relative_support_ref =
-        workspace.support_ref - frame.base_pose_in_odom.position.z();
+        workspace.support_ref - frame.base_pose_in_map.position.z();
     const float relative_upper_z =
-        workspace.filtered_stats.max_z - frame.base_pose_in_odom.position.z();
+        workspace.filtered_stats.max_z - frame.base_pose_in_map.position.z();
     const FrontendExplanationDecision reject_decision =
         ClassifyExplanationRejectDecision(
             has_support_anchor,
-            support_anchor - frame.base_pose_in_odom.position.z(),
+            support_anchor - frame.base_pose_in_map.position.z(),
             relative_support_ref, relative_upper_z, vertical_span,
             support_count, workspace.ascending_stair_support_count,
             aligned_neighbor_support_count, min_neighbor_upper_support_cells,

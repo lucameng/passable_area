@@ -43,7 +43,7 @@ void DebugPublishers::publish(const passable_area::core::FrameOutput &output,
   msg.base_point_count = output.base_point_count;
   // Historical field name in the message contract; the counted samples follow
   // the internal map-view cloud semantics.
-  msg.odom_point_count = output.odom_point_count;
+  msg.map_point_count = output.map_point_count;
   msg.sector_states.reserve(output.observability.sectors.size());
   msg.sector_coverage_confidence.reserve(output.observability.sectors.size());
   for (const auto &sector : output.observability.sectors) {

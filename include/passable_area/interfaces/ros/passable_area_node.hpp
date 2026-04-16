@@ -57,7 +57,7 @@ private:
   void logFatal(const char *format, ...);
   void logTopicConfiguration();
   void publishMapToBaseGravityTransform(
-      const passable_area::core::Pose3D &base_pose_in_odom,
+      const passable_area::core::Pose3D &base_pose_in_map,
       const builtin_interfaces::msg::Time &stamp);
 
   RosNodeParams node_params_;
