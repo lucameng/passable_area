@@ -79,6 +79,17 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 - 样本相对 `support_ref` 的高度要达到 `obstacle_points_min_height`
 - 样本在 `base_link` 下的高度不能高于 `obstacle_points_max_height_in_base_link`
 
+另外，当前 `/terrain_obstacle_points` 使用的是 cell-owned publication 语义：
+
+- 样本只能从它自己的 publishable obstacle cell 发布
+- 不允许“样本在 A，但直接借相邻 B cell 的 obstacle evidence 发出来”
+
+所以当报告给出 `NoObstacleSourceSamplesInRoi` 时，应该优先理解成：
+
+> 地图里已经有足够强的 obstacle evidence，但当前 ROI 内没有样本落在那些真正可发布的 obstacle cell 上。
+
+这不是补丁行为，而是当前实现有意保留的空间 ownership 约束。
+
 ## 5. 常见 root cause
 
 - `NoSamplesInRoi`
@@ -90,6 +101,19 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 - `NoObstacleSourceSamplesInRoi`
 
 这些名称都对应实际字段，不是场景标签。
+
+补充一个当前版本的 semantic 口径：
+
+- `KeepAsObstacle`
+  - 表示当前解释系统没有把这个 suspicious cell reject 掉
+- `kConfirmedFacade`
+  - 是更窄的一类 obstacle candidate semantic
+  - 只有明确的 facade-like、适合地图层加速累积的结构才会进入
+
+因此在 miss obstacle 排查里：
+
+- “已经 `KeepAsObstacle`” 不自动等于 “已经拿到 confirmed-facade map policy”
+- 一些 ceiling / overhead / below-robot layered structure 可能会被 keep，但仍只保留默认 semantic
 
 ## 6. 关于高台前沿 / 连续高支撑带的排查提示
 

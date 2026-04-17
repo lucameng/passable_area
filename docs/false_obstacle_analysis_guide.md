@@ -71,6 +71,21 @@ build/passable_area/passable_area_offline_replay \
 
 它不是最终真值判定器，也不是“绝对正确”的场景理解器。
 
+补充一个当前版本很重要的口径：
+
+- 这个工具分析的是最终进入 `/terrain_obstacle_points` 的发布结果
+- 但 false obstacle 的上游原因，常常出在前端解释层或 semantic 赋值层
+- 特别是：
+  - `KeepAsObstacle`
+  - `facade_lower_upper_coexisting`
+  - `obstacle_upper_patch_confirmed`
+  - `support_anchor_origin / authority`
+
+这些字段可以帮助你区分：
+
+- 这是一个真的 facade-like obstacle 被正常保留下来
+- 还是一个 overhead / ceiling / clearance-only layered structure 被前端解释得过宽
+
 ## 3. 先看哪几行
 
 第一次看输出时，不要从头到尾一项项抠。建议按这个顺序看：
@@ -164,6 +179,14 @@ root_causes:
 
 - 从当前已有证据看
 - 这个问题更像是由哪条触发链路引起的
+
+当前版本还有一个常见误区要避免：
+
+- `KeepAsObstacle` 不等于 “这个 cell 一定拿到了强化版 obstacle semantic”
+- 一些 cell 可能 explanation 上是 `KeepAsObstacle`
+- 但 semantic 仍是默认 obstacle candidate，而不是 `kConfirmedFacade`
+
+因此排查 false obstacle 时，不要把 “被 keep 住了” 和 “被 confirmed-facade 强化了” 混为一件事。
 
 ## 6. ranked_frames 是什么意思
 

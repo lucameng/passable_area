@@ -594,6 +594,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 - 先保留 `vertical_span` 的 suspicious trigger
 - 再要求 3x3 邻域里有足够多的 explanation-adjusted `upper_support_cell`
+- 对满足 facade-like keep 结构的 cell，再让 keep-side explanation 与 reject-side explanation 做一次仲裁
 - 同时要排除被当前前端解释成“楼梯/上下层混合/前缘重解释”的情况
 
 只有这样才会形成：
@@ -602,6 +603,51 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 - `obstacle_candidates`
 
 这就是当前版本的“固定 `3x3` upper-support neighborhood gate”。
+
+这里要特别区分两件事：
+
+- `KeepAsObstacle`
+  - 只表示当前 explanation 系统认为这个 cell 不该被 reject
+  - 它可以来自 facade-like keep evidence
+  - 但它本身还不是“强化版障碍语义”
+- `kConfirmedFacade`
+  - 这是前端显式输出的 obstacle candidate semantic
+  - 只有更窄的一类“可发布的 facade-like obstacle structure”才会进入它
+
+也就是说：
+
+- 不是所有 `KeepAsObstacle` 的 cell 都会变成 `kConfirmedFacade`
+- `kConfirmedFacade` 是 keep-side 结构里的一个更强、更窄的子集
+
+#### 8.3.5.1 `kConfirmedFacade` 的当前语义合同
+
+当前实现里，`ObstacleCandidateSemantic::kConfirmedFacade` 表达的是：
+
+> 这个 cell 不只是“没有被 reject 的 obstacle candidate”，而是已经形成了适合交给地图层加速累积的 facade-like obstacle structure。
+
+它当前要求同时满足：
+
+- 当前 cell 样本足够稠密
+- 没有 `sub_support_leak`
+- 有明确的 `facade_lower_upper_coexisting`
+- 3x3 邻域 upper-support 数量足够
+- `relative_support_ref` 没有落到明显的 below-robot step-down 带以下
+- `relative_upper_z` 真正进入了 obstacle 的 publishable 高度带
+
+这条语义合同的目的，是把下面两类几何分开：
+
+- 应该进入 `kConfirmedFacade` 的：
+  - 侧挡板
+  - 连续立面
+  - 近机器人高度的 wall-like / board-like obstacle structure
+- 不应该进入 `kConfirmedFacade` 的：
+  - 低矮 ceiling
+  - overhead cover
+  - 只是带有 lower/upper coexistence 的 clearance-only layered structure
+
+换句话说，`kConfirmedFacade` 的语义不是“只要 local trigger 很强就快速过线”，而是：
+
+> 只有当前前端已经确认它属于一类可解释、可维护、适合强化累积的 facade-like obstacle 时，才把这个 semantic 交给地图层。
 
 #### 8.3.6 `effective_support_ref` 的定位
 
@@ -659,6 +705,22 @@ obstacle 更新：
 - 写 `overhead_height`
 - 增加 `overhead_confidence`
 - 增加 `obstacle_evidence`
+
+当前 obstacle 更新不是对所有 candidate 一视同仁。
+
+地图层会读取前端给出的 `ObstacleCandidateSemantic`：
+
+- `kDefault`
+  - 使用基线 obstacle evidence 累积策略
+- `kConfirmedFacade`
+  - 使用 semantic-scoped 的 evidence gain / min-evidence policy
+
+这样做的分工是：
+
+- 前端负责表达“这是什么 obstacle candidate”
+- 地图层负责决定“这类 candidate 应该用什么累积速度”
+
+当前实现明确避免让前端编码“2 帧 / 3 帧内过线”这类隐藏时间策略。
 
 当前实现还会显式清理两类旧障碍：
 
@@ -755,6 +817,7 @@ obstacle 更新：
 - 障碍证据必须足够高
 - 点相对支撑参考的高度要够高
 - 点在 `base_link` 下的 z 又不能太高
+- 点的发布资格必须由样本自己的 cell 拥有，不允许直接借相邻 cell 的 obstacle evidence 发布
 
 这使得障碍调试点更偏向“与机器人近地通行有关的障碍样本”。
 
@@ -818,7 +881,15 @@ obstacle 更新：
 - 要求相对支撑参考高度至少为 `obstacle_points_min_height`
 - 同时要求样本在 `base_link` 下 z 不高于 `obstacle_points_max_height_in_base_link`
 - 当历史 `support_height` 不可用时，用当前帧该 cell 的 fallback `min_z` 作为支撑参考
+- 发布资格由样本自己的 cell 决定，不允许“样本在 A、发布资格借 B”这种跨 cell 直接借用
 - 发布在 `base_gravity`
+
+因此 `/terrain_obstacle_points` 当前遵守的是 cell-owned publication 语义：
+
+- map evidence 可以跨帧累积
+- 但发布时，样本只能从它自己的 publishable obstacle cell 发出来
+
+这个约束是为了避免空间 ownership 断裂带来的 false obstacle。
 
 ### 10.4 `/terrain_debug/unknown_mask`
 

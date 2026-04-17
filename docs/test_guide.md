@@ -20,10 +20,13 @@
 - `test_processor`
 - `test_output_converter`
 - `test_debug_publishers`
+- `test_status_code_manager`
+- `test_ros_param_loader`
+- `test_passable_area_node_frames`
 - `test_false_obstacle_analyzer`
 - `test_miss_obstacle_analyzer`
 
-截至当前版本，自动测试总共有 5 个 target、84 个 gtest case。
+截至当前版本，自动测试总共有 8 个 target、116 个 test case。
 
 ### 1.2 手工 benchmark / harness
 
@@ -78,6 +81,8 @@
 - PolarFrontend obstacle formation
   - suspicious cell 没有邻域支撑时拒绝
   - 有 3x3 upper-support cluster 时确认 obstacle
+  - true facade-like candidate 会进入 `kConfirmedFacade`
+  - below-robot overhead-cover 即使 `KeepAsObstacle`，也不会误进入 `kConfirmedFacade`
   - 无历史 support 时使用当前帧 `min_z`
   - 有效历史锚点下的 sub-support leak 抑制
   - finite 但无效历史 support 不参与 leak 过滤
@@ -90,6 +95,7 @@
 - debug / obstacle point 发布
   - support_points 使用 base_gravity 语义
   - obstacle_points 只发布 obstacle cell 的 upper band
+  - obstacle_points 的发布资格保持 cell-owned，不直接借相邻 cell 的 obstacle evidence
   - low ceiling 下不发布地面点
   - wall base noise 不进入 obstacle_points
   - 弱 evidence 默认不发布 obstacle_points
@@ -157,7 +163,60 @@
 - 已覆盖 false obstacle 分析器最关键的分类和热点选择逻辑
 - 但它不是 bag 级回归，更多是局部单元语义测试
 
-### 2.5 `test_miss_obstacle_analyzer`
+### 2.5 `test_status_code_manager`
+
+文件：
+
+- `test/interfaces/ros/test_status_code_manager.cpp`
+
+覆盖内容：
+
+- 输入健康时发布 `OK_RUNNING`
+- `ERR_ODOM_TIMEOUT`
+- `ERR_SYNC_STALL`
+- `ERR_OUTPUT_STALL`
+- sticky fatal 覆盖运行态状态码
+
+结论：
+
+- 有效
+- 兜底节点运行时健康状态机
+
+### 2.6 `test_ros_param_loader`
+
+文件：
+
+- `test/interfaces/ros/test_ros_param_loader.cpp`
+
+覆盖内容：
+
+- 新参数路径加载
+- legacy top-level 参数回退
+- 新旧参数位置冲突时优先级
+
+结论：
+
+- 有效
+- 兜底参数合同和兼容逻辑
+
+### 2.7 `test_passable_area_node_frames`
+
+文件：
+
+- `test/interfaces/ros/test_passable_area_node_frames.cpp`
+
+覆盖内容：
+
+- 默认 frame 配置
+- `map -> base_gravity` TF 开关
+- 输入 frame 不匹配时的 warning 行为
+
+结论：
+
+- 有效
+- 兜底 ROS 节点 frame 语义与对外接口行为
+
+### 2.8 `test_miss_obstacle_analyzer`
 
 文件：
 
@@ -266,8 +325,8 @@
 
 结果：
 
-- 当前 `passable_area` 自动测试 5 个 target 全部通过
-- 最近一次该包 gtest 覆盖共 84 个 case
+- 当前 `passable_area` 自动测试 8 个 target 全部通过
+- 最近一次该包测试结果共 116 个 case
 
 本轮还实跑了：
 
