@@ -3265,14 +3265,14 @@ TEST(ProcessorTest,
   layers.obstacle_evidence[disconnected_cell] = 0.78f;
 
   FrontendOutput frontend_output;
-  frontend_output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()),
-                                                 0U);
+  frontend_output.obstacle_candidate_cell.assign(
+      static_cast<size_t>(map.size()), 0U);
   frontend_output.facade_upper_edge_aligned_with_supported_neighbors.assign(
       static_cast<size_t>(map.size()), 0U);
   frontend_output.obstacle_candidate_cell[seed_cell] = 1U;
   frontend_output.obstacle_candidate_cell[connected_cell] = 1U;
-  frontend_output.facade_upper_edge_aligned_with_supported_neighbors[seed_cell] =
-      1U;
+  frontend_output
+      .facade_upper_edge_aligned_with_supported_neighbors[seed_cell] = 1U;
   frontend_output.obstacle_candidates.push_back(
       passable_area::core::ObstacleCandidate{
           seed_cell, layers.overhead_height[seed_cell], 0.8f,
@@ -3297,6 +3297,50 @@ TEST(ProcessorTest,
           passable_area::core::ObstaclePublishabilityState::kNotPublishable));
   EXPECT_EQ(
       map.layers().obstacle_publishable[disconnected_cell],
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePublishabilityState::kNotPublishable));
+}
+
+TEST(ProcessorTest,
+     MapUpdaterDoesNotGrantPublishabilityFromEvidenceWithoutOwnedStructure) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+  config.obstacle_points_min_evidence = 0.35f;
+  config.persistence.support_confidence_decay = 0.0f;
+
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+  auto &layers = map.layers();
+
+  const int strong_cell = 4;
+  layers.support_height[strong_cell] = 0.0f;
+  layers.support_confidence[strong_cell] = 1.0f;
+  layers.support_continuity[strong_cell] = 1.0f;
+  layers.clearance[strong_cell] = config.geometry.min_clearance + 0.2f;
+  layers.overhead_height[strong_cell] = 0.45f;
+  layers.obstacle_evidence[strong_cell] = 0.6f;
+
+  FrontendOutput frontend_output;
+  frontend_output.obstacle_candidate_cell.assign(
+      static_cast<size_t>(map.size()), 0U);
+  frontend_output.facade_upper_edge_aligned_with_supported_neighbors.assign(
+      static_cast<size_t>(map.size()), 0U);
+  frontend_output.obstacle_candidate_cell[strong_cell] = 1U;
+  frontend_output.obstacle_candidates.push_back(
+      passable_area::core::ObstacleCandidate{
+          strong_cell, layers.overhead_height[strong_cell], 0.6f,
+          passable_area::core::ObstacleCandidateSemantic::kDefault});
+
+  DropoutAwareMapUpdater updater(config);
+  const auto dirty =
+      updater.update(frontend_output, MakeObservedObservability(4), map);
+
+  ASSERT_FALSE(dirty.empty());
+  EXPECT_EQ(
+      map.layers().obstacle_publishable[strong_cell],
       static_cast<uint8_t>(
           passable_area::core::ObstaclePublishabilityState::kNotPublishable));
 }

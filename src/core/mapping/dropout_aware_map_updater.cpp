@@ -1,7 +1,6 @@
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <deque>
 #include <limits>
@@ -20,8 +19,7 @@ float ObstacleEvidenceGainScaleForSemantic(const ObstacleCandidate &candidate,
   switch (candidate.semantic) {
   case ObstacleCandidateSemantic::kConfirmedFacade:
     return std::max(
-        1.0f,
-        config.persistence.confirmed_facade_obstacle_evidence_gain_scale);
+        1.0f, config.persistence.confirmed_facade_obstacle_evidence_gain_scale);
   case ObstacleCandidateSemantic::kDefault:
   default:
     return 1.0f;
@@ -40,14 +38,44 @@ float ObstacleEvidenceForSemantic(const ObstacleCandidate &candidate,
   }
 }
 
-bool IsStrongObstacleCell(int cell, const TerrainLayers &layers,
-                          const Config &config) {
-  return layers.obstacle_evidence[cell] >= config.obstacle_points_min_evidence &&
+std::vector<uint8_t>
+BuildCurrentCandidateMask(const FrontendOutput &frontend_output,
+                          int cell_count) {
+  std::vector<uint8_t> current_candidate(static_cast<size_t>(cell_count), 0U);
+  for (const auto &candidate : frontend_output.obstacle_candidates) {
+    if (candidate.cell >= 0 && candidate.cell < cell_count) {
+      current_candidate[static_cast<size_t>(candidate.cell)] = 1U;
+    }
+  }
+  if (frontend_output.obstacle_candidate_cell.size() ==
+      static_cast<size_t>(cell_count)) {
+    current_candidate = frontend_output.obstacle_candidate_cell;
+  }
+  return current_candidate;
+}
+
+std::vector<uint8_t>
+BuildConfirmedFacadeMask(const FrontendOutput &frontend_output,
+                         int cell_count) {
+  std::vector<uint8_t> confirmed_facade(static_cast<size_t>(cell_count), 0U);
+  for (const auto &candidate : frontend_output.obstacle_candidates) {
+    if (candidate.cell >= 0 && candidate.cell < cell_count &&
+        candidate.semantic == ObstacleCandidateSemantic::kConfirmedFacade) {
+      confirmed_facade[static_cast<size_t>(candidate.cell)] = 1U;
+    }
+  }
+  return confirmed_facade;
+}
+
+bool CellHasObstacleEvidenceForOwnership(int cell, const TerrainLayers &layers,
+                                         const Config &config) {
+  return layers.obstacle_evidence[cell] >=
+             config.obstacle_points_min_evidence &&
          std::isfinite(layers.overhead_height[cell]);
 }
 
-bool IsCellHeightPublishable(int cell, const TerrainLayers &layers,
-                             const Config &config) {
+bool CellHasPublishableHeightEnvelope(int cell, const TerrainLayers &layers,
+                                      const Config &config) {
   if (!std::isfinite(layers.overhead_height[cell])) {
     return false;
   }
@@ -58,9 +86,17 @@ bool IsCellHeightPublishable(int cell, const TerrainLayers &layers,
          layers.support_height[cell] + config.obstacle_points_min_height;
 }
 
-bool AreCellsStructurallyConnected(int lhs_cell, int rhs_cell,
-                                   const TerrainLayers &layers,
-                                   const Config &config) {
+bool IsCeilingLikeOverheadCell(int cell, const TerrainLayers &layers,
+                               const Config &config) {
+  return std::isfinite(layers.support_height[cell]) &&
+         std::isfinite(layers.clearance[cell]) &&
+         layers.clearance[cell] < config.geometry.min_clearance &&
+         layers.support_continuity[cell] >= 0.99f;
+}
+
+bool CellsSharePublishableObstacleStructure(int lhs_cell, int rhs_cell,
+                                            const TerrainLayers &layers,
+                                            const Config &config) {
   if (!std::isfinite(layers.overhead_height[lhs_cell]) ||
       !std::isfinite(layers.overhead_height[rhs_cell])) {
     return false;
@@ -90,46 +126,32 @@ bool AreCellsStructurallyConnected(int lhs_cell, int rhs_cell,
                   layers.support_height[rhs_cell]) <= support_tolerance;
 }
 
-std::vector<uint8_t> BuildObstaclePublishableMask(
-    const FrontendOutput &frontend_output, const std::vector<uint8_t> &previous,
-    const TerrainLayers &layers, const LocalTerrainMap &map,
-    const Config &config) {
-  std::vector<uint8_t> confirmed_facade_candidate(
-      static_cast<size_t>(map.size()), 0U);
-  std::vector<uint8_t> obstacle_candidate_cell(static_cast<size_t>(map.size()),
-                                               0U);
-  for (const auto &candidate : frontend_output.obstacle_candidates) {
-    if (candidate.cell < 0 || candidate.cell >= map.size()) {
-      continue;
-    }
-    obstacle_candidate_cell[static_cast<size_t>(candidate.cell)] = 1U;
-    if (candidate.semantic == ObstacleCandidateSemantic::kConfirmedFacade) {
-      confirmed_facade_candidate[static_cast<size_t>(candidate.cell)] = 1U;
-    }
-  }
-  if (frontend_output.obstacle_candidate_cell.size() ==
-      static_cast<size_t>(map.size())) {
-    obstacle_candidate_cell = frontend_output.obstacle_candidate_cell;
-  }
+std::vector<uint8_t>
+BuildObstaclePublishableMask(const FrontendOutput &frontend_output,
+                             const std::vector<uint8_t> &previous,
+                             const TerrainLayers &layers,
+                             const LocalTerrainMap &map, const Config &config) {
+  const auto current_candidate =
+      BuildCurrentCandidateMask(frontend_output, map.size());
+  const auto confirmed_facade =
+      BuildConfirmedFacadeMask(frontend_output, map.size());
 
   std::vector<uint8_t> publishable(static_cast<size_t>(map.size()), 0U);
   std::deque<int> queue;
-  queue.clear();
 
   for (int cell = 0; cell < map.size(); ++cell) {
-    if (!IsStrongObstacleCell(cell, layers, config) ||
-        !IsCellHeightPublishable(cell, layers, config) ||
-        obstacle_candidate_cell[static_cast<size_t>(cell)] == 0U) {
+    if (current_candidate[static_cast<size_t>(cell)] == 0U ||
+        !CellHasObstacleEvidenceForOwnership(cell, layers, config) ||
+        !CellHasPublishableHeightEnvelope(cell, layers, config) ||
+        IsCeilingLikeOverheadCell(cell, layers, config)) {
       continue;
     }
-    const bool structural_seed =
-        confirmed_facade_candidate[static_cast<size_t>(cell)] != 0U ||
-        (frontend_output.facade_upper_edge_aligned_with_supported_neighbors
-                 .size() == static_cast<size_t>(map.size()) &&
-         frontend_output.facade_upper_edge_aligned_with_supported_neighbors
-                 [static_cast<size_t>(cell)] != 0U) ||
+    const bool structure_seed =
+        confirmed_facade[static_cast<size_t>(cell)] != 0U ||
+        !std::isfinite(layers.support_height[cell]) ||
+        layers.support_continuity[cell] < 0.99f ||
         previous[static_cast<size_t>(cell)] != 0U;
-    if (!structural_seed) {
+    if (!structure_seed) {
       continue;
     }
     publishable[static_cast<size_t>(cell)] = 1U;
@@ -148,23 +170,24 @@ std::vector<uint8_t> BuildObstaclePublishableMask(
         }
         const int neighbor_row = row + row_offset;
         const int neighbor_col = col + col_offset;
-        if (neighbor_row < 0 || neighbor_row >= map.rows() || neighbor_col < 0 ||
-            neighbor_col >= map.cols()) {
+        if (neighbor_row < 0 || neighbor_row >= map.rows() ||
+            neighbor_col < 0 || neighbor_col >= map.cols()) {
           continue;
         }
         const int neighbor = neighbor_row * map.cols() + neighbor_col;
         if (publishable[static_cast<size_t>(neighbor)] != 0U ||
-            !IsStrongObstacleCell(neighbor, layers, config) ||
-            !IsCellHeightPublishable(neighbor, layers, config) ||
-            !AreCellsStructurallyConnected(cell, neighbor, layers, config)) {
+            !CellHasObstacleEvidenceForOwnership(neighbor, layers, config) ||
+            !CellHasPublishableHeightEnvelope(neighbor, layers, config) ||
+            IsCeilingLikeOverheadCell(neighbor, layers, config) ||
+            !CellsSharePublishableObstacleStructure(cell, neighbor, layers,
+                                                    config)) {
           continue;
         }
 
-        const bool current_candidate =
-            obstacle_candidate_cell[static_cast<size_t>(neighbor)] != 0U;
-        const bool previously_publishable =
+        const bool current_or_owned =
+            current_candidate[static_cast<size_t>(neighbor)] != 0U ||
             previous[static_cast<size_t>(neighbor)] != 0U;
-        if (!current_candidate && !previously_publishable) {
+        if (!current_or_owned) {
           continue;
         }
 
