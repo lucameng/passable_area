@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <unordered_map>
 
@@ -52,12 +53,185 @@ bool IsPublishableObstacleCell(
     const passable_area::core::TerrainLayers &layers,
     const std::unordered_map<int, float> &fallback_support_ref_by_cell,
     const passable_area::core::Config &config) {
+  if (layers.obstacle_publishable[sample_cell] ==
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePublishabilityState::kNotPublishable)) {
+    return false;
+  }
   const float direct_support_ref = LookupObstacleSupportRef(
       sample_cell, layers, fallback_support_ref_by_cell);
-  return layers.obstacle_evidence[sample_cell] >=
-             config.obstacle_points_min_evidence &&
-         PassesObstaclePointPublishHeightGates(sample, direct_support_ref,
+  return PassesObstaclePointPublishHeightGates(sample, direct_support_ref,
                                                config);
+}
+
+std::vector<uint8_t> BuildCurrentCandidateMask(
+    const passable_area::core::FrontendOutput &frontend_output, int cell_count) {
+  std::vector<uint8_t> current_candidate(static_cast<size_t>(cell_count), 0U);
+  for (const auto &candidate : frontend_output.obstacle_candidates) {
+    if (candidate.cell >= 0 && candidate.cell < cell_count) {
+      current_candidate[static_cast<size_t>(candidate.cell)] = 1U;
+    }
+  }
+  if (frontend_output.obstacle_candidate_cell.size() ==
+      static_cast<size_t>(cell_count)) {
+    current_candidate = frontend_output.obstacle_candidate_cell;
+  }
+  return current_candidate;
+}
+
+std::vector<uint8_t> BuildConfirmedFacadeMask(
+    const passable_area::core::FrontendOutput &frontend_output, int cell_count) {
+  std::vector<uint8_t> confirmed_facade(static_cast<size_t>(cell_count), 0U);
+  for (const auto &candidate : frontend_output.obstacle_candidates) {
+    if (candidate.cell >= 0 && candidate.cell < cell_count &&
+        candidate.semantic ==
+            passable_area::core::ObstacleCandidateSemantic::kConfirmedFacade) {
+      confirmed_facade[static_cast<size_t>(candidate.cell)] = 1U;
+    }
+  }
+  return confirmed_facade;
+}
+
+bool CellHasObstacleEvidenceForOwnership(
+    int cell, const passable_area::core::TerrainLayers &layers,
+    const passable_area::core::Config &config) {
+  return layers.obstacle_evidence[cell] >= config.obstacle_points_min_evidence &&
+         std::isfinite(layers.overhead_height[cell]);
+}
+
+bool CellHasPublishableHeightEnvelope(
+    int cell, const passable_area::core::TerrainLayers &layers,
+    const passable_area::core::Config &config) {
+  if (!std::isfinite(layers.overhead_height[cell])) {
+    return false;
+  }
+  if (!std::isfinite(layers.support_height[cell])) {
+    return true;
+  }
+  return layers.overhead_height[cell] >=
+         layers.support_height[cell] + config.obstacle_points_min_height;
+}
+
+bool IsCeilingLikeOverheadCell(int cell,
+                               const passable_area::core::TerrainLayers &layers,
+                               const passable_area::core::Config &config) {
+  return std::isfinite(layers.support_height[cell]) &&
+         std::isfinite(layers.clearance[cell]) &&
+         layers.clearance[cell] < config.geometry.min_clearance &&
+         layers.support_continuity[cell] >= 0.99f;
+}
+
+bool CellsSharePublishableObstacleStructure(
+    int lhs_cell, int rhs_cell, int cols,
+    const passable_area::core::TerrainLayers &layers,
+    const passable_area::core::Config &config) {
+  const int lhs_row = lhs_cell / cols;
+  const int lhs_col = lhs_cell % cols;
+  const int rhs_row = rhs_cell / cols;
+  const int rhs_col = rhs_cell % cols;
+  if (std::abs(lhs_row - rhs_row) > 1 || std::abs(lhs_col - rhs_col) > 1) {
+    return false;
+  }
+  if (!std::isfinite(layers.overhead_height[lhs_cell]) ||
+      !std::isfinite(layers.overhead_height[rhs_cell])) {
+    return false;
+  }
+
+  const float overhead_tolerance =
+      std::max({config.map.resolution, config.geometry.max_step_up,
+                config.geometry.support_anchor_reobserve_tolerance});
+  if (std::abs(layers.overhead_height[lhs_cell] -
+               layers.overhead_height[rhs_cell]) > overhead_tolerance) {
+    return false;
+  }
+
+  const bool lhs_has_support = std::isfinite(layers.support_height[lhs_cell]);
+  const bool rhs_has_support = std::isfinite(layers.support_height[rhs_cell]);
+  if (lhs_has_support != rhs_has_support) {
+    return false;
+  }
+  if (!lhs_has_support) {
+    return true;
+  }
+
+  const float support_tolerance =
+      std::max({config.map.resolution, config.geometry.max_step_down,
+                config.geometry.support_anchor_reobserve_tolerance});
+  return std::abs(layers.support_height[lhs_cell] -
+                  layers.support_height[rhs_cell]) <= support_tolerance;
+}
+
+std::vector<uint8_t> RecomputeObstaclePublishableMask(
+    const passable_area::core::FrontendOutput &frontend_output,
+    const std::vector<uint8_t> &previous_publishable,
+    const passable_area::core::LocalTerrainMap &map,
+    const passable_area::core::Config &config) {
+  const auto &layers = map.layers();
+  const auto current_candidate =
+      BuildCurrentCandidateMask(frontend_output, map.size());
+  const auto confirmed_facade =
+      BuildConfirmedFacadeMask(frontend_output, map.size());
+
+  std::vector<uint8_t> publishable(static_cast<size_t>(map.size()), 0U);
+  std::deque<int> queue;
+
+  for (int cell = 0; cell < map.size(); ++cell) {
+    if (current_candidate[static_cast<size_t>(cell)] == 0U ||
+        !CellHasObstacleEvidenceForOwnership(cell, layers, config) ||
+        !CellHasPublishableHeightEnvelope(cell, layers, config) ||
+        IsCeilingLikeOverheadCell(cell, layers, config)) {
+      continue;
+    }
+    const bool structure_seed =
+        confirmed_facade[static_cast<size_t>(cell)] != 0U ||
+        !std::isfinite(layers.support_height[cell]) ||
+        layers.support_continuity[cell] < 0.99f ||
+        previous_publishable[static_cast<size_t>(cell)] != 0U;
+    if (!structure_seed) {
+      continue;
+    }
+    publishable[static_cast<size_t>(cell)] = 1U;
+    queue.push_back(cell);
+  }
+
+  while (!queue.empty()) {
+    const int cell = queue.front();
+    queue.pop_front();
+    const int row = cell / map.cols();
+    const int col = cell % map.cols();
+    for (int row_offset = -1; row_offset <= 1; ++row_offset) {
+      for (int col_offset = -1; col_offset <= 1; ++col_offset) {
+        if (row_offset == 0 && col_offset == 0) {
+          continue;
+        }
+        const int neighbor_row = row + row_offset;
+        const int neighbor_col = col + col_offset;
+        if (neighbor_row < 0 || neighbor_row >= map.rows() || neighbor_col < 0 ||
+            neighbor_col >= map.cols()) {
+          continue;
+        }
+        const int neighbor = neighbor_row * map.cols() + neighbor_col;
+        if (publishable[static_cast<size_t>(neighbor)] != 0U ||
+            !CellHasObstacleEvidenceForOwnership(neighbor, layers, config) ||
+            !CellHasPublishableHeightEnvelope(neighbor, layers, config) ||
+            IsCeilingLikeOverheadCell(neighbor, layers, config) ||
+            !CellsSharePublishableObstacleStructure(cell, neighbor, map.cols(),
+                                                    layers, config)) {
+          continue;
+        }
+        const bool current_or_owned =
+            current_candidate[static_cast<size_t>(neighbor)] != 0U ||
+            previous_publishable[static_cast<size_t>(neighbor)] != 0U;
+        if (!current_or_owned) {
+          continue;
+        }
+        publishable[static_cast<size_t>(neighbor)] = 1U;
+        queue.push_back(neighbor);
+      }
+    }
+  }
+
+  return publishable;
 }
 
 } // namespace
@@ -85,10 +259,14 @@ FrameOutput Processor::update(const FrameInput &input) {
       observability_estimator_.estimate(preprocessed);
   const FrontendOutput frontend_output =
       frontend_.run(preprocessed, observability, map_);
+  const std::vector<uint8_t> previous_publishable =
+      map_.layers().obstacle_publishable;
   const std::vector<int> dirty_cells =
       map_updater_.update(frontend_output, observability, map_);
   feature_updater_.update(dirty_cells, map_);
   traversability_solver_.update(map_);
+  map_.layers().obstacle_publishable = RecomputeObstaclePublishableMask(
+      frontend_output, previous_publishable, map_, config_);
   return buildOutput(preprocessed, observability, frontend_output);
 }
 
@@ -121,6 +299,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.roughness = layers.roughness;
   output.clearance = layers.clearance;
   output.support_continuity = layers.support_continuity;
+  output.obstacle_publishable = layers.obstacle_publishable;
   output.support_anchor_used = frontend_output.support_anchor_used;
   output.support_anchor_origin = frontend_output.support_anchor_origin;
   output.support_anchor_authority = frontend_output.support_anchor_authority;
@@ -177,7 +356,9 @@ Processor::buildOutput(const ProcessedFrame &frame,
     if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
-    if (layers.obstacle_evidence[cell] < config_.obstacle_points_min_evidence ||
+    if (layers.obstacle_publishable[cell] ==
+            static_cast<uint8_t>(
+                ObstaclePublishabilityState::kNotPublishable) ||
         std::isfinite(layers.support_height[cell])) {
       continue;
     }

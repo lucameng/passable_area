@@ -105,6 +105,8 @@ struct FrameOutput {
   std::vector<float> roughness;
   std::vector<float> clearance;
   std::vector<float> support_continuity;
+  // Explicit cell-owned obstacle publication ownership mask.
+  std::vector<uint8_t> obstacle_publishable;
   std::vector<float> support_anchor_used;
   std::vector<uint8_t> support_anchor_origin;
   std::vector<uint8_t> support_anchor_authority;

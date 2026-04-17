@@ -156,8 +156,8 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
   analysis.min_clearance = std::numeric_limits<float>::infinity();
   analysis.min_support_continuity = std::numeric_limits<float>::infinity();
 
-  int strong_evidence_cell_count = 0;
-  int strong_evidence_cells_with_samples = 0;
+  int publishable_cell_count = 0;
+  int publishable_cells_with_samples = 0;
   int publishable_sample_count = 0;
   int upper_patch_failed_suspicious_cell_count = 0;
   int explanation_rejected_suspicious_cell_count = 0;
@@ -235,17 +235,17 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
         support_ref = sample_stats.min_z;
       }
 
-      if (output.obstacle_evidence[idx] >=
-          config_.obstacle_points_min_evidence) {
-        ++strong_evidence_cell_count;
+      if (!output.obstacle_publishable.empty() &&
+          output.obstacle_publishable[idx] != 0U) {
+        ++publishable_cell_count;
         if (has_samples && sample_stats.sample_count > 0) {
-          ++strong_evidence_cells_with_samples;
+          ++publishable_cells_with_samples;
         }
       }
 
       if (has_samples && sample_stats.sample_count > 0 &&
-          output.obstacle_evidence[idx] >=
-              config_.obstacle_points_min_evidence &&
+          !output.obstacle_publishable.empty() &&
+          output.obstacle_publishable[idx] != 0U &&
           PassesObstaclePointPublishHeightGates(config_, support_ref,
                                                 sample_stats)) {
         publishable_sample_count += sample_stats.sample_count;
@@ -281,6 +281,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.support_ref = support_ref;
       cell.overhead_height = output.overhead_height[idx];
       cell.obstacle_evidence = output.obstacle_evidence[idx];
+      cell.obstacle_publishable =
+          !output.obstacle_publishable.empty() &&
+          output.obstacle_publishable[idx] != 0U;
       cell.support_confidence = output.support_confidence[idx];
       cell.support_anchor_used = output.support_anchor_used[idx];
       cell.support_anchor_origin = output.support_anchor_origin.empty()
@@ -373,15 +376,13 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                      static_cast<uint8_t>(
                          passable_area::core::FrontendExplanationDecision::
                              kKeepAsObstacle) &&
-                 cell.obstacle_evidence <
-                     config_.obstacle_points_min_evidence) {
+                 !cell.obstacle_publishable) {
         cell.explanation = "explicit keep verdict formed a candidate, but "
-                           "obstacle evidence is still below publish threshold";
-      } else if (output.obstacle_evidence[idx] >=
-                     config_.obstacle_points_min_evidence &&
+                           "the cell did not receive publishability";
+      } else if (cell.obstacle_publishable &&
                  (!PassesObstaclePointPublishHeightGates(config_, support_ref,
                                                          sample_stats))) {
-        cell.explanation = "obstacle evidence is high enough but samples fail "
+        cell.explanation = "cell is publishable, but samples fail "
                            "the obstacle-point publish height gates";
       } else if (cell.sub_support_leak_count > 0U &&
                  !cell.obstacle_candidate_cell &&
@@ -473,27 +474,25 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.evidence_lines.push_back(
         "obstacle_candidate_cells=" +
         std::to_string(analysis.obstacle_candidate_cell_count));
-  } else if (strong_evidence_cell_count > 0 && publishable_sample_count == 0) {
-    if (strong_evidence_cells_with_samples == 0) {
+  } else if (publishable_cell_count > 0 && publishable_sample_count == 0) {
+    if (publishable_cells_with_samples == 0) {
       analysis.classification =
           MissObstacleRootCause::kNoObstacleSourceSamplesInRoi;
       analysis.explanation =
-          "some roi cells already have strong obstacle evidence, but no "
-          "current roi samples land in those publishable cells";
+          "some roi cells already own publishability, but no current roi "
+          "samples land in those publishable cells";
       analysis.evidence_lines.push_back(
-          "strong_evidence_cells=" +
-          std::to_string(strong_evidence_cell_count));
+          "publishable_cells=" + std::to_string(publishable_cell_count));
       analysis.evidence_lines.push_back(
-          "strong_evidence_cells_with_samples=" +
-          std::to_string(strong_evidence_cells_with_samples));
+          "publishable_cells_with_samples=" +
+          std::to_string(publishable_cells_with_samples));
     } else {
       analysis.classification = MissObstacleRootCause::kOutputHeightGateNotMet;
       analysis.explanation =
-          "roi cells have enough obstacle evidence, but no current sample "
-          "passes the publish height gates in both base_gravity and base_link";
+          "roi cells own publishability, but no current sample passes the "
+          "publish height gates in both base_gravity and base_link";
       analysis.evidence_lines.push_back(
-          "strong_evidence_cells=" +
-          std::to_string(strong_evidence_cell_count));
+          "publishable_cells=" + std::to_string(publishable_cell_count));
       analysis.evidence_lines.push_back(
           "obstacle_points_min_height=" +
           std::to_string(config_.obstacle_points_min_height));
@@ -527,8 +526,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
   } else if (analysis.max_obstacle_evidence <
              config_.obstacle_points_min_evidence) {
     analysis.classification = MissObstacleRootCause::kObstacleEvidenceTooLow;
-    analysis.explanation = "frontend obstacle evidence exists, but it never "
-                           "reached the publish threshold for obstacle points";
+    analysis.explanation =
+        "frontend obstacle evidence exists, but no cell accumulated enough "
+        "owned structure to become publishable";
     analysis.evidence_lines.push_back(
         "max_obstacle_evidence=" +
         std::to_string(analysis.max_obstacle_evidence));

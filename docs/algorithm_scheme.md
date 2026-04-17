@@ -886,10 +886,13 @@ obstacle 更新：
 
 因此 `/terrain_obstacle_points` 当前遵守的是 cell-owned publication 语义：
 
+- `kConfirmedFacade` 和其他 frontend semantic 只回答“这是什么结构”
+- 地图层 evidence 只回答“这个 cell 的 obstacle 记忆有多强”
+- 处理器会再显式导出一个 cell-owned `obstacle_publishable` mask，回答“这个 cell 当前是否拥有 obstacle point 发布权”
 - map evidence 可以跨帧累积
 - 但发布时，样本只能从它自己的 publishable obstacle cell 发出来
 
-这个约束是为了避免空间 ownership 断裂带来的 false obstacle。
+这个约束是为了避免把 semantic 或 evidence 直接当作发布代理，进而造成空间 ownership 断裂和 ceiling / facade 摆动。
 
 ### 10.4 `/terrain_debug/unknown_mask`
 

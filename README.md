@@ -64,7 +64,7 @@ Preprocessing semantics are intentionally split as well:
 Current debug point semantics:
 - `/terrain_debug/base_gravity_cloud`: full preprocessed algorithm cloud expressed in `base_gravity_frame`
 - `/terrain_debug/support_points`: real input samples that land in support cells and remain close to the cell support height, expressed in `base_gravity_frame`
-- `/terrain_obstacle_points`: real input samples that land in obstacle cells whose `obstacle_evidence` is already high enough and whose height is at least `obstacle_points_min_height` relative to the cell support reference, not as an absolute z threshold, expressed in `base_gravity_frame`
+- `/terrain_obstacle_points`: real input samples that land in cells that currently own obstacle publishability; publishability is derived from local confirmed obstacle structure plus map evidence, then per-sample height gates are applied relative to the cell support reference and `base_link`, expressed in `base_gravity_frame`
 - `/terrain_debug/unknown_mask`: unknown cell centers expressed in `base_gravity_frame`
 - these point outputs are intended to align directly with the robot-centric `grid_map`, `terrain_state`, and `terrain_cost` views in RViz
 - `TerrainObservability.map_point_count`: counts samples in the internal map-view cloud (`cloud_in_map`)
@@ -160,7 +160,7 @@ For industrial open stairs and other perforated structures, the frontend now app
 - suspicious cells whose upper samples are still below the robot and align with neighboring support surfaces are rejected as stair-layer mixes instead of being promoted to obstacle evidence
 
 Relevant obstacle-point output controls:
-- `obstacle_points_min_evidence`: minimum obstacle evidence required before a cell can contribute to `/terrain_obstacle_points`
+- `obstacle_points_min_evidence`: minimum obstacle evidence required before a cell can become publishable for `/terrain_obstacle_points`; evidence alone is no longer sufficient
 - `obstacle_points_min_height`: minimum height relative to the cell support reference required for a sample to be published to `/terrain_obstacle_points`, not an absolute z threshold; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
 - `obstacle_points_max_height_in_base_link`: maximum allowed sample height in `base_link` for `/terrain_obstacle_points`; samples above this ceiling are filtered at publish time even if they clear the support-relative height gate in `base_gravity`
 

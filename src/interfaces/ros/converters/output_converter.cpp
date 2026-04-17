@@ -181,7 +181,8 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
       {"support_height", "support_confidence", "overhead_height",
        "obstacle_evidence", "coverage_confidence", "slope", "step_up",
        "step_down", "roughness", "clearance", "support_continuity",
-       "support_anchor_used", "sub_support_leak_count", "passability"});
+       "obstacle_publishable", "support_anchor_used",
+       "sub_support_leak_count", "passability"});
   map.setFrameId(header.frame_id);
   map.setGeometry(plan.geometry.length, plan.geometry.resolution,
                   plan.geometry.center);
@@ -206,6 +207,14 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
                          std::numeric_limits<float>::quiet_NaN()));
   AddLayer(map, "support_continuity", plan,
            ResampleLayer(plan, output.support_continuity, 0.0f));
+  std::vector<float> obstacle_publishable_float(output.obstacle_publishable.size(),
+                                                0.0f);
+  for (size_t i = 0; i < output.obstacle_publishable.size(); ++i) {
+    obstacle_publishable_float[i] =
+        output.obstacle_publishable[i] != 0U ? 1.0f : 0.0f;
+  }
+  AddLayer(map, "obstacle_publishable", plan,
+           ResampleLayer(plan, obstacle_publishable_float, 0.0f));
   AddLayer(map, "support_anchor_used", plan,
            ResampleLayer(plan, output.support_anchor_used,
                          std::numeric_limits<float>::quiet_NaN()));

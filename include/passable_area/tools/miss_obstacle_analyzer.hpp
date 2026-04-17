@@ -44,6 +44,7 @@ struct MissObstacleRepresentativeCell {
   float support_ref = 0.0f;
   float overhead_height = 0.0f;
   float obstacle_evidence = 0.0f;
+  bool obstacle_publishable = false;
   float support_confidence = 0.0f;
   float support_anchor_used = 0.0f;
   uint8_t support_anchor_origin = 0U;

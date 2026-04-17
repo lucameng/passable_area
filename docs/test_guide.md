@@ -95,7 +95,9 @@
 - debug / obstacle point 发布
   - support_points 使用 base_gravity 语义
   - obstacle_points 只发布 obstacle cell 的 upper band
+  - obstacle publishability 已显式拆成独立 cell-owned mask，不再把 semantic 或 evidence 直接当发布代理
   - obstacle_points 的发布资格保持 cell-owned，不直接借相邻 cell 的 obstacle evidence
+  - 连续局部 obstacle structure 可以把 publishability 扩展到同结构 cell，但 ownership 仍然逐 cell 生效
   - low ceiling 下不发布地面点
   - wall base noise 不进入 obstacle_points
   - 弱 evidence 默认不发布 obstacle_points

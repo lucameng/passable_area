@@ -21,6 +21,7 @@ struct TerrainLayers {
   std::vector<float> clearance;
   std::vector<float> support_continuity;
   std::vector<uint8_t> support_state;
+  std::vector<uint8_t> obstacle_publishable;
   std::vector<int8_t> passability_state;
   std::vector<int8_t> traversal_cost;
   std::vector<uint8_t> last_sector_state;

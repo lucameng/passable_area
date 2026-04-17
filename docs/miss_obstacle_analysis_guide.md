@@ -48,7 +48,8 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 1. ROI 内是否有输入样本
 2. 前端是否形成 `obstacle_suspicious / obstacle_candidate`
 3. 地图里的 `obstacle_evidence` 是否过阈值
-4. 当前样本是否满足 `/terrain_obstacle_points` 的发布高度门槛
+4. 当前 cell 是否已经拿到 publishability
+5. 当前样本是否满足 `/terrain_obstacle_points` 的发布高度门槛
 
 所以报告里会直接给出：
 
@@ -86,7 +87,7 @@ root cause 不是猜的，而是沿着实际控制链往后推：
 
 所以当报告给出 `NoObstacleSourceSamplesInRoi` 时，应该优先理解成：
 
-> 地图里已经有足够强的 obstacle evidence，但当前 ROI 内没有样本落在那些真正可发布的 obstacle cell 上。
+> 地图里已经有拿到 publishability 的 obstacle cell，但当前 ROI 内没有样本落在那些真正可发布的 cell 上。
 
 这不是补丁行为，而是当前实现有意保留的空间 ownership 约束。
 

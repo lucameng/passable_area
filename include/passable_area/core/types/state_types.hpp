@@ -23,6 +23,11 @@ enum class SupportState : uint8_t {
   kPersistent = 2,
 };
 
+enum class ObstaclePublishabilityState : uint8_t {
+  kNotPublishable = 0,
+  kPublishable = 1,
+};
+
 } // namespace passable_area::core
 
 #endif

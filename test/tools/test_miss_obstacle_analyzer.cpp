@@ -48,6 +48,7 @@ FrameOutput MakeOutput() {
   output.overhead_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_confidence.assign(9, 0.0f);
+  output.obstacle_publishable.assign(9, 0U);
   output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_anchor_origin.assign(9, 0U);
   output.support_anchor_authority.assign(9, 0U);
@@ -228,6 +229,7 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_suspicious[cell] = 1U;
   output.obstacle_candidate_cell[cell] = 1U;
   output.obstacle_evidence[cell] = 0.6f;
+  output.obstacle_publishable[cell] = 1U;
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
@@ -252,6 +254,7 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_suspicious[cell] = 1U;
   output.obstacle_candidate_cell[cell] = 1U;
   output.obstacle_evidence[cell] = 0.6f;
+  output.obstacle_publishable[cell] = 1U;
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
@@ -260,9 +263,8 @@ TEST(MissObstacleAnalyzerTest,
             MissObstacleRootCause::kOutputHeightGateNotMet);
 }
 
-TEST(
-    MissObstacleAnalyzerTest,
-    ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {
+TEST(MissObstacleAnalyzerTest,
+     ReturnsNoObstacleSourceSamplesWhenPublishableCellsHaveNoCurrentSamples) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   output.resolution = 0.5f;
@@ -270,6 +272,7 @@ TEST(
   const auto frame = MakeProcessedFrame({Point3f{-0.49f, 0.0f, 0.10f}});
   const int cell = CenterCellIndex(output);
   output.obstacle_evidence[cell] = 0.7f;
+  output.obstacle_publishable[cell] = 1U;
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);

@@ -63,6 +63,9 @@ void LocalTerrainMap::clearLayers() {
   Fill(layers_.support_continuity, 0.0f, cell_count);
   Fill(layers_.support_state, static_cast<uint8_t>(SupportState::kNone),
        cell_count);
+  Fill(layers_.obstacle_publishable,
+       static_cast<uint8_t>(ObstaclePublishabilityState::kNotPublishable),
+       cell_count);
   Fill(layers_.passability_state,
        static_cast<int8_t>(PassabilityState::kUnknown), cell_count);
   Fill(layers_.traversal_cost, static_cast<int8_t>(-1), cell_count);
@@ -104,6 +107,9 @@ void LocalTerrainMap::shiftLayers(int row_shift, int col_shift) {
              0.0f);
   ShiftLayer(layers_.support_state, rows_, cols_, row_shift, col_shift,
              static_cast<uint8_t>(SupportState::kNone));
+  ShiftLayer(layers_.obstacle_publishable, rows_, cols_, row_shift, col_shift,
+             static_cast<uint8_t>(
+                 ObstaclePublishabilityState::kNotPublishable));
   ShiftLayer(layers_.passability_state, rows_, cols_, row_shift, col_shift,
              static_cast<int8_t>(PassabilityState::kUnknown));
   ShiftLayer(layers_.traversal_cost, rows_, cols_, row_shift, col_shift,

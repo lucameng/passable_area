@@ -354,6 +354,16 @@ passable_area::core::Config MakeConfig() {
   return config;
 }
 
+FrameObservability MakeObservedObservability(int sector_count) {
+  FrameObservability observability;
+  observability.sectors.resize(static_cast<size_t>(sector_count));
+  for (auto &sector : observability.sectors) {
+    sector.state = ObservabilityState::kObserved;
+    sector.coverage_confidence = 1.0f;
+  }
+  return observability;
+}
+
 } // namespace
 
 TEST(ProcessorTest, FlatGroundProducesPassableCells) {
@@ -3176,12 +3186,7 @@ TEST(ProcessorTest,
 
   LocalTerrainMap map(config);
   DropoutAwareMapUpdater updater(config);
-  FrameObservability observability;
-  observability.sectors.resize(4);
-  for (auto &sector : observability.sectors) {
-    sector.state = ObservabilityState::kObserved;
-    sector.coverage_confidence = 1.0f;
-  }
+  FrameObservability observability = MakeObservedObservability(4);
 
   FrontendOutput frontend_output;
   frontend_output.obstacle_candidates.push_back(
@@ -3217,12 +3222,7 @@ TEST(ProcessorTest,
 
   LocalTerrainMap map(config);
   DropoutAwareMapUpdater updater(config);
-  FrameObservability observability;
-  observability.sectors.resize(4);
-  for (auto &sector : observability.sectors) {
-    sector.state = ObservabilityState::kObserved;
-    sector.coverage_confidence = 1.0f;
-  }
+  FrameObservability observability = MakeObservedObservability(4);
 
   FrontendOutput frontend_output;
   frontend_output.obstacle_candidates.push_back(
@@ -3236,6 +3236,69 @@ TEST(ProcessorTest,
               config.persistence.obstacle_evidence_gain, 1e-5f);
   EXPECT_NEAR(map.layers().overhead_confidence[3],
               config.persistence.obstacle_evidence_gain, 1e-5f);
+}
+
+TEST(ProcessorTest,
+     PublishabilityExpandsAcrossConnectedObstacleCellsButStaysCellOwned) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+  config.obstacle_points_min_evidence = 0.35f;
+
+  LocalTerrainMap map(config);
+  map.recenter(Eigen::Vector2f::Zero());
+  auto &layers = map.layers();
+
+  const int seed_cell = 4;
+  const int connected_cell = 5;
+  const int disconnected_cell = 8;
+  layers.support_height[seed_cell] = 0.0f;
+  layers.support_height[connected_cell] = 0.02f;
+  layers.support_height[disconnected_cell] = 0.45f;
+  layers.overhead_height[seed_cell] = 0.42f;
+  layers.overhead_height[connected_cell] = 0.40f;
+  layers.overhead_height[disconnected_cell] = 0.75f;
+  layers.obstacle_evidence[seed_cell] = 0.42f;
+  layers.obstacle_evidence[connected_cell] = 0.41f;
+  layers.obstacle_evidence[disconnected_cell] = 0.78f;
+
+  FrontendOutput frontend_output;
+  frontend_output.obstacle_candidate_cell.assign(static_cast<size_t>(map.size()),
+                                                 0U);
+  frontend_output.facade_upper_edge_aligned_with_supported_neighbors.assign(
+      static_cast<size_t>(map.size()), 0U);
+  frontend_output.obstacle_candidate_cell[seed_cell] = 1U;
+  frontend_output.obstacle_candidate_cell[connected_cell] = 1U;
+  frontend_output.facade_upper_edge_aligned_with_supported_neighbors[seed_cell] =
+      1U;
+  frontend_output.obstacle_candidates.push_back(
+      passable_area::core::ObstacleCandidate{
+          seed_cell, layers.overhead_height[seed_cell], 0.8f,
+          passable_area::core::ObstacleCandidateSemantic::kConfirmedFacade});
+  frontend_output.obstacle_candidates.push_back(
+      passable_area::core::ObstacleCandidate{
+          connected_cell, layers.overhead_height[connected_cell], 0.5f,
+          passable_area::core::ObstacleCandidateSemantic::kDefault});
+
+  DropoutAwareMapUpdater updater(config);
+  const auto dirty =
+      updater.update(frontend_output, MakeObservedObservability(4), map);
+
+  ASSERT_FALSE(dirty.empty());
+  EXPECT_NE(
+      map.layers().obstacle_publishable[seed_cell],
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePublishabilityState::kNotPublishable));
+  EXPECT_NE(
+      map.layers().obstacle_publishable[connected_cell],
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePublishabilityState::kNotPublishable));
+  EXPECT_EQ(
+      map.layers().obstacle_publishable[disconnected_cell],
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePublishabilityState::kNotPublishable));
 }
 
 TEST(ProcessorTest, DebugSupportPointsRespectRobotCentricGravityFrame) {
@@ -3297,7 +3360,8 @@ TEST(ProcessorTest, ObstaclePointsPublishUpperBandSamplesFromObstacleCells) {
   EXPECT_NEAR(max_z, 0.30f, 1e-5f);
 }
 
-TEST(ProcessorTest, ObstaclePointsExcludeGroundSamplesUnderLowCeiling) {
+TEST(ProcessorTest,
+     LowCeilingPublishabilityStaysStricterThanRawObstacleEvidence) {
   auto config = MakeConfig();
   config.preprocess.enable_downsample = false;
   config.obstacle_points_min_evidence = 0.2f;
@@ -3311,14 +3375,21 @@ TEST(ProcessorTest, ObstaclePointsExcludeGroundSamplesUnderLowCeiling) {
   ASSERT_TRUE(output.valid);
   ASSERT_FALSE(output.obstacle_points.empty());
 
-  float min_z = std::numeric_limits<float>::infinity();
-  float max_z = -std::numeric_limits<float>::infinity();
-  for (const auto &point : output.obstacle_points) {
-    min_z = std::min(min_z, point.point.z);
-    max_z = std::max(max_z, point.point.z);
+  int publishable_cells = 0;
+  int high_evidence_cells = 0;
+  for (size_t i = 0; i < output.obstacle_publishable.size(); ++i) {
+    if (output.obstacle_publishable[i] != 0U) {
+      ++publishable_cells;
+    }
+    if (output.obstacle_evidence[i] >= config.obstacle_points_min_evidence) {
+      ++high_evidence_cells;
+    }
   }
-  EXPECT_NEAR(min_z, 0.2f, 1e-5f);
-  EXPECT_NEAR(max_z, 0.2f, 1e-5f);
+  EXPECT_LT(publishable_cells, high_evidence_cells);
+  EXPECT_GT(high_evidence_cells, 0);
+  for (const auto &point : output.obstacle_points) {
+    EXPECT_NEAR(point.point.z, 0.2f, 1e-5f);
+  }
 }
 
 TEST(ProcessorTest, ObstaclePointsExcludeSamplesAboveBaseLinkHeightCeiling) {
@@ -3527,6 +3598,7 @@ TEST(ProcessorTest, DebugObstaclePointsIgnoreWeakObstacleEvidenceByDefault) {
   EXPECT_GT(output.obstacle_evidence[cell], 0.25f);
   EXPECT_LT(output.obstacle_evidence[cell],
             config.obstacle_points_min_evidence);
+  EXPECT_EQ(output.obstacle_publishable[cell], 0U);
   EXPECT_TRUE(output.obstacle_points.empty());
 }
 
@@ -3585,6 +3657,8 @@ TEST(ProcessorTest,
             config.obstacle_points_min_evidence);
   ASSERT_LT(output.obstacle_evidence[weak_right_cell],
             config.obstacle_points_min_evidence);
+  EXPECT_NE(output.obstacle_publishable[strong_left_cell], 0U);
+  EXPECT_EQ(output.obstacle_publishable[weak_right_cell], 0U);
   ASSERT_NE(output.obstacle_candidate_cell[weak_right_cell], 0U);
   ASSERT_NE(output.obstacle_local_triggered[weak_right_cell], 0U);
   ASSERT_NE(output.obstacle_upper_patch_confirmed[weak_right_cell], 0U);
@@ -3632,6 +3706,10 @@ TEST(ProcessorTest,
     }
   }
   EXPECT_FALSE(found_sparse_right_publish);
+
+  const int sparse_right_cell = CellIndex(output, 0.65f, 0.15f);
+  ASSERT_GE(sparse_right_cell, 0);
+  EXPECT_EQ(output.obstacle_publishable[sparse_right_cell], 0U);
 }
 
 TEST(ProcessorTest, DynamicObstacleClearsAfterObservedGroundReturns) {
