@@ -909,10 +909,6 @@ obstacle 更新：
 - `max_step_down`
 - `max_support_roughness`
 - `min_clearance`
-- `upper_min_height_above_support`
-- `sub_support_leak_tolerance`
-- `support_anchor_reobserve_tolerance`
-- `min_neighbor_upper_support_cells`
 
 ### 12.3 观测参数
 

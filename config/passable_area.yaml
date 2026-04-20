@@ -24,10 +24,6 @@ passable_area:
     obstacle_points_min_evidence: 0.4
     obstacle_points_min_height: 0.10
     obstacle_points_max_height_in_base_link: 0.20
-    upper_min_height_above_support: 0.20
-    sub_support_leak_tolerance: 0.18
-    support_anchor_reobserve_tolerance: 0.08
-    min_neighbor_upper_support_cells: 2
 
     map_frame: "map"
     base_gravity_frame: "base_gravity"

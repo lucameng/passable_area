@@ -150,14 +150,12 @@ Relevant dynamic-obstacle persistence controls:
 - `obstacle_height_clear_threshold`: clears `overhead_height` once obstacle evidence has fallen below this threshold
 
 Relevant obstacle-formation controls:
-- `upper_min_height_above_support`: minimum height above the support reference required to mark a cell as containing upper support; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
-- `sub_support_leak_tolerance`: when a valid historical or neighbor support anchor exists, samples lower than `support_anchor - sub_support_leak_tolerance` are treated as leaked returns from a lower layer and excluded from current-frame support / obstacle formation
-- `support_anchor_reobserve_tolerance`: tolerance used to decide whether the historical support anchor is still re-observed by the current frame before trusting it for leak suppression and stair-mix rejection
-- `min_neighbor_upper_support_cells`: minimum number of upper-support cells inside the fixed 3x3 neighborhood required to confirm a suspicious obstacle cell
+- `max_step_up`: the frontend uses `vertical_span > max_step_up * 0.75` as the direct obstacle trigger threshold
 
-For industrial open stairs and other perforated structures, the frontend now applies two extra guards before forming obstacle candidates:
-- valid support anchors suppress obvious lower-layer leaks without changing the single-layer map semantics
-- suspicious cells whose upper samples are still below the robot and align with neighboring support surfaces are rejected as stair-layer mixes instead of being promoted to obstacle evidence
+The current frontend has been rolled back to a simple per-cell baseline:
+- support candidates come directly from the current cell `min_z`
+- obstacle candidates form directly from the current cell `vertical_span`
+- the old anchor/leak/neighbor-gate rule stack is no longer part of the active obstacle-formation path
 
 Relevant obstacle-point output controls:
 - `obstacle_points_min_evidence`: minimum obstacle evidence required before a cell can contribute to `/terrain_obstacle_points`

@@ -629,7 +629,6 @@ TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
 TEST(ProcessorTest,
      PolarFrontendFormsObstacleCandidateFromVerticalSpanWithoutNeighborGates) {
   auto config = MakeConfig();
-  config.geometry.min_neighbor_upper_support_cells = 5;
   PolarFrontend frontend(config);
   LocalTerrainMap map(config);
   map.recenter(Eigen::Vector2f::Zero());

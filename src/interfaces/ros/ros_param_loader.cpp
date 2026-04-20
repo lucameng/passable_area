@@ -53,17 +53,6 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "max_support_roughness", config.geometry.max_support_roughness);
   config.geometry.min_clearance =
       node.declare_parameter("min_clearance", config.geometry.min_clearance);
-  config.geometry.upper_min_height_above_support =
-      node.declare_parameter("upper_min_height_above_support",
-                             config.geometry.upper_min_height_above_support);
-  config.geometry.sub_support_leak_tolerance = node.declare_parameter(
-      "sub_support_leak_tolerance", config.geometry.sub_support_leak_tolerance);
-  config.geometry.support_anchor_reobserve_tolerance = node.declare_parameter(
-      "support_anchor_reobserve_tolerance",
-      config.geometry.support_anchor_reobserve_tolerance);
-  config.geometry.min_neighbor_upper_support_cells =
-      node.declare_parameter("min_neighbor_upper_support_cells",
-                             config.geometry.min_neighbor_upper_support_cells);
   config.obstacle_points_min_evidence = node.declare_parameter(
       "obstacle_points_min_evidence", config.obstacle_points_min_evidence);
   config.obstacle_points_min_height = node.declare_parameter(
