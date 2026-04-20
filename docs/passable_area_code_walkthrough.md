@@ -423,190 +423,114 @@ map_.recenter(preprocessed.base_pose_in_map.position.head<2>())
 
 - `src/passable_area/src/core/polar_frontend.cpp`
 
-这是整套算法里最核心、也最绕的部分。
+当前版本已经把前端回退到接近 `f92759c` 的简单语义。
 
 如果只记一句话，可以记成：
 
-**`PolarFrontend` 负责把当前帧点云解释成三类前端证据：support candidate、obstacle candidate、ambiguous candidate。**
-
-但这句话还不够，因为它内部做的事情远不止“按格子取 min/max”。
+**`PolarFrontend` 现在只负责把“当前帧每个 cell 的原始高度分布”翻译成 support / obstacle / ambiguous 三类单帧候选，不再承担复杂的历史解释。**
 
 #### 5.4.1 它先按 cell 聚合点
 
-对于每个 `odom_sample`：
+对于每个 `map_sample`：
 
 1. 根据 `point_in_map.x/y` 找到地图 cell
-2. 把该 cell 对应的样本索引存下来
+2. 更新这个 cell 的 `min_z / max_z / count`
 
-之后每个 cell 都会有一组属于自己的样本点。
+这一步结束后，每个有样本的 cell 只有一份非常直接的统计：
 
-#### 5.4.2 它先尝试给每个 cell 找一个“支撑参考”
+- `min_z`
+- `max_z`
+- `count`
+- `vertical_span = max_z - min_z`
 
-这是理解整个前端的第一个关键。
+当前前端不再在这一层做样本级过滤、anchor 借用、邻域锚点共识或 explanation-only 支撑抬高。
 
-代码里有三个容易混淆的概念：
+#### 5.4.2 support candidate 怎么来
 
-- `raw_min_z`
-- `support_anchor`
-- `support_ref`
+对每个有样本、且该扇区不是 `MissingByDropout` 的 cell：
 
-它们不是一回事。
+- 直接把当前帧 `min_z` 作为 `support_height`
+- 生成一个 `SupportCandidate`
 
-##### `raw_min_z`
+因此当前前端里的 support 候选是纯单帧、纯观测驱动的：
 
-- 当前 cell 本帧样本里的最低 z
-- 只是原始观测，不代表一定可信
+- 不依赖历史 `support_height`
+- 不依赖 `support_anchor`
+- 不引入 `effective_support_ref`
 
-##### `support_anchor`
+历史支撑的保留、衰减和状态转换都留给后面的 `DropoutAwareMapUpdater` 处理。
 
-- 从历史地图里找来的支撑锚点
-- 优先用当前 cell 自己已有的 `support_height`
-- 如果本 cell 不可靠，再尝试邻居的支撑共识
+#### 5.4.3 obstacle candidate 怎么来
 
-但不是有历史就一定用，代码会检查：
-
-- support 置信度够不够
-- support state 是否不是 `kNone`
-- `last_reliable_age` 是否没太老
-- 锚点高度和当前观测的 `raw_min_z` 是否相容
-
-##### `support_ref`
-
-这是当前 cell 在本次前端判断里真正采用的“支撑参考面”：
-
-- 如果本 cell 有本地历史支撑锚点且本次仍然接受，就用历史 `support_height`
-- 否则退回 `stats.min_z`
-
-所以 `support_ref` 更像是：
-
-**当前前端用于解释这个 cell 的“暂时地面参考”**。
-
-#### 5.4.3 它会主动拒绝一些不可信的旧支撑锚点
-
-前端不会盲信历史支撑。
-
-当前实现里有两类显式拒绝：
-
-- `reject_stale_anchor`
-- `reject_wall_only_anchor`
-
-大意是：
-
-- 如果旧锚点几乎没有被本帧重新看到，但上方却出现了明显结构，说明旧锚点可能过期了
-- 如果锚点下方泄漏点很多，而锚点附近重观测不足，也可能是在把墙或分层结构误解释成地面
-
-这一步是为了避免“历史地面粘住不走”。
-
-#### 5.4.4 它统计每个 cell 的上下层结构
-
-在选定 `support_ref` 之后，前端会看：
-
-- 当前 cell 的 `vertical_span = max_z - min_z`
-- 是否存在高于 `support_ref + upper_min_height_above_support` 的上层点
-- 是否有“稳定上层带（stable upper layer candidate）”
-
-所谓稳定上层带，不是只看一个高点，而是要满足：
-
-- 点确实落在“高于支撑面、但不高到离谱”的区间里
-- 至少有 2 个点
-- 这些点在 z 方向上形成足够紧的带状结构
-
-这部分是当前实现识别**楼梯上层、分层支撑、贴近支撑面上方的稳定台阶结构**的关键。
-
-#### 5.4.5 `vertical_span` 只是“可疑触发”，不是障碍最终判定
-
-这点一定要注意。
-
-代码里会先用：
+当前障碍形成规则也回到了直接判定：
 
 ```cpp
-vertical_span > max_step_up * 0.75
+vertical_span > max_step_up * 0.75f
 ```
 
-把 cell 标成 `obstacle_suspicious`。
+只要当前 cell 的原始高度跨度超过这个阈值，就会：
 
-但这还只是“这个格子内部高度跨度大，值得怀疑”。
+- 标记 `obstacle_local_triggered = 1`
+- 标记 `obstacle_suspicious = 1`
+- 标记 `obstacle_candidate_cell = 1`
+- 生成一个 `ObstacleCandidate`
 
-真正进入 `obstacle_candidates`，还要过后面的邻域门控。
+也就是说，当前版本里：
 
-#### 5.4.6 这套前端在努力解决什么问题
-
-从代码细节看，前端最想解决的是这些典型误判：
-
-- 楼梯边缘被当成墙
-- 机器人脚下以下的下层地面和当前层混在一起，被误判成障碍
-- 楼梯上行时，台阶前缘或上层带被误判成不可通行障碍
-- 有历史支撑时，新观测其实已经说明支撑参考该抬高，但地图还没来得及真正更新
-
-因此代码里出现了大量带语义的 helper，例如：
-
-- `ShouldRejectBelowRobotStairMix`
-- `ShouldRejectBelowRobotGroundLayerMix`
-- `ShouldRejectBelowRobotUpstairGroundMix`
-- `ShouldUseElevatedEffectiveSupportRef`
-- `ShouldUseElevatedEffectiveSupportRefForUnanchoredLayeredStairRun`
-- `...FrontEdge`
-- `...EdgeOfEdge`
-
-这些函数名字很长，但传达的意思很直接：
-
-- 先判断某种结构是不是应该被解释成“上下层混合 / 楼梯层状结构”
-- 如果是，就临时把这个 cell 的“有效支撑参考”抬高
-- 这样后续就不会把同一结构当障碍
-
-#### 5.4.7 什么是 `effective_support_ref`
-
-这是前端里第二个最关键的概念。
-
-代码注释已经写得很明确：
-
-> Frontend-local temporary explanation ref; never persisted as map support.
-
-也就是说：
-
-- `effective_support_ref` 只是当前前端为了正确解释这一帧的临时支撑参考
-- 它不是直接写回地图的永久 `support_height`
-
-这非常重要，因为它说明当前实现区分了两件事：
-
-- 当前这帧怎么解释更合理
-- 地图应该长期记住什么
-
-这是一种明显偏保守的工程策略。
-
-#### 5.4.8 障碍是怎么形成的
-
-最终障碍候选只从 `suspicious_cells` 里产生。
-
-大致条件是：
-
-1. 当前 cell 高度跨度足够大，先成为 suspicious
-2. 周围 3x3 邻域里，有足够多的 `upper_support_cell`
-3. 这些邻域支持结构不能又被当前逻辑解释成楼梯/分层混合
-4. 某些“已被解释为抬高支撑参考”的 cell 会显式拒绝成为障碍
-
-最终只有满足条件的 cell，才会写入：
-
+- `obstacle_suspicious`
 - `obstacle_candidate_cell`
-- `obstacle_candidates`
+- `obstacle_upper_patch_confirmed`
 
-也就是 `AGENTS.md` 里提到的：
+三者本质上已经合并成同一阶段的兼容性表达，不再是多级门控链。
 
-- 先保留现有 `vertical_span` suspicious trigger
-- 再用固定 `3x3` upper-support neighborhood gate 确认障碍
+#### 5.4.4 `upper_support_cell` 和 explanation 字段现在是什么地位
 
-这跟简单“跨度大就是障碍”完全不同。
+当前实现仍然保留了很多历史调试字段，是为了不打破：
 
-#### 5.4.9 `ambiguous_candidates` 在当前实现里的位置
+- `FrameOutput`
+- offline replay
+- false / miss analyzer
+- 已有 ROS debug 输出契约
 
-代码里会在部分观测扇区下生成 `AmbiguousCandidate`，但后续 `DropoutAwareMapUpdater` 并没有使用它。
+但这些字段在当前简单前端里大多只是兼容位：
 
-所以当前版本里它更像：
+- `raw_upper_support_cell = 0`
+- `explanation_adjusted_upper_support_cell = 0`
+- `upper_support_cell = 0`
+- `obstacle_rejected_by_neighbor_support = 0`
+- `neighbor_upper_support_count = 0`
+- `aligned_neighbor_support_count = 0`
+- `explanation_decision = None`
 
-- 预留接口
-- 辅助调试/后续扩展痕迹
+因此现在看到这些字段，不应该再把它们理解成“当前主判定链正在经过这些分支”。
 
-它不是主链真正参与地图更新的核心输入。
+#### 5.4.5 `ambiguous_candidates` 在当前实现里的位置
+
+这部分仍然保留，但语义非常简单：
+
+- cell 所在扇区是 `PartiallyObserved`
+- 当前 cell 本身没有触发 obstacle candidate
+
+满足这两个条件时，前端会生成一个 `AmbiguousCandidate`。
+
+它仍然不是地图更新主链的核心输入，但保留这个输出可以继续表达：
+
+- 这里不是完全看清
+- 这里也不是前端明确障碍
+- 它更像“观测不充分下的待定区域”
+
+#### 5.4.6 当前复杂度被主动收回到了哪里
+
+这次前端回退的核心边界是：
+
+- `PolarFrontend` 只做单帧、per-cell、高度跨度解释
+- `Processor` 继续保留当前处理链编排
+- 地图记忆、证据累计、通行性求解都不回退
+- `/terrain_obstacle_points` 仍然保留当前两个发布门槛
+
+所以现在维护这层代码时，首先要把它当成：
+
+**“当前帧候选生成器”，而不是“带大量场景特化解释的前端专家系统”。**
 
 ### 5.5 第五步：`DropoutAwareMapUpdater`
 
@@ -991,7 +915,7 @@ vertical_span > max_step_up * 0.75
 
 作用：
 
-- 从当前帧点云里提取前端候选和解释信息
+- 从当前帧 `map_samples` 里提取单帧候选
 
 输出：
 
@@ -1002,19 +926,17 @@ vertical_span > max_step_up * 0.75
 - `support_candidates`
 - `obstacle_candidates`
 - `ambiguous_candidates`
-- `support_anchor_used`
-- `sub_support_leak_count`
-- `upper_support_cell`
+- `raw_sample_min_z / raw_sample_max_z / raw_sample_count`
+- `filtered_sample_min_z / filtered_sample_max_z / filtered_sample_count`
 - `obstacle_suspicious`
 - `obstacle_candidate_cell`
-- `obstacle_rejected_by_neighbor_support`
-- `neighbor_upper_support_count`
-- `effective_support_ref_elevated`
 
 理解重点：
 
-- 这一层是“当前帧怎么解释”的核心
-- 里面很多 debug layer 实际上就是为了帮助解释前端为什么这样判
+- 当前版本的主逻辑只有两件事：
+  - 非 dropout cell 用 `min_z` 形成 support candidate
+  - `vertical_span` 超阈值时直接形成 obstacle candidate
+- 很多历史 debug layer 仍然存在，但主要是兼容字段，不再驱动主判定
 
 ### 7.8 `DropoutAwareMapUpdater::update()`
 
@@ -1051,7 +973,7 @@ vertical_span > max_step_up * 0.75
 
 ## 8. 读代码时最容易混淆的几个概念
 
-### 8.1 `support_height`、`support_anchor`、`support_ref`、`effective_support_ref`
+### 8.1 `support_height`、`support_ref` 和历史兼容字段
 
 这是最容易绕晕的一组。
 
@@ -1059,27 +981,36 @@ vertical_span > max_step_up * 0.75
 
 - `support_height`
   - 地图里长期保存的支撑高度
-- `support_anchor`
-  - 当前前端从历史地图借来的支撑锚点
 - `support_ref`
-  - 当前 cell 本帧判断的基础支撑参考
-- `effective_support_ref`
-  - 当前前端为了避免误判，临时抬高后的解释参考
+  - 当前输出里用于解释 obstacle point 发布门槛的支撑参考
+  - 在当前简单前端语义下，基本就是该 cell 的当前 `min_z` 或地图层里的有效支撑高度
 
-其中只有 `support_height` 是地图长期层。
+当前需要特别注意的是：
 
-### 8.2 `upper_support_cell` 不是“最终障碍”
+- `support_height` 是地图长期层
+- `support_ref` 是输出/调试视角下的参考高度
+- `support_anchor_*`、`effective_support_ref_*` 相关字段现在主要是兼容性遗留，不应再按旧复杂前端心智去理解
 
-它表达的是：
+### 8.2 `upper_support_cell` 现在不是主链判定量
 
-- 当前 cell 上方存在高于支撑参考的结构
+当前版本里它默认保持不激活。
 
-它更多是邻域结构证据，而不是最终类别。
+保留它的原因不是前端还在靠它判障碍，而是：
+
+- analyzer 还会读取这类字段
+- `FrameOutput` 结构没有被缩减
+- 诊断输出仍然需要稳定契约
 
 ### 8.3 `obstacle_suspicious` 不等于 `obstacle_candidate_cell`
 
-- `obstacle_suspicious`：只是因为 `vertical_span` 大而被怀疑
-- `obstacle_candidate_cell`：通过了邻域 upper-support 门控后，真正进入障碍候选
+这句话对历史版本成立，但对当前版本不再成立。
+
+当前简单前端里：
+
+- `obstacle_suspicious`：表示 `vertical_span` 已过阈值
+- `obstacle_candidate_cell`：同一个事件的兼容性映射
+
+也就是说，在当前实现里它们通常同时出现。
 
 ### 8.4 `Observed` / `PartiallyObserved` / `MissingByDropout`
 
@@ -1151,12 +1082,11 @@ vertical_span > max_step_up * 0.75
 
 其中读 `polar_frontend.cpp` 时，不要一开始就试图把所有 helper 细节全记住。
 
-先抓四件事：
+先抓三件事：
 
-- support anchor 怎么找
-- suspicious cell 怎么触发
-- 什么时候抬高 effective support ref
-- 什么时候真正形成 obstacle candidate
+- cell 内 `min_z / max_z / count` 是怎么聚合的
+- 哪些 cell 会形成 support candidate
+- `vertical_span` 什么时候直接形成 obstacle candidate
 
 ### 9.4 第四轮：看地图怎么记、结果怎么判
 
@@ -1207,20 +1137,21 @@ vertical_span > max_step_up * 0.75
 - 单独建 `support`
 - 单独建 `obstacle evidence`
 - 单独建 `observability`
-- 允许临时抬高 `effective_support_ref`
-- 障碍形成必须经过邻域上层支撑门控
+- 让地图层负责短时记忆和稳定性
+- 把前端收回到简单、直接、单帧的候选生成
 
 ### 10.2 它试图特别照顾哪些场景
 
-从前端函数命名和条件可以看出，当前实现非常在意这些场景：
+从整条链路的职责分工看，当前实现仍然在意这些场景：
 
 - 机器人脚下以下还能看到更低层地面
 - 上楼梯时台阶前缘
-- 未锚定但局部呈现稳定层状台阶结构
-- 已锚定支撑但前沿需要被重解释
 - 垂直墙面造成的高跨度假障碍
 
-可以说当前版本明显是围绕“假障碍抑制”和“楼梯/层状结构解释”做了较多工程化强化。
+区别在于：
+
+- 这些场景不再通过 `PolarFrontend` 里的大量特化 helper 来解释
+- 当前先回到简单障碍形成，再依赖地图更新、证据累计和离线工具去重新建立可维护基线
 
 ### 10.3 为了实时性做了哪些折中
 
@@ -1230,7 +1161,7 @@ vertical_span > max_step_up * 0.75
 - 特征只在 dirty cell 及其小邻域更新
 - 坡度、粗糙度等用 3x3 统计近似
 - 没有做复杂地面拟合或全局优化
-- 前端虽然复杂，但本质仍是 per-cell + local-neighborhood 逻辑
+- 前端重新回到纯 per-cell 统计，避免规则栈继续膨胀
 
 ### 10.4 为了稳定性做了哪些折中
 
@@ -1238,25 +1169,29 @@ vertical_span > max_step_up * 0.75
 - support 有 persistence
 - dropout 区域衰减极弱
 - UNKNOWN 优先级很高
-- 有些“当前帧看起来可解释”的结构，只作为 `effective_support_ref` 临时使用，不立即改写长期地图
+- 当前版本把“复杂前端解释”整体拿掉，稳定性主要转交给地图层和发布门槛保证
 
 ### 10.5 哪些地方后续维护时最要小心
 
-#### 前端条件耦合非常强
+#### 不要再把复杂规则堆回前端
 
-`polar_frontend.cpp` 里很多条件不是独立的，改一个阈值可能会影响：
+这次回退的目的之一，就是把前端从难以维护的规则集合重新缩回简单基线。
 
-- support 锚点是否接受
-- 楼梯是否会被解释成分层结构
-- 最终障碍门控是否还能成立
+如果后续又把下面这些能力继续塞回 `PolarFrontend`：
 
-改这里一定要配合离线分析和回放验证。
+- anchor 借用
+- leak 抑制
+- stale anchor 拒绝
+- explanation-only 支撑抬高
+- 邻域 upper-support gate
 
-#### `effective_support_ref` 和 `support_height` 不能混为一谈
+那复杂度会快速回到这次决定放弃维护的状态。
 
-这是当前实现里很重要的边界。
+因此新特性默认应该优先考虑：
 
-如果后续维护时把前端临时解释直接写成地图长期支撑，很可能会引入新的历史污染。
+- 是否能放到地图层做时序稳定
+- 是否能放到离线诊断里做解释
+- 是否能用更少的字段表达，而不是继续叠加前端状态位
 
 #### 输出层坐标语义很容易误解
 
@@ -1324,15 +1259,15 @@ vertical_span > max_step_up * 0.75
 - 为什么先保留 `cloud_in_base` 和 `cloud_in_map` 两种视图
 - 为什么观测性要单独估计
 - 为什么 support 要有 confidence / persistence
-- 为什么 `vertical_span` 只能做 suspicious trigger
-- 为什么还要引入 `effective_support_ref`
+- 为什么这次把 `vertical_span` 恢复成直接障碍形成
+- 为什么复杂解释不再放在前端
 - 为什么 UNKNOWN 的优先级这么高
 - 为什么内部地图在 `odom`，但对外结果转成 `base_gravity`
 
 如果你第一次维护这套代码，我建议始终围绕下面三个问题来判断改动是否合理：
 
 1. 这次改动影响的是“当前帧解释”，还是“地图长期记忆”？
-2. 这次改动会不会把楼梯/分层结构重新误打成障碍？
+2. 这次改动是不是又在把复杂场景特化重新堆回前端？
 3. 这次改动在掉点、部分观测、短时丢失观测时是否还稳定？
 
 只要这三件事始终看住，后续维护就不容易偏离当前实现的真正设计方向。

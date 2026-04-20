@@ -517,62 +517,63 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 #### 8.3.1 核心思路
 
-当前前端不是“每格取最低点当地面、取最高点当障碍”的简单版本。
+当前主线已经回退到接近 `f92759c` 的简单前端语义。
 
-它更接近：
+它的核心就是三件事：
 
-1. 先给每个 cell 找一个合理的支撑参考
-2. 再判断当前 cell 是否存在上层结构、分层结构或楼梯状结构
-3. 最后只把通过邻域支撑门控的可疑 cell 形成障碍候选
+1. 按 cell 聚合当前帧样本，统计 `min_z / max_z / count`
+2. 对非 dropout cell 输出 `support_candidates(cell, min_z, coverage)`
+3. 当 `vertical_span = max_z - min_z` 超过阈值时，直接形成 `obstacle_candidates`
+
+当前不再在前端主链里做：
+
+- 支撑锚点借用与拒绝
+- leak suppression
+- upper-support 邻域确认
+- explanation reject / keep
+- `effective_support_ref` 这类临时抬高参考面的解释链
 
 #### 8.3.2 支撑相关的几个关键概念
 
-最容易混淆的是这四个量：
-
-- `raw_min_z`
-- `support_anchor`
-- `support_ref`
-- `effective_support_ref`
-
-含义分别是：
+当前真正参与主链判定的量已经收敛成两个：
 
 - `raw_min_z`
   - 当前 cell 本帧样本的最低 z
-- `support_anchor`
-  - 当前前端从历史地图借来的支撑锚点
-- `support_ref`
-  - 当前 cell 本帧解释真正使用的基础支撑参考
-- `effective_support_ref`
-  - 当前前端为了避免误判，对当前 cell 临时抬高后的解释参考
+- `vertical_span`
+  - 当前 cell 本帧样本的竖直跨度 `max_z - min_z`
 
-其中：
+它们的用法是：
 
-- `support_height` 是地图长期层
-- `effective_support_ref` 只是 explanation 内部的局部推导量，不写回地图 `support_height`
-- 当前调试输出里不再单独暴露 `effective_support_ref`
+- `raw_min_z`
+  - 直接作为 `support_candidates` 的高度来源
+- `vertical_span`
+  - 直接作为 obstacle trigger 的依据
 
-和 `upper_support` 相关的三个输出层含义是：
+当前 `FrameOutput` 里仍保留了很多历史解释字段，例如：
 
+- `support_anchor_used`
 - `raw_upper_support_cell`
-  - 当前 cell 相对 `support_ref` 的原始 upper-band 事实
 - `explanation_adjusted_upper_support_cell`
-  - 经过 explanation 调整后、供邻域确认使用的 upper-support 语义
 - `upper_support_cell`
-  - 兼容层，当前固定等价于 `explanation_adjusted_upper_support_cell`
+- `neighbor_upper_support_count`
+- `aligned_neighbor_support_count`
+- `explanation_decision`
+
+这些字段现在主要是**兼容旧调试接口**，当前简单前端默认把它们保持为无效值或 0，不再作为障碍形成逻辑的一部分。
 
 #### 8.3.3 锚点的来源与拒绝逻辑
 
-前端先尝试为当前 cell 找支撑锚点：
+当前主线前端已经不再做锚点解析。
 
-- 优先使用当前 cell 自身已有的历史 `support_height`
-- 如果本 cell 无法用，再尝试 3x3 邻域里有效支撑的中位数
+也就是说：
 
-但前端不会盲信历史锚点，还会拒绝一些不可信情况，例如：
+- 不再使用历史 `support_height` 给当前帧借锚
+- 不再区分 local / borrowed support anchor
+- 不再做 stale / wall-only anchor reject
 
-- `reject_stale_anchor`
-- `reject_wall_only_anchor`
+当前支撑候选的来源就是：
 
-这些规则的目的是防止历史支撑参考在分层结构、墙面或旧地图残留的情况下把当前解释带偏。
+- 当前 cell 的本帧 `raw_min_z`
 
 #### 8.3.4 suspicious obstacle 只是第一步
 
@@ -584,43 +585,28 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 - `obstacle_suspicious`
 
-它还不是最终障碍。
+在当前简单前端里，`obstacle_suspicious` 与 `obstacle_candidate_cell` 已经同步形成，不再经过额外门控。
 
 #### 8.3.5 当前障碍形成的真实门控
 
-最终障碍候选必须经过邻域支撑门控。
+当前没有额外门控。
 
-当前实现逻辑是：
+主线判断就是：
 
-- 先保留 `vertical_span` 的 suspicious trigger
-- 再要求 3x3 邻域里有足够多的 explanation-adjusted `upper_support_cell`
-- 同时要排除被当前前端解释成“楼梯/上下层混合/前缘重解释”的情况
+- 如果 `vertical_span > max_step_up * 0.75`
+  - 设置 `obstacle_local_triggered = 1`
+  - 设置 `obstacle_suspicious = 1`
+  - 设置 `obstacle_upper_patch_confirmed = 1` 作为兼容态
+  - 设置 `obstacle_candidate_cell = 1`
+  - 直接输出 `obstacle_candidates`
 
-只有这样才会形成：
-
-- `obstacle_candidate_cell`
-- `obstacle_candidates`
-
-这就是当前版本的“固定 `3x3` upper-support neighborhood gate”。
+因此当前已经没有“固定 `3x3` upper-support neighborhood gate”。
 
 #### 8.3.6 `effective_support_ref` 的定位
 
-当前代码明确把它当作：
+当前主线前端已经不再使用 `effective_support_ref`。
 
-> frontend-local temporary explanation ref
-
-也就是：
-
-- 只服务于当前 cell 的本帧解释
-- 只影响 `upper_support` / obstacle explanation
-- 不写回地图的 `support_height`
-- 不是新的长期支撑估计
-- 不再作为跨 phase 的通用 `CellWorkspace` 状态存在
-
-它主要用于避免下面这类典型误判：
-
-- 机器人下方还能看到更低一层，导致 `support_ref` 被拉到过低层
-- 结果把更合理的上层踏面和其上的局部结构误打成 obstacle
+如果后续重新设计更通用的解释型前端，可以重新引入类似概念；但当前基线实现里不应该把它看成现役逻辑。
 
 #### 8.3.7 `ambiguous_candidates`
 
@@ -1020,13 +1006,17 @@ obstacle 更新：
 
 ### 13.2 当前实现特别照顾的场景
 
-从前端规则可以明确看出，当前实现特别关注：
+从整条链路的职责分工可以看出，当前实现仍然特别关注：
 
 - 楼梯边缘误判为墙
-- 楼梯上行时前沿台阶误判为障碍
 - 机器人脚下以下的低层地面混入当前层
-- 历史支撑参考和当前观测发生冲突时的保守重解释
 - 墙面型高跨度 cell 造成的假障碍
+
+区别在于：
+
+- 这些场景不再通过复杂 `PolarFrontend` 规则栈处理
+- 当前先回到简单前端基线
+- 稳定性主要靠 observability、地图更新、证据累计和输出门槛维持
 
 ### 13.3 工程化取舍
 
@@ -1036,7 +1026,7 @@ obstacle 更新：
 - 特征只在 dirty cells 及邻域增量更新
 - 坡度、粗糙度等用 3x3 邻域统计近似
 - 不做复杂地面拟合和全局优化
-- 用 `effective_support_ref` 做前端局部解释，但不直接污染长期地图支撑层
+- 把复杂前端解释整体拿掉，保持 `PolarFrontend` 简单且可维护
 
 ### 13.4 当前主链没有做的事情
 
@@ -1049,10 +1039,10 @@ obstacle 更新：
 
 ### 13.5 后续维护时最需要小心的地方
 
-- `support_height`、`support_anchor`、`support_ref`、`effective_support_ref` 不要混淆
-- `vertical_span` 只是 suspicious trigger，不是障碍最终判定
+- `support_height`、`support_ref` 和一批历史兼容字段不要混淆
+- 当前前端里 `vertical_span` 已经直接形成 obstacle candidate
 - 内部地图是 `map`，对外发布结果是 `base_gravity`
-- 前端条件耦合很强，改一个阈值可能连带影响楼梯解释和假障碍抑制
+- 不要再把复杂场景特化重新堆回 `PolarFrontend`
 
 ---
 
@@ -1208,8 +1198,8 @@ source install/setup.bash
 - 为什么同时保留 `cloud_in_base` 和 `cloud_in_map`
 - 为什么要先做 `FrameObservabilityEstimator`
 - 为什么 support 和 obstacle 都用证据累积
-- 为什么 `vertical_span` 只能做 suspicious trigger
-- 为什么需要 `effective_support_ref`
+- 为什么这次把 `vertical_span` 恢复成直接障碍形成
+- 为什么复杂解释不再放在前端
 - 为什么 `UNKNOWN` 的优先级这么高
 - 为什么内部在 `map` 建图，但最终发布为 `base_gravity` 机器人中心地图
 
