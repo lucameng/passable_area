@@ -24,6 +24,8 @@ enum class FalseObstacleRootCause : uint8_t {
   kObstacleEvidencePlusLowContinuity = 2,
   kObservabilityInfluenced = 3,
   kUnknownOrMixed = 4,
+  kProtrusionEvidenceDriven = 5,
+  kOverheadEvidenceDriven = 6,
 };
 
 struct FalseObstacleAnalyzerConfig {
@@ -45,6 +47,8 @@ struct FalseObstacleHotspot {
   bool source_matches_center = false;
   float severity = 0.0f;
   float obstacle_evidence = 0.0f;
+  float protrusion_evidence = 0.0f;
+  float overhead_evidence = 0.0f;
   float clearance = 0.0f;
   float support_continuity = 0.0f;
   float overhead_height = 0.0f;
@@ -53,6 +57,8 @@ struct FalseObstacleHotspot {
   uint8_t support_anchor_authority = 0U;
   bool anchor_leak_suppression_enabled = false;
   float source_obstacle_evidence = 0.0f;
+  float source_protrusion_evidence = 0.0f;
+  float source_overhead_evidence = 0.0f;
   float source_overhead_height = 0.0f;
   float source_support_anchor_used = 0.0f;
   uint16_t sub_support_leak_count = 0U;
@@ -80,9 +86,11 @@ struct FalseObstacleHotspot {
   bool facade_upper_edge_aligned_with_supported_neighbors = false;
   bool has_grid_values = false;
   bool has_observability = false;
+  uint8_t block_reason = 0U;
   passable_area::core::ObservabilityState observability_state =
       passable_area::core::ObservabilityState::kObserved;
-  FalseObstacleRootCause classification = FalseObstacleRootCause::kUnknownOrMixed;
+  FalseObstacleRootCause classification =
+      FalseObstacleRootCause::kUnknownOrMixed;
   std::string explanation;
 };
 
@@ -91,7 +99,8 @@ struct FalseObstacleFrameAnalysis {
   double start_offset_sec = 0.0;
   int in_box_obstacle_point_count = 0;
   float severity = 0.0f;
-  FalseObstacleRootCause classification = FalseObstacleRootCause::kUnknownOrMixed;
+  FalseObstacleRootCause classification =
+      FalseObstacleRootCause::kUnknownOrMixed;
   bool frame_partial = false;
   bool rear_dropout = false;
   float max_local_obstacle_evidence = 0.0f;
@@ -107,7 +116,7 @@ struct FalseObstacleBagSummary {
   int candidate_frames = 0;
   int rear_dropout_frames = 0;
   int longest_consecutive_candidate_run = 0;
-  std::array<int, 5> root_cause_counts = {0, 0, 0, 0, 0};
+  std::array<int, 7> root_cause_counts = {0, 0, 0, 0, 0, 0, 0};
   std::vector<FalseObstacleFrameAnalysis> ranked_frames;
 };
 
@@ -116,14 +125,18 @@ public:
   FalseObstacleAnalyzer(const passable_area::core::Config &config,
                         const FalseObstacleAnalyzerConfig &analysis_config);
 
-  std::optional<FalseObstacleFrameAnalysis> analyzeFrame(
-      const passable_area::core::FrameOutput &output) const;
+  std::optional<FalseObstacleFrameAnalysis>
+  analyzeFrame(const passable_area::core::FrameOutput &output) const;
 
-  FalseObstacleBagSummary buildSummary(
-      int total_frames, int rear_dropout_frames, int longest_consecutive_candidate_run,
-      std::vector<FalseObstacleFrameAnalysis> candidate_frames, int top_k) const;
+  FalseObstacleBagSummary
+  buildSummary(int total_frames, int rear_dropout_frames,
+               int longest_consecutive_candidate_run,
+               std::vector<FalseObstacleFrameAnalysis> candidate_frames,
+               int top_k) const;
 
-  const FalseObstacleAnalyzerConfig &analysisConfig() const { return analysis_config_; }
+  const FalseObstacleAnalyzerConfig &analysisConfig() const {
+    return analysis_config_;
+  }
 
 private:
   struct LocalCellContext {
@@ -131,11 +144,15 @@ private:
     int source_cell = -1;
     int center_cell = -1;
     float obstacle_evidence = 0.0f;
+    float protrusion_evidence = 0.0f;
+    float overhead_evidence = 0.0f;
     float clearance = 0.0f;
     float support_continuity = 0.0f;
     float overhead_height = 0.0f;
     float support_anchor_used = 0.0f;
     float source_obstacle_evidence = 0.0f;
+    float source_protrusion_evidence = 0.0f;
+    float source_overhead_evidence = 0.0f;
     float source_overhead_height = 0.0f;
     float source_support_anchor_used = 0.0f;
     uint8_t support_anchor_origin = 0U;
@@ -165,18 +182,23 @@ private:
     bool facade_lower_upper_coexisting = false;
     bool facade_upper_edge_aligned_with_supported_neighbors = false;
     bool has_observability = false;
+    uint8_t block_reason = 0U;
     passable_area::core::ObservabilityState observability_state =
         passable_area::core::ObservabilityState::kObserved;
   };
 
-  LocalCellContext lookupLocalContext(const passable_area::core::FrameOutput &output, float x,
-                                      float y, int source_cell) const;
-  FalseObstacleHotspot buildHotspot(const passable_area::core::FrameOutput &output, float x,
-                                    float y, float min_z, float max_z, int source_cell,
-                                    int obstacle_point_count) const;
+  LocalCellContext
+  lookupLocalContext(const passable_area::core::FrameOutput &output, float x,
+                     float y, int source_cell) const;
+  FalseObstacleHotspot
+  buildHotspot(const passable_area::core::FrameOutput &output, float x, float y,
+               float min_z, float max_z, int source_cell,
+               int obstacle_point_count) const;
   float computeHotspotSeverity(const FalseObstacleHotspot &hotspot) const;
-  FalseObstacleRootCause classifyHotspot(const FalseObstacleHotspot &hotspot) const;
-  FalseObstacleRootCause reduceFrameClass(const std::vector<FalseObstacleHotspot> &hotspots) const;
+  FalseObstacleRootCause
+  classifyHotspot(const FalseObstacleHotspot &hotspot) const;
+  FalseObstacleRootCause
+  reduceFrameClass(const std::vector<FalseObstacleHotspot> &hotspots) const;
 
   passable_area::core::Config config_;
   FalseObstacleAnalyzerConfig analysis_config_;

@@ -20,7 +20,7 @@
 
 这份文档里，“当前版本”指当前分支 `revert/base-line` 上、`16b43ed` 回退和 `8053800` 清理旧参数之后的状态。
 
-更新说明（2026-04-21）：本文末尾已追加 Phase 1 / Phase 2 完成状态。阅读时以后续完成状态为准；前文中关于“当前简单前端 / ObstacleCandidate / ambiguous_candidates”的描述保留为重构背景和历史基线说明，不再代表 Phase 2 后的最新 runtime 事实。
+更新说明（2026-04-21）：本文末尾已追加 Phase 1 / Phase 2 / Phase 3a 完成状态。阅读时以后续完成状态为准；前文中关于“当前简单前端 / ObstacleCandidate / ambiguous_candidates / ObstacleReasoner 尚不存在”的描述保留为重构背景和历史基线说明，不再代表 Phase 3a 后的最新 runtime 事实。
 
 ## 2. 项目当前总体状态
 当前 `passable_area` 已经完成了比较大的工程化重构：主链是一个 **ROS-free core + 薄 ROS 接口** 的单节点 ROS 2 包，核心处理链是：
@@ -1516,3 +1516,41 @@ V2 不会回到旧 anchor tree，但会保留“历史 support 跟踪”这个�
 - 当前 `ObstacleReasoner` 仍未引入，solver 仍消费兼容 `obstacle_evidence`。
 - Low clearance 仍通过当前 `overhead_height -> clearance -> solver` 路径影响 passability；Phase 3b 才会正式补齐 low-clearance 到 `/terrain_obstacle_points` 的 reasoner bridge。
 - false / miss analyzer root cause 集合仍是旧合同，Phase 3a 需要转向 protrusion / overhead / reasoner / publish gate 解释链。
+
+## 17. Phase 3a 完成状态（2026-04-21）
+本次已按 `docs/implementation_plan.md` 的 Phase 3a 引入 shadow `ObstacleReasoner`，并同步更新 analyzer 的原因链解释。该阶段只增加诊断和对比输出，不切换 solver 主判定权。
+
+已完成：
+
+- 新增 ROS-free `ObstacleReasoner`：
+  - `include/passable_area/core/obstacle_reasoner.hpp`
+  - `src/core/obstacle_reasoner.cpp`
+- `ObstacleReasoner` 输入 `TerrainLayers`，输出：
+  - `block_reason`
+  - `protrusion_stage`
+  - `overhead_stage`
+  - `obstacle_point_publish_status`
+- `Processor` 在 `buildOutput()` 中调用 reasoner，并把 shadow 输出写入 `FrameOutput`。
+- `grid_map` 新增发布以下诊断层：
+  - `block_reason`
+  - `protrusion_stage`
+  - `overhead_stage`
+  - `obstacle_point_publish_status`
+- `false_obstacle_analyzer` 增加 protrusion / overhead driven root cause，hotspot 中同步暴露 protrusion / overhead evidence 与 block reason。
+- `miss_obstacle_analyzer` 增加 reasoner / publish gate 相关字段，并新增 `ReasonerNotBlocked` root cause。
+- 新增 `test/core/test_obstacle_reasoner.cpp`，覆盖 low clearance、protrusion、geometry failure 和 evidence gate。
+- 更新 `docs/algorithm_scheme.md`，把 shadow reasoner 和 Phase 3a 边界写入当前算法说明。
+
+验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 89 tests, 0 errors, 0 failures, 0 skipped`。
+
+注意事项：
+
+- 当前 `ObstacleReasoner` 是 shadow path；`TraversabilitySolver` 仍按现有 `clearance / obstacle_evidence / geometry` 逻辑生成 `passability`。
+- `block_reason` 仍是内部诊断信号，不是新的外部障碍真值；下游导航外部合同仍是 `/terrain_obstacle_points`。
+- `obstacle_point_publish_status` 当前表达发布意图 / gate 归因，但 `Processor` 的 obstacle point 筛选逻辑尚未改为消费该字段。
+- Phase 3b 的重点仍是 Low Clearance 到 `/terrain_obstacle_points` 的桥接，尤其要保持地面点不过滤进 obstacle points 的既有语义。
+- Phase 4 前还没有跑冻结 false obstacle bags 的 reasoner / solver 一致率统计；该验收仍待离线 bag 验证。

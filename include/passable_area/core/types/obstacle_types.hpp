@@ -13,6 +13,12 @@ enum class BlockReason : uint8_t {
   kMixed,
 };
 
+enum class ObstacleEvidenceStage : uint8_t {
+  kNone = 0,
+  kEvidenceLow,
+  kBlocking,
+};
+
 enum class ObstaclePointPublishStatus : uint8_t {
   kNotApplicable = 0,
   kPublishedByProtrusion,

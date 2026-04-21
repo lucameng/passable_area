@@ -39,7 +39,7 @@ bool PassesObstaclePointPublishHeightGates(
 
 passable_area::core::Point3f
 TransformMapPointToBaseGravity(float x, float y, float z,
-                                const passable_area::core::Pose3D &pose) {
+                               const passable_area::core::Pose3D &pose) {
   const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
@@ -162,15 +162,17 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
   int upper_patch_failed_suspicious_cell_count = 0;
   int explanation_rejected_suspicious_cell_count = 0;
   int no_keep_explanation_suspicious_cell_count = 0;
+  int reasoner_blocked_cell_count = 0;
+  int reasoner_candidate_not_blocked_count = 0;
   std::vector<std::pair<float, MissObstacleRepresentativeCell>> ranked_cells;
   ranked_cells.reserve(sample_stats_by_cell.size() + 8U);
 
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
       const float map_x = output.origin.x() +
-                           (static_cast<float>(col) + 0.5f) * output.resolution;
+                          (static_cast<float>(col) + 0.5f) * output.resolution;
       const float map_y = output.origin.y() +
-                           (static_cast<float>(row) + 0.5f) * output.resolution;
+                          (static_cast<float>(row) + 0.5f) * output.resolution;
       const auto point_in_base_gravity = TransformMapPointToBaseGravity(
           map_x, map_y, output.support_height[row * output.cols + col],
           output.base_pose_in_map);
@@ -218,6 +220,15 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       }
       analysis.max_obstacle_evidence = std::max(analysis.max_obstacle_evidence,
                                                 output.obstacle_evidence[idx]);
+      const uint8_t block_reason =
+          output.block_reason.empty() ? 0U : output.block_reason[idx];
+      if (block_reason != 0U) {
+        ++reasoner_blocked_cell_count;
+      } else if (!output.block_reason.empty() &&
+                 (output.obstacle_candidate_cell[idx] != 0U ||
+                  output.obstacle_evidence[idx] > 0.0f)) {
+        ++reasoner_candidate_not_blocked_count;
+      }
       analysis.max_support_confidence = std::max(
           analysis.max_support_confidence, output.support_confidence[idx]);
       if (std::isfinite(output.clearance[idx])) {
@@ -280,7 +291,19 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.support_height = output.support_height[idx];
       cell.support_ref = support_ref;
       cell.overhead_height = output.overhead_height[idx];
+      cell.protrusion_evidence = output.protrusion_evidence.empty()
+                                     ? 0.0f
+                                     : output.protrusion_evidence[idx];
+      cell.overhead_evidence = output.overhead_evidence.empty()
+                                   ? 0.0f
+                                   : output.overhead_evidence[idx];
       cell.obstacle_evidence = output.obstacle_evidence[idx];
+      cell.block_reason =
+          output.block_reason.empty() ? 0U : output.block_reason[idx];
+      cell.obstacle_point_publish_status =
+          output.obstacle_point_publish_status.empty()
+              ? 0U
+              : output.obstacle_point_publish_status[idx];
       cell.support_confidence = output.support_confidence[idx];
       cell.support_anchor_used = output.support_anchor_used[idx];
       cell.support_anchor_origin = output.support_anchor_origin.empty()
@@ -473,6 +496,15 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.evidence_lines.push_back(
         "obstacle_candidate_cells=" +
         std::to_string(analysis.obstacle_candidate_cell_count));
+  } else if (reasoner_candidate_not_blocked_count > 0 &&
+             reasoner_blocked_cell_count == 0) {
+    analysis.classification = MissObstacleRootCause::kReasonerNotBlocked;
+    analysis.explanation =
+        "frontend or map evidence exists in the roi, but shadow reasoner did "
+        "not mark any roi cell as blocked";
+    analysis.evidence_lines.push_back(
+        "reasoner_candidate_not_blocked_cells=" +
+        std::to_string(reasoner_candidate_not_blocked_count));
   } else if (strong_evidence_cell_count > 0 && publishable_sample_count == 0) {
     if (strong_evidence_cells_with_samples == 0) {
       analysis.classification =
@@ -595,20 +627,22 @@ const char *ToString(MissObstacleRootCause cause) {
   switch (cause) {
   case MissObstacleRootCause::kNoSamplesInRoi:
     return "NoSamplesInRoi";
-  case MissObstacleRootCause::kNoFrontendObstacleSuspicion:
-    return "NoFrontendObstacleSuspicion";
+  case MissObstacleRootCause::kNoFrontendCandidate:
+    return "NoFrontendCandidate";
   case MissObstacleRootCause::kRejectedByNeighborSupport:
     return "RejectedByNeighborSupport";
   case MissObstacleRootCause::kLeakFilteredToNoCandidate:
     return "LeakFilteredToNoCandidate";
-  case MissObstacleRootCause::kObstacleEvidenceTooLow:
-    return "ObstacleEvidenceTooLow";
-  case MissObstacleRootCause::kOutputHeightGateNotMet:
-    return "OutputHeightGateNotMet";
+  case MissObstacleRootCause::kEvidenceTooLow:
+    return "EvidenceTooLow";
+  case MissObstacleRootCause::kPublishHeightGated:
+    return "PublishHeightGated";
   case MissObstacleRootCause::kNoObstacleSourceSamplesInRoi:
     return "NoObstacleSourceSamplesInRoi";
   case MissObstacleRootCause::kUnknownOrMixed:
     return "UnknownOrMixed";
+  case MissObstacleRootCause::kReasonerNotBlocked:
+    return "ReasonerNotBlocked";
   }
   return "UnknownOrMixed";
 }

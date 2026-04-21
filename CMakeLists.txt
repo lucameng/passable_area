@@ -66,6 +66,7 @@ set(core_sources
   src/core/mapping/dropout_aware_map_updater.cpp
   src/core/terrain_feature_updater.cpp
   src/core/traversability_solver.cpp
+  src/core/obstacle_reasoner.cpp
   src/core/processor.cpp
 )
 
@@ -219,6 +220,16 @@ if(BUILD_TESTING)
     target_include_directories(test_processor PUBLIC include)
     target_link_libraries(test_processor ${OpenCV_LIBS})
     ament_target_dependencies(test_processor Eigen3 OpenCV grid_map_core)
+  endif()
+
+  ament_add_gtest(test_obstacle_reasoner
+    test/core/test_obstacle_reasoner.cpp
+    ${core_sources}
+  )
+  if(TARGET test_obstacle_reasoner)
+    target_include_directories(test_obstacle_reasoner PUBLIC include)
+    target_link_libraries(test_obstacle_reasoner ${OpenCV_LIBS})
+    ament_target_dependencies(test_obstacle_reasoner Eigen3 OpenCV grid_map_core)
   endif()
 
   ament_add_gtest(test_output_converter

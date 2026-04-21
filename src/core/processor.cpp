@@ -45,7 +45,8 @@ MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
 Processor::Processor(const Config &config)
     : config_(config), preprocessor_(config), observability_estimator_(config),
       frontend_(config), map_(config), map_updater_(config),
-      feature_updater_(config), traversability_solver_(config) {}
+      feature_updater_(config), traversability_solver_(config),
+      obstacle_reasoner_(config) {}
 
 FrameOutput Processor::update(const FrameInput &input) {
   ProcessedFrame preprocessed;
@@ -104,6 +105,12 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.roughness = layers.roughness;
   output.clearance = layers.clearance;
   output.support_continuity = layers.support_continuity;
+  const auto reasoner_output = obstacle_reasoner_.evaluate(layers);
+  output.block_reason = reasoner_output.block_reason;
+  output.protrusion_stage = reasoner_output.protrusion_stage;
+  output.overhead_stage = reasoner_output.overhead_stage;
+  output.obstacle_point_publish_status =
+      reasoner_output.obstacle_point_publish_status;
   output.support_anchor_used = frontend_output.support_anchor_used;
   output.support_anchor_origin = frontend_output.support_anchor_origin;
   output.support_anchor_authority = frontend_output.support_anchor_authority;

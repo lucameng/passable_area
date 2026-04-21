@@ -20,13 +20,17 @@ struct MissObstacleDetectionBox {
 
 enum class MissObstacleRootCause : uint8_t {
   kNoSamplesInRoi = 0,
-  kNoFrontendObstacleSuspicion = 1,
+  kNoFrontendCandidate = 1,
+  kNoFrontendObstacleSuspicion = kNoFrontendCandidate,
   kRejectedByNeighborSupport = 2,
   kLeakFilteredToNoCandidate = 3,
-  kObstacleEvidenceTooLow = 4,
-  kOutputHeightGateNotMet = 5,
+  kEvidenceTooLow = 4,
+  kObstacleEvidenceTooLow = kEvidenceTooLow,
+  kPublishHeightGated = 5,
+  kOutputHeightGateNotMet = kPublishHeightGated,
   kNoObstacleSourceSamplesInRoi = 6,
   kUnknownOrMixed = 7,
+  kReasonerNotBlocked = 8,
 };
 
 struct MissObstacleAnalyzerConfig {
@@ -43,7 +47,11 @@ struct MissObstacleRepresentativeCell {
   float support_height = 0.0f;
   float support_ref = 0.0f;
   float overhead_height = 0.0f;
+  float protrusion_evidence = 0.0f;
+  float overhead_evidence = 0.0f;
   float obstacle_evidence = 0.0f;
+  uint8_t block_reason = 0U;
+  uint8_t obstacle_point_publish_status = 0U;
   float support_confidence = 0.0f;
   float support_anchor_used = 0.0f;
   uint8_t support_anchor_origin = 0U;
@@ -100,7 +108,7 @@ struct MissObstacleBagSummary {
   MissObstacleDetectionBox detection_box;
   int total_frames = 0;
   int missed_frames = 0;
-  std::array<int, 8> root_cause_counts = {0, 0, 0, 0, 0, 0, 0, 0};
+  std::array<int, 9> root_cause_counts = {0, 0, 0, 0, 0, 0, 0, 0, 0};
   std::vector<MissObstacleFrameAnalysis> ranked_frames;
 };
 
@@ -113,10 +121,13 @@ public:
       const passable_area::core::FrameOutput &output,
       const passable_area::core::ProcessedFrame &processed_frame) const;
 
-  MissObstacleBagSummary buildSummary(int total_frames,
-                                      std::vector<MissObstacleFrameAnalysis> candidate_frames) const;
+  MissObstacleBagSummary
+  buildSummary(int total_frames,
+               std::vector<MissObstacleFrameAnalysis> candidate_frames) const;
 
-  const MissObstacleAnalyzerConfig &analysisConfig() const { return analysis_config_; }
+  const MissObstacleAnalyzerConfig &analysisConfig() const {
+    return analysis_config_;
+  }
 
 private:
   passable_area::core::Config config_;

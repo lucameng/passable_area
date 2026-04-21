@@ -1,5 +1,6 @@
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
 
+#include "passable_area/core/types/obstacle_types.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>
@@ -56,7 +57,7 @@ int CellIndex(const passable_area::core::FrameOutput &output, float map_x,
 
 passable_area::core::Point3f
 TransformMapPointToBaseGravity(float x, float y,
-                                const passable_area::core::Pose3D &pose) {
+                               const passable_area::core::Pose3D &pose) {
   const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
@@ -68,7 +69,7 @@ TransformMapPointToBaseGravity(float x, float y,
 
 passable_area::core::Point3f
 TransformBaseGravityPointToMap(float x, float y,
-                                const passable_area::core::Pose3D &pose) {
+                               const passable_area::core::Pose3D &pose) {
   const float yaw = passable_area::core::YawFromQuaternion(pose.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
@@ -182,11 +183,11 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
     const int row = static_cast<int>(cell) / output.cols;
     const int col = static_cast<int>(cell) % output.cols;
     const float map_x = output.origin.x() +
-                         (static_cast<float>(col) + 0.5f) * output.resolution;
+                        (static_cast<float>(col) + 0.5f) * output.resolution;
     const float map_y = output.origin.y() +
-                         (static_cast<float>(row) + 0.5f) * output.resolution;
-    const auto point_in_base_gravity = TransformMapPointToBaseGravity(
-        map_x, map_y, output.base_pose_in_map);
+                        (static_cast<float>(row) + 0.5f) * output.resolution;
+    const auto point_in_base_gravity =
+        TransformMapPointToBaseGravity(map_x, map_y, output.base_pose_in_map);
     if (IsInsideDetectionBox(analysis_config_.detection_box,
                              point_in_base_gravity.x,
                              point_in_base_gravity.y)) {
@@ -258,7 +259,7 @@ FalseObstacleBagSummary FalseObstacleAnalyzer::buildSummary(
     int longest_consecutive_candidate_run,
     std::vector<FalseObstacleFrameAnalysis> candidate_frames, int top_k) const {
   const int total_candidate_frames = static_cast<int>(candidate_frames.size());
-  std::array<int, 5> root_cause_counts = {0, 0, 0, 0, 0};
+  std::array<int, 7> root_cause_counts = {0, 0, 0, 0, 0, 0, 0};
   for (const auto &frame : candidate_frames) {
     ++root_cause_counts[RootCauseIndex(frame.classification)];
   }
@@ -371,6 +372,14 @@ FalseObstacleAnalyzer::lookupLocalContext(
       context.source_obstacle_evidence =
           output.obstacle_evidence[static_cast<size_t>(source_cell)];
     }
+    if (output.protrusion_evidence.size() > static_cast<size_t>(source_cell)) {
+      context.source_protrusion_evidence =
+          output.protrusion_evidence[static_cast<size_t>(source_cell)];
+    }
+    if (output.overhead_evidence.size() > static_cast<size_t>(source_cell)) {
+      context.source_overhead_evidence =
+          output.overhead_evidence[static_cast<size_t>(source_cell)];
+    }
     if (output.overhead_height.size() > static_cast<size_t>(source_cell)) {
       context.source_overhead_height =
           output.overhead_height[static_cast<size_t>(source_cell)];
@@ -405,6 +414,18 @@ FalseObstacleAnalyzer::lookupLocalContext(
     context.center_cell = center_cell;
     context.obstacle_evidence =
         output.obstacle_evidence[static_cast<size_t>(center_cell)];
+    if (output.protrusion_evidence.size() > static_cast<size_t>(center_cell)) {
+      context.protrusion_evidence =
+          output.protrusion_evidence[static_cast<size_t>(center_cell)];
+    }
+    if (output.overhead_evidence.size() > static_cast<size_t>(center_cell)) {
+      context.overhead_evidence =
+          output.overhead_evidence[static_cast<size_t>(center_cell)];
+    }
+    if (output.block_reason.size() > static_cast<size_t>(center_cell)) {
+      context.block_reason =
+          output.block_reason[static_cast<size_t>(center_cell)];
+    }
     context.clearance = output.clearance[static_cast<size_t>(center_cell)];
     context.support_continuity =
         output.support_continuity[static_cast<size_t>(center_cell)];
@@ -502,6 +523,8 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
       context.source_cell >= 0 && context.source_cell == context.center_cell;
   hotspot.has_grid_values = context.has_grid_values;
   hotspot.obstacle_evidence = context.obstacle_evidence;
+  hotspot.protrusion_evidence = context.protrusion_evidence;
+  hotspot.overhead_evidence = context.overhead_evidence;
   hotspot.clearance = context.clearance;
   hotspot.support_continuity = context.support_continuity;
   hotspot.overhead_height = context.overhead_height;
@@ -511,6 +534,8 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.anchor_leak_suppression_enabled =
       context.anchor_leak_suppression_enabled;
   hotspot.source_obstacle_evidence = context.source_obstacle_evidence;
+  hotspot.source_protrusion_evidence = context.source_protrusion_evidence;
+  hotspot.source_overhead_evidence = context.source_overhead_evidence;
   hotspot.source_overhead_height = context.source_overhead_height;
   hotspot.source_support_anchor_used = context.source_support_anchor_used;
   hotspot.sub_support_leak_count = context.sub_support_leak_count;
@@ -543,6 +568,7 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.facade_upper_edge_aligned_with_supported_neighbors =
       context.facade_upper_edge_aligned_with_supported_neighbors;
   hotspot.has_observability = context.has_observability;
+  hotspot.block_reason = context.block_reason;
   hotspot.observability_state = context.observability_state;
   hotspot.classification = classifyHotspot(hotspot);
   hotspot.severity = computeHotspotSeverity(hotspot);
@@ -556,6 +582,12 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
     break;
   case FalseObstacleRootCause::kObstacleEvidenceDriven:
     hotspot.explanation = "high obstacle evidence";
+    break;
+  case FalseObstacleRootCause::kProtrusionEvidenceDriven:
+    hotspot.explanation = "high protrusion evidence";
+    break;
+  case FalseObstacleRootCause::kOverheadEvidenceDriven:
+    hotspot.explanation = "high overhead evidence";
     break;
   case FalseObstacleRootCause::kObservabilityInfluenced:
     hotspot.explanation = "observability degraded, direct trigger unclear";
@@ -621,6 +653,22 @@ FalseObstacleRootCause FalseObstacleAnalyzer::classifyHotspot(
     return FalseObstacleRootCause::kClearanceDriven;
   }
   if (hotspot.has_grid_values &&
+      (hotspot.block_reason ==
+           static_cast<uint8_t>(
+               passable_area::core::BlockReason::kProtrusion) ||
+       hotspot.protrusion_evidence >=
+           analysis_config_.obstacle_evidence_high_threshold)) {
+    return FalseObstacleRootCause::kProtrusionEvidenceDriven;
+  }
+  if (hotspot.has_grid_values &&
+      (hotspot.block_reason ==
+           static_cast<uint8_t>(
+               passable_area::core::BlockReason::kLowClearance) ||
+       hotspot.overhead_evidence >=
+           analysis_config_.obstacle_evidence_high_threshold)) {
+    return FalseObstacleRootCause::kOverheadEvidenceDriven;
+  }
+  if (hotspot.has_grid_values &&
       hotspot.obstacle_evidence >=
           analysis_config_.obstacle_evidence_high_threshold &&
       std::isfinite(hotspot.support_continuity) &&
@@ -670,6 +718,10 @@ const char *ToString(FalseObstacleRootCause cause) {
     return "ObservabilityInfluenced";
   case FalseObstacleRootCause::kUnknownOrMixed:
     return "UnknownOrMixed";
+  case FalseObstacleRootCause::kProtrusionEvidenceDriven:
+    return "ProtrusionEvidenceDriven";
+  case FalseObstacleRootCause::kOverheadEvidenceDriven:
+    return "OverheadEvidenceDriven";
   }
   return "UnknownOrMixed";
 }

@@ -107,8 +107,9 @@ Processor::update(const FrameInput&) -> FrameOutput
 4. `DropoutAwareMapUpdater`
 5. `TerrainFeatureUpdater`
 6. `TraversabilitySolver`
-7. `Processor::buildOutput`
-8. ROS 输出转换与发布
+7. Shadow `ObstacleReasoner`
+8. `Processor::buildOutput`
+9. ROS 输出转换与发布
 
 这条主链由：
 
@@ -368,7 +369,10 @@ TF：
 - `traversal_cost`
 - `support_height`
 - `overhead_height`
+- `protrusion_height`
 - `support_confidence`
+- `protrusion_evidence`
+- `overhead_evidence`
 - `obstacle_evidence`
 - `coverage_confidence`
 - `slope`
@@ -377,6 +381,10 @@ TF：
 - `roughness`
 - `clearance`
 - `support_continuity`
+- `block_reason`
+- `protrusion_stage`
+- `overhead_stage`
+- `obstacle_point_publish_status`
 - `support_anchor_used`
 - `sub_support_leak_count`
 - `raw_upper_support_cell`
@@ -418,6 +426,9 @@ TF：
 - `support_confidence`
 - `overhead_height`
 - `overhead_confidence`
+- `protrusion_height`
+- `protrusion_evidence`
+- `overhead_evidence`
 - `obstacle_evidence`
 - `coverage_confidence`
 - `slope`
@@ -659,10 +670,7 @@ obstacle 更新：
 - `overhead_candidates` 写 `overhead_height` / `overhead_confidence` / `overhead_evidence`
 - 过渡期 `obstacle_evidence = max(protrusion_evidence, overhead_evidence)`，继续作为 solver 和 obstacle point publish 的兼容证据层
 
-当前实现还会显式清理两类旧障碍：
-
-- 本帧被“抬高有效支撑参考”重新解释的 cell
-- 本帧被“邻域支撑否决为障碍”的 cell
+当前实现不再按旧 explanation / 邻域否决字段清理障碍层。障碍层清理由证据衰减、support 重观测和 support 失效后的阈值判断触发。
 
 ### 8.5 `TerrainFeatureUpdater`
 
@@ -731,7 +739,37 @@ obstacle 更新：
 - 当前主链没有 BFS、可达域扩张或图搜索求解
 - 当前版本是逐 cell 判通行性，再给 passable cell 生成代价
 
-### 8.7 `Processor::buildOutput`
+### 8.7 `ObstacleReasoner`
+
+实现：
+
+- `src/passable_area/src/core/obstacle_reasoner.cpp`
+
+职责：
+
+- 作为 shadow path 解释当前地图层中的阻挡原因
+- 不替换当前 `TraversabilitySolver`，不改变 `passability`
+- 把 protrusion / overhead / geometry 相关证据整理成可审计输出
+
+当前输出：
+
+- `block_reason`
+  - `None`
+  - `Protrusion`
+  - `LowClearance`
+  - `GeometryFailure`
+  - `Mixed`
+- `protrusion_stage`
+- `overhead_stage`
+- `obstacle_point_publish_status`
+
+当前边界：
+
+- `block_reason` 是内部诊断和 Phase 4 切换前的对比信号，不是新的外部障碍真值。
+- 对下游导航仍以 `/terrain_obstacle_points` 为唯一外部障碍输出合同。
+- Low Clearance 到 obstacle point 发布的正式桥接放在 Phase 3b。
+
+### 8.8 `Processor::buildOutput`
 
 实现：
 

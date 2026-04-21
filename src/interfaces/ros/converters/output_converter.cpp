@@ -155,6 +155,15 @@ void AddLayer(grid_map::GridMap &map, const std::string &name,
   map.add(name, matrix);
 }
 
+template <typename T>
+std::vector<float> ToFloatLayer(const std::vector<T> &values) {
+  std::vector<float> result(values.size(), 0.0f);
+  for (size_t i = 0; i < values.size(); ++i) {
+    result[i] = static_cast<float>(values[i]);
+  }
+  return result;
+}
+
 } // namespace
 
 nav_msgs::msg::OccupancyGrid
@@ -177,12 +186,27 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
       ResampleLayer(plan, output.passability, static_cast<int8_t>(-1));
   const auto traversal_cost =
       ResampleLayer(plan, output.traversal_cost, static_cast<int8_t>(-1));
-  grid_map::GridMap map(
-      {"support_height", "support_confidence", "overhead_height",
-       "protrusion_height", "protrusion_evidence", "overhead_evidence",
-       "obstacle_evidence", "coverage_confidence", "slope", "step_up",
-       "step_down", "roughness", "clearance", "support_continuity",
-       "support_anchor_used", "sub_support_leak_count", "passability"});
+  grid_map::GridMap map({"support_height",
+                         "support_confidence",
+                         "overhead_height",
+                         "protrusion_height",
+                         "protrusion_evidence",
+                         "overhead_evidence",
+                         "obstacle_evidence",
+                         "coverage_confidence",
+                         "slope",
+                         "step_up",
+                         "step_down",
+                         "roughness",
+                         "clearance",
+                         "support_continuity",
+                         "block_reason",
+                         "protrusion_stage",
+                         "overhead_stage",
+                         "obstacle_point_publish_status",
+                         "support_anchor_used",
+                         "sub_support_leak_count",
+                         "passability"});
   map.setFrameId(header.frame_id);
   map.setGeometry(plan.geometry.length, plan.geometry.resolution,
                   plan.geometry.center);
@@ -214,6 +238,19 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
                          std::numeric_limits<float>::quiet_NaN()));
   AddLayer(map, "support_continuity", plan,
            ResampleLayer(plan, output.support_continuity, 0.0f));
+  AddLayer(map, "block_reason", plan,
+           ToFloatLayer(ResampleLayer(plan, output.block_reason,
+                                      static_cast<uint8_t>(0))));
+  AddLayer(map, "protrusion_stage", plan,
+           ToFloatLayer(ResampleLayer(plan, output.protrusion_stage,
+                                      static_cast<uint8_t>(0))));
+  AddLayer(map, "overhead_stage", plan,
+           ToFloatLayer(ResampleLayer(plan, output.overhead_stage,
+                                      static_cast<uint8_t>(0))));
+  AddLayer(
+      map, "obstacle_point_publish_status", plan,
+      ToFloatLayer(ResampleLayer(plan, output.obstacle_point_publish_status,
+                                 static_cast<uint8_t>(0))));
   AddLayer(map, "support_anchor_used", plan,
            ResampleLayer(plan, output.support_anchor_used,
                          std::numeric_limits<float>::quiet_NaN()));

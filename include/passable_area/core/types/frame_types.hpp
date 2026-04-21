@@ -109,6 +109,10 @@ struct FrameOutput {
   std::vector<float> roughness;
   std::vector<float> clearance;
   std::vector<float> support_continuity;
+  std::vector<uint8_t> block_reason;
+  std::vector<uint8_t> protrusion_stage;
+  std::vector<uint8_t> overhead_stage;
+  std::vector<uint8_t> obstacle_point_publish_status;
   std::vector<float> support_anchor_used;
   std::vector<uint8_t> support_anchor_origin;
   std::vector<uint8_t> support_anchor_authority;
