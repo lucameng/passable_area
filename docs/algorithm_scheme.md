@@ -106,8 +106,8 @@ Processor::update(const FrameInput&) -> FrameOutput
 3. `PolarFrontend`
 4. `DropoutAwareMapUpdater`
 5. `TerrainFeatureUpdater`
-6. `TraversabilitySolver`
-7. Shadow `ObstacleReasoner`
+6. `ObstacleReasoner`
+7. `TraversabilitySolver`
 8. `Processor::buildOutput`
 9. ROS 输出转换与发布
 
@@ -717,7 +717,7 @@ obstacle 更新：
 
 职责：
 
-- 基于 support / obstacle / coverage / feature 层输出三态可通行性
+- 基于 support / coverage / feature 层和 `ObstacleReasoner` 输出的 `block_reason` 输出三态可通行性
 - 同步生成 `terrain_cost`
 
 当前判定策略：
@@ -735,11 +735,14 @@ obstacle 更新：
 
 `IMPASSABLE` 的典型条件：
 
-- `clearance < min_clearance`
-- `support_continuity` 差且 `obstacle_evidence` 明显
+- `block_reason == LowClearance`
+- `block_reason == Protrusion`
+- `block_reason == Mixed`
+- `block_reason == GeometryFailure`
 
 `PASSABLE` 的典型条件：
 
+- `block_reason == None`
 - `slope <= max_support_slope_deg`
 - `step_up <= max_step_up`
 - `step_down <= max_step_down`
@@ -748,6 +751,8 @@ obstacle 更新：
 
 实现说明：
 
+- `UNKNOWN` 优先级仍高于 `block_reason`，无可靠 support / coverage / stale cell 不会被 reasoner 硬判成 `IMPASSABLE`
+- solver 不再直接用 `obstacle_evidence + support_continuity` 解释障碍阻挡；障碍阻挡语义先由 `ObstacleReasoner` 给出
 - 当前主链没有 BFS、可达域扩张或图搜索求解
 - 当前版本是逐 cell 判通行性，再给 passable cell 生成代价
 
@@ -759,8 +764,8 @@ obstacle 更新：
 
 职责：
 
-- 作为 shadow path 解释当前地图层中的阻挡原因
-- 不替换当前 `TraversabilitySolver`，不改变 `passability`
+- 在 `TraversabilitySolver` 前解释当前地图层中的阻挡原因
+- 向 solver 提供 `block_reason`，作为 `IMPASSABLE` 判定的主障碍语义输入
 - 把 protrusion / overhead / geometry 相关证据整理成可审计输出
 
 当前输出：
@@ -777,7 +782,7 @@ obstacle 更新：
 
 当前边界：
 
-- `block_reason` 是内部诊断和 Phase 4 切换前的对比信号，不是新的外部障碍真值。
+- `block_reason` 是内部通行性判定和诊断信号，不是新的外部障碍真值。
 - 对下游导航仍以 `/terrain_obstacle_points` 为唯一外部障碍输出合同。
 - Phase 3b 后，`LowClearance` 和包含低净空的 `Mixed` cell 在 overhead evidence 达到发布阈值时，可驱动 `/terrain_obstacle_points` 发布。
 

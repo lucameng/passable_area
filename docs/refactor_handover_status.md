@@ -2021,3 +2021,81 @@ timing：
 - Setup A right 仍需要继续调查 strong-evidence cell 与当前 ROI source samples 的空间错位，尤其是 `NoObstacleSourceSamplesInRoi` 那一帧。
 - Setup A left 仍是 dense side-board protrusion evidence 约 `0.32` 的单帧不足问题；如果继续修，应优先建模 source aggregation 或验收窗口边界，而不是放宽低净空 bridge。
 - Setup B left 仍是稀疏 2~3 点 source 和 step-range low-clearance height gate 的组合局限，不应直接套 dense source gate。
+
+## 25. Phase 5 起步：solver 主判定权切到 reasoner（2026-04-21 17:35 +0800）
+
+用户确认：剩余 Setup A/B miss 已属于 source sample 对齐 / 架构级问题，不应继续阻塞 solver 主判定权切换。本轮据此推进 Phase 5 起步，但仍不清理旧兼容字段，不改变 `/terrain_obstacle_points` 外部障碍输出合同。
+
+本轮行为改动：
+
+- `ObstacleReasoner` 从 `Processor::buildOutput()` 的 shadow path 前移到 `TerrainFeatureUpdater` 后、`TraversabilitySolver` 前。
+- `TraversabilitySolver::update()` 改为接收 `ObstacleReasonerOutput`。
+- `TraversabilitySolver` 仍先判 `UNKNOWN`：
+  - coverage 不足
+  - support 缺失
+  - support confidence 不足
+  - stale 超时
+- 通过 `UNKNOWN` 保护后，solver 使用 `block_reason` 作为主障碍判定：
+  - `Protrusion` / `LowClearance` / `Mixed` / `GeometryFailure` -> `IMPASSABLE`
+  - `None` 且几何阈值通过 -> `PASSABLE`
+- solver 不再直接用旧兼容 `obstacle_evidence + support_continuity` 组合解释障碍阻挡。
+- `GeometryFailure` 会影响 `terrain_state` / `terrain_cost` 的通行性，但仍不 claim `/terrain_obstacle_points` 发布资格。
+- `Processor::buildOutput()` 复用同一份 reasoner output，避免同帧重复计算和诊断不一致。
+
+新增测试：
+
+- `ProcessorTest.TraversabilitySolverUsesReasonerBlockReason`
+  - 验证 `GeometryFailure` block reason 会让可靠支撑 cell 变为 `IMPASSABLE`，cost 为 `100`。
+- `ProcessorTest.TraversabilitySolverKeepsUnknownPriorityOverReasonerBlock`
+  - 验证无可靠支撑 / unknown cell 即使 reasoner 给出 block reason，也保持 `UNKNOWN`，cost 为 `-1`。
+
+自动化验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 97 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags（检测框 `x[0.0, 1.4] y[-0.25, 0.25]`，排除 x30 bag）：
+
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+
+miss obstacle frozen ROIs：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`1 / 4 miss`
+    - root cause：`EvidenceTooLow`
+  - `right_board`：`2 / 4 miss`
+    - root cause：`EvidenceTooLow` 1 帧，`NoObstacleSourceSamplesInRoi` 1 帧
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`2 / 3 miss`
+    - root cause：`EvidenceTooLow` 2 帧
+  - `right_side_board`：`0 / 3 miss`
+
+timing：
+
+- `offline_replay --benchmark-timing`
+  - `rosbag2_open_short_upstairs`：`avg = 6.772 ms`，`max = 11.178 ms`，`p95 = 9.822 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 7.459 ms`，`max = 11.932 ms`，`p95 = 10.071 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 6.793 ms`，`max = 9.206 ms`，`p95 = 7.833 ms`
+  - `rosbag2_b1_upstairs`：`avg = 6.489 ms`，`max = 12.518 ms`，`p95 = 8.938 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 12.57 ms`，`p95 = 12.79 ms`，`p99 = 12.93 ms`
+  - `160k points`：`avg = 21.66 ms`，`p95 = 24.59 ms`，`p99 = 24.67 ms`
+
+当前结论：
+
+- solver 主判定权已切到 reasoner 输出。
+- `/terrain_obstacle_points` 外部输出合同未变，false frozen bags 仍全 0。
+- Miss ROI 结果与 Phase 4.2 一致；剩余 miss 不再阻塞 solver 切换，但仍应作为后续架构改动输入。
+- timing 未显示异常。
+- 允许继续 Phase 5 后续清理，但建议分批做：
+  - 先清理明显不再使用的 solver 旧障碍解释路径和文档表述。
+  - 再逐步清理 `FrameOutput` / analyzer / grid_map 中旧前端兼容字段，避免一次性打断诊断工具。

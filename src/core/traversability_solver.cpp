@@ -4,8 +4,19 @@
 #include <cmath>
 
 namespace passable_area::core {
+namespace {
 
-void TraversabilitySolver::update(LocalTerrainMap &map) const {
+bool IsBlockingReason(BlockReason reason) {
+  return reason == BlockReason::kProtrusion ||
+         reason == BlockReason::kLowClearance ||
+         reason == BlockReason::kGeometryFailure ||
+         reason == BlockReason::kMixed;
+}
+
+} // namespace
+
+void TraversabilitySolver::update(
+    LocalTerrainMap &map, const ObstacleReasonerOutput &reasoner_output) const {
   auto &layers = map.layers();
   const float stale_threshold_frames =
       std::max(1.0f, config_.observability.stale_to_unknown_time /
@@ -14,12 +25,15 @@ void TraversabilitySolver::update(LocalTerrainMap &map) const {
     const float coverage = layers.coverage_confidence[cell];
     const float support_confidence = layers.support_confidence[cell];
     const float clearance = layers.clearance[cell];
-    const float obstacle = layers.obstacle_evidence[cell];
-    const float continuity = layers.support_continuity[cell];
     const float slope = layers.slope[cell];
     const float step_up = layers.step_up[cell];
     const float step_down = layers.step_down[cell];
     const float roughness = layers.roughness[cell];
+    const BlockReason block_reason =
+        static_cast<size_t>(cell) < reasoner_output.block_reason.size()
+            ? static_cast<BlockReason>(
+                  reasoner_output.block_reason[static_cast<size_t>(cell)])
+            : BlockReason::kNone;
     const auto support_state =
         static_cast<SupportState>(layers.support_state[cell]);
     const bool stale = static_cast<float>(layers.last_reliable_age[cell]) >
@@ -30,10 +44,7 @@ void TraversabilitySolver::update(LocalTerrainMap &map) const {
         support_confidence < config_.observability.min_support_confidence ||
         stale) {
       state = PassabilityState::kUnknown;
-    } else if (std::isfinite(clearance) &&
-               clearance < config_.geometry.min_clearance) {
-      state = PassabilityState::kImpassable;
-    } else if (continuity < 0.3f && obstacle > 0.4f) {
+    } else if (IsBlockingReason(block_reason)) {
       state = PassabilityState::kImpassable;
     } else if (slope <= config_.geometry.max_support_slope_deg &&
                step_up <= config_.geometry.max_step_up &&

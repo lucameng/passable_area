@@ -2,6 +2,7 @@
 #define PASSABLE_AREA_CORE_TRAVERSABILITY_SOLVER_HPP_
 
 #include "passable_area/core/mapping/local_terrain_map.hpp"
+#include "passable_area/core/obstacle_reasoner.hpp"
 #include "passable_area/core/types/config_types.hpp"
 
 namespace passable_area::core {
@@ -10,7 +11,8 @@ class TraversabilitySolver {
 public:
   explicit TraversabilitySolver(const Config &config) : config_(config) {}
 
-  void update(LocalTerrainMap &map) const;
+  void update(LocalTerrainMap &map,
+              const ObstacleReasonerOutput &reasoner_output) const;
 
 private:
   Config config_;

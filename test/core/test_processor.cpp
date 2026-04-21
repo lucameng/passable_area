@@ -3,6 +3,7 @@
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/polar_frontend.hpp"
 #include "passable_area/core/processor.hpp"
+#include "passable_area/core/traversability_solver.hpp"
 #include "passable_area/core/types/obstacle_types.hpp"
 
 #include <algorithm>
@@ -23,6 +24,7 @@ using passable_area::core::LocalTerrainMap;
 using passable_area::core::MapGeometry;
 using passable_area::core::ObservabilityState;
 using passable_area::core::ObstacleEvidenceStage;
+using passable_area::core::ObstacleReasonerOutput;
 using passable_area::core::OverheadCandidate;
 using passable_area::core::PassabilityState;
 using passable_area::core::PolarFrontend;
@@ -33,6 +35,7 @@ using passable_area::core::SupportAnchorAuthority;
 using passable_area::core::SupportAnchorOrigin;
 using passable_area::core::SupportCandidate;
 using passable_area::core::SupportState;
+using passable_area::core::TraversabilitySolver;
 
 FrameInput MakeFlatFrame(int stamp = 1) {
   FrameInput input;
@@ -339,6 +342,32 @@ MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
                      map.origin()};
 }
 
+ObstacleReasonerOutput MakeReasonerOutput(int cell_count) {
+  ObstacleReasonerOutput output;
+  output.block_reason.assign(cell_count,
+                             static_cast<uint8_t>(BlockReason::kNone));
+  output.protrusion_stage.assign(
+      cell_count, static_cast<uint8_t>(ObstacleEvidenceStage::kNone));
+  output.overhead_stage.assign(
+      cell_count, static_cast<uint8_t>(ObstacleEvidenceStage::kNone));
+  output.obstacle_point_publish_status.assign(
+      cell_count,
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePointPublishStatus::kNotApplicable));
+  return output;
+}
+
+void SeedReliableSupportCell(LocalTerrainMap &map, int cell) {
+  auto &layers = map.layers();
+  layers.coverage_confidence[cell] = 1.0f;
+  layers.support_height[cell] = 0.0f;
+  layers.support_confidence[cell] = 1.0f;
+  layers.support_state[cell] = static_cast<uint8_t>(SupportState::kObserved);
+  layers.last_reliable_age[cell] = 0U;
+  layers.clearance[cell] = std::numeric_limits<float>::infinity();
+  layers.support_continuity[cell] = 1.0f;
+}
+
 } // namespace
 
 TEST(ProcessorTest, FlatGroundProducesPassableCells) {
@@ -354,6 +383,41 @@ TEST(ProcessorTest, FlatGroundProducesPassableCells) {
     }
   }
   EXPECT_GT(passable_count, 0);
+}
+
+TEST(ProcessorTest, TraversabilitySolverUsesReasonerBlockReason) {
+  const auto config = MakeConfig();
+  LocalTerrainMap map(config);
+  TraversabilitySolver solver(config);
+  const int cell = 0;
+  SeedReliableSupportCell(map, cell);
+
+  auto reasoner_output = MakeReasonerOutput(map.size());
+  reasoner_output.block_reason[cell] =
+      static_cast<uint8_t>(BlockReason::kGeometryFailure);
+
+  solver.update(map, reasoner_output);
+
+  EXPECT_EQ(map.layers().passability_state[cell],
+            static_cast<int8_t>(PassabilityState::kImpassable));
+  EXPECT_EQ(map.layers().traversal_cost[cell], 100);
+}
+
+TEST(ProcessorTest, TraversabilitySolverKeepsUnknownPriorityOverReasonerBlock) {
+  const auto config = MakeConfig();
+  LocalTerrainMap map(config);
+  TraversabilitySolver solver(config);
+  const int cell = 0;
+
+  auto reasoner_output = MakeReasonerOutput(map.size());
+  reasoner_output.block_reason[cell] =
+      static_cast<uint8_t>(BlockReason::kLowClearance);
+
+  solver.update(map, reasoner_output);
+
+  EXPECT_EQ(map.layers().passability_state[cell],
+            static_cast<int8_t>(PassabilityState::kUnknown));
+  EXPECT_EQ(map.layers().traversal_cost[cell], -1);
 }
 
 TEST(PreprocessorTest, BodyFilterRemovesPointsInsideConfiguredBaseLinkBox) {

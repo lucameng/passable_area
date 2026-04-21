@@ -24,7 +24,8 @@ public:
 private:
   FrameOutput buildOutput(const ProcessedFrame &frame,
                           const FrameObservability &observability,
-                          const FrontendOutput &frontend_output) const;
+                          const FrontendOutput &frontend_output,
+                          const ObstacleReasonerOutput &reasoner_output) const;
 
   Config config_;
   FramePreprocessor preprocessor_;

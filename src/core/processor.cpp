@@ -134,14 +134,17 @@ FrameOutput Processor::update(const FrameInput &input) {
   const std::vector<int> dirty_cells =
       map_updater_.update(frontend_output, observability, map_);
   feature_updater_.update(dirty_cells, map_);
-  traversability_solver_.update(map_);
-  return buildOutput(preprocessed, observability, frontend_output);
+  const auto reasoner_output = obstacle_reasoner_.evaluate(map_.layers());
+  traversability_solver_.update(map_, reasoner_output);
+  return buildOutput(preprocessed, observability, frontend_output,
+                     reasoner_output);
 }
 
 FrameOutput
 Processor::buildOutput(const ProcessedFrame &frame,
                        const FrameObservability &observability,
-                       const FrontendOutput &frontend_output) const {
+                       const FrontendOutput &frontend_output,
+                       const ObstacleReasonerOutput &reasoner_output) const {
   FrameOutput output;
   output.stamp = frame.stamp;
   output.base_pose_in_map = frame.base_pose_in_map;
@@ -170,7 +173,6 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.roughness = layers.roughness;
   output.clearance = layers.clearance;
   output.support_continuity = layers.support_continuity;
-  const auto reasoner_output = obstacle_reasoner_.evaluate(layers);
   output.block_reason = reasoner_output.block_reason;
   output.protrusion_stage = reasoner_output.protrusion_stage;
   output.overhead_stage = reasoner_output.overhead_stage;
