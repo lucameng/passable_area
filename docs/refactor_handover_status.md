@@ -2053,7 +2053,7 @@ timing：
 
 - `colcon build --packages-select passable_area --symlink-install` 通过。
 - `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
-- `colcon test-result --verbose`：`Summary: 97 tests, 0 errors, 0 failures, 0 skipped`。
+- `colcon test-result --verbose`：`Summary: 93 tests, 0 errors, 0 failures, 0 skipped`。
 
 false obstacle frozen bags（检测框 `x[0.0, 1.4] y[-0.25, 0.25]`，排除 x30 bag）：
 
@@ -2245,6 +2245,72 @@ miss obstacle frozen ROIs：
 timing：
 
 - `offline_replay --benchmark-timing --bag ...`
+  - `rosbag2_open_short_upstairs`：`avg = 6.693 ms`，`max = 10.209 ms`，`p95 = 9.385 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 7.426 ms`，`max = 10.902 ms`，`p95 = 9.869 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 6.785 ms`，`max = 9.248 ms`，`p95 = 8.357 ms`
+  - `rosbag2_b1_upstairs`：`avg = 6.304 ms`，`max = 9.341 ms`，`p95 = 8.658 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 12.68 ms`，`p95 = 13.53 ms`，`p99 = 14.84 ms`
+  - `160k points`：`avg = 24.44 ms`，`p95 = 29.08 ms`，`p99 = 31.66 ms`
+
+当前结论：
+
+- solver 主判定权已在 Phase 5 起步阶段切到 reasoner，本轮不回退。
+- `/terrain_obstacle_points` 外部障碍输出合同未变，false frozen bags 仍全 0。
+- frozen miss ROI 结果未退化。
+- timing 无异常。
+- 允许继续 Phase 5 后续清理；下一步可以继续收缩 docs 中残余“旧 explanation 语义仍在现役”的表述，并检查外部是否仍有人消费已删除的历史 grid_map 层。
+
+## 28. Phase 5 收口：docs 终清与 solver 去重（2026-04-21 19:55 +0800）
+
+本轮做最后一批 Phase 5 收口动作：
+
+- 继续清理 `docs/algorithm_scheme.md` 中残余的旧 explanation / anchor / neighborhood suppression 表述，确保文档只描述当前 V2 主线。
+- `TraversabilitySolver` 去掉 `block_reason == None` 后的几何二次否决：
+  - 仍保留 `UNKNOWN` gate
+  - `block_reason` 为阻挡时判 `IMPASSABLE`
+  - 其余可靠 cell 直接判 `PASSABLE`
+  - 几何阈值只继续参与 passable cost 细分，不再作为 solver 的第二套阻挡真值
+- 复核 `PolarFrontend.hpp` 与 `LocalTerrainMap.hpp`：
+  - 未发现为旧解释器保留的额外成员变量或内部计数器
+  - 本轮无须在这两个头文件继续裁剪成员
+
+新增测试：
+
+- `ProcessorTest.TraversabilitySolverDoesNotRedoGeometryFailureChecks`
+  - 人工构造“几何值超阈但 reasoner 未给阻挡原因”的不一致输入
+  - 验证 solver 现在按 contract 信任 `block_reason == None`，保持 `PASSABLE`
+
+自动化验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 97 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags：
+
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+
+miss obstacle frozen ROIs：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`1 / 4 miss`
+  - `right_board`：`2 / 4 miss`
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`2 / 3 miss`
+  - `right_side_board`：`0 / 3 miss`
+
+timing：
+
+- `offline_replay --benchmark-timing --bag ...`
   - `rosbag2_open_short_upstairs`：`avg = 6.591 ms`，`max = 10.026 ms`，`p95 = 9.407 ms`
   - `rosbag2_open_up_down_stairs`：`avg = 6.422 ms`，`max = 8.735 ms`，`p95 = 7.771 ms`
   - `rosbag2_open_stair_and_slope`：`avg = 6.439 ms`，`max = 8.413 ms`，`p95 = 7.320 ms`
@@ -2255,8 +2321,7 @@ timing：
 
 当前结论：
 
-- solver 主判定权已在 Phase 5 起步阶段切到 reasoner，本轮不回退。
-- `/terrain_obstacle_points` 外部障碍输出合同未变，false frozen bags 仍全 0。
-- frozen miss ROI 结果未退化。
-- timing 无异常。
-- 允许继续 Phase 5 后续清理；下一步可以继续收缩 docs 中残余“旧 explanation 语义仍在现役”的表述，并检查外部是否仍有人消费已删除的历史 grid_map 层。
+- `algorithm_scheme.md` 已对齐到当前 V2 主线，不再把旧 explanation / anchor / neighborhood suppression 写成现役逻辑。
+- solver 现在只整合 `UNKNOWN` 与 `ObstacleReasoner` 的阻挡结论，不再维护第二套几何阻挡真值。
+- frozen false / miss / timing 均未退化。
+- 允许把本轮作为 Phase 5 的正式收口状态。

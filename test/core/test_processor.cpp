@@ -417,6 +417,27 @@ TEST(ProcessorTest, TraversabilitySolverKeepsUnknownPriorityOverReasonerBlock) {
   EXPECT_EQ(map.layers().traversal_cost[cell], -1);
 }
 
+TEST(ProcessorTest, TraversabilitySolverDoesNotRedoGeometryFailureChecks) {
+  const auto config = MakeConfig();
+  LocalTerrainMap map(config);
+  TraversabilitySolver solver(config);
+  const int cell = 0;
+  SeedReliableSupportCell(map, cell);
+  map.layers().slope[cell] = config.geometry.max_support_slope_deg + 10.0f;
+  map.layers().step_up[cell] = config.geometry.max_step_up + 0.1f;
+  map.layers().step_down[cell] = config.geometry.max_step_down + 0.1f;
+  map.layers().roughness[cell] = config.geometry.max_support_roughness + 0.1f;
+  map.layers().clearance[cell] = 0.0f;
+
+  const auto reasoner_output = MakeReasonerOutput(map.size());
+  solver.update(map, reasoner_output);
+
+  EXPECT_EQ(map.layers().passability_state[cell],
+            static_cast<int8_t>(PassabilityState::kPassable));
+  EXPECT_GE(map.layers().traversal_cost[cell], 1);
+  EXPECT_LE(map.layers().traversal_cost[cell], 99);
+}
+
 TEST(PreprocessorTest, BodyFilterRemovesPointsInsideConfiguredBaseLinkBox) {
   auto config = MakeConfig();
   config.preprocess.body_filter.enable = true;

@@ -24,7 +24,6 @@ void TraversabilitySolver::update(
   for (int cell = 0; cell < map.size(); ++cell) {
     const float coverage = layers.coverage_confidence[cell];
     const float support_confidence = layers.support_confidence[cell];
-    const float clearance = layers.clearance[cell];
     const float slope = layers.slope[cell];
     const float step_up = layers.step_up[cell];
     const float step_down = layers.step_down[cell];
@@ -46,12 +45,7 @@ void TraversabilitySolver::update(
       state = PassabilityState::kUnknown;
     } else if (IsBlockingReason(block_reason)) {
       state = PassabilityState::kImpassable;
-    } else if (slope <= config_.geometry.max_support_slope_deg &&
-               step_up <= config_.geometry.max_step_up &&
-               step_down <= config_.geometry.max_step_down &&
-               roughness <= config_.geometry.max_support_roughness &&
-               (!std::isfinite(clearance) ||
-                clearance >= config_.geometry.min_clearance)) {
+    } else {
       state = PassabilityState::kPassable;
     }
 

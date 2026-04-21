@@ -509,14 +509,14 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 职责：
 
 - 基于 `map_samples` 逐 cell 聚合当前帧点
-- 推导本帧支撑候选、障碍候选和解释辅助层
+- 推导本帧支撑候选和障碍候选
 
 输出：
 
 - `support_candidates`
 - `protrusion_candidates`
 - `overhead_candidates`
-- 一系列前端解释层
+- sample 统计以及轻量 stage 字段
 
 #### 8.3.1 核心思路
 
@@ -573,7 +573,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 - `protrusion_stage` / `overhead_stage`
 - `obstacle_point_publish_status`
 
-#### 8.3.3 锚点的来源与拒绝逻辑
+#### 8.3.3 历史解释逻辑已退出主线
 
 当前主线前端已经不做锚点解析，相关兼容字段也已移除。
 
@@ -624,9 +624,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 #### 8.3.6 `effective_support_ref` 的定位
 
-当前主线前端已经不再使用 `effective_support_ref`。
-
-如果后续重新设计更通用的解释型前端，可以重新引入类似概念；但当前基线实现里不应该把它看成现役逻辑。
+当前主线前端已经不再使用 `effective_support_ref`，它也不是现役 contract 的一部分。
 
 #### 8.3.7 `ambiguous_candidates`
 
@@ -721,7 +719,7 @@ obstacle 更新：
 
 1. 先判 `UNKNOWN`
 2. 再判 `IMPASSABLE`
-3. 满足几何约束再判 `PASSABLE`
+3. 剩余可靠 cell 直接判 `PASSABLE`
 
 `UNKNOWN` 的典型条件：
 
@@ -740,16 +738,13 @@ obstacle 更新：
 `PASSABLE` 的典型条件：
 
 - `block_reason == None`
-- `slope <= max_support_slope_deg`
-- `step_up <= max_step_up`
-- `step_down <= max_step_down`
-- `roughness <= max_support_roughness`
-- `clearance` 充足
+- 且 cell 已经通过 `UNKNOWN` gate
 
 实现说明：
 
 - `UNKNOWN` 优先级仍高于 `block_reason`，无可靠 support / coverage / stale cell 不会被 reasoner 硬判成 `IMPASSABLE`
 - solver 不再直接用 `obstacle_evidence + support_continuity` 解释障碍阻挡；障碍阻挡语义先由 `ObstacleReasoner` 给出
+- solver 也不再重复执行几何阻挡阈值判定；`GeometryFailure` 等阻挡语义由 `ObstacleReasoner` 提供，solver 只负责 `UNKNOWN / IMPASSABLE / PASSABLE` 三态整合与 cost 输出
 - 当前主链没有 BFS、可达域扩张或图搜索求解
 - 当前版本是逐 cell 判通行性，再给 passable cell 生成代价
 
