@@ -1948,3 +1948,76 @@ timing：
 - Setup A left 不应再用全局 protrusion gain 解决；当前最高 evidence 只有约 `0.32`，需要重新判断 ROI 窗口首帧是否应接受更低 evidence、是否应引入更明确的 side-board source aggregation，或是否验收标准需要按帧窗口边界区分。
 - Setup A right 的 `NoObstacleSourceSamplesInRoi` 需要继续看 strong-evidence cell 和 ROI source sample 的空间错位，避免把无当前 source sample 的历史强证据直接当成外部障碍。
 - Setup B left 的两个剩余帧分别是稀疏 2~3 点 source 和 low-clearance height-gated source，不应套用本轮 dense source gate。
+
+## 24. Phase 4.2 推进状态（2026-04-21 17:20 +0800）
+
+本轮按最新 `docs/phase_4_2_plan.md` 做了唯一行为改动：把 `PolarFrontend` 的 overhead candidate evidence 从原始 `min_clearance - clearance_gap` 改为按不可通行净空区间归一化：
+
+`(min_clearance - clearance_gap) / max(min_clearance - max_step_up, 1e-3)`，并 clamp 到 `[0, 1]`。
+
+本轮没有修改 low-clearance bridge 的发布条件，没有切换 `TraversabilitySolver` 主判定权，也没有进入 Phase 5。
+
+同步改动：
+
+- `src/core/polar_frontend.cpp`
+  - 新增局部 `ComputeOverheadEvidence()`，集中表达 overhead evidence 归一化公式。
+- `test/core/test_processor.cpp`
+  - `PolarFrontendFormsOverheadCandidateForLowClearanceBand` 断言归一化后 evidence 为 `1.0`。
+- `docs/algorithm_scheme.md`
+  - 同步说明 overhead evidence 公式和 low-clearance bridge 仍保留 `clearance > max_step_up` 发布门控。
+
+自动化验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 95 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags（检测框 `x[0.0, 1.4] y[-0.25, 0.25]`，排除 x30 bag）：
+
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+
+miss obstacle frozen ROIs：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`1 / 4 miss`
+    - root cause：`EvidenceTooLow`
+  - `right_board`：`2 / 4 miss`
+    - root cause：`EvidenceTooLow` 1 帧，`NoObstacleSourceSamplesInRoi` 1 帧
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`2 / 3 miss`
+    - root cause：`EvidenceTooLow` 2 帧
+  - `right_side_board`：`0 / 3 miss`
+
+timing：
+
+- `offline_replay --benchmark-timing`
+  - `rosbag2_open_short_upstairs`：`avg = 6.838 ms`，`max = 15.810 ms`，`p95 = 9.905 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 7.507 ms`，`max = 11.206 ms`，`p95 = 10.076 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 6.752 ms`，`max = 9.461 ms`，`p95 = 7.862 ms`
+  - `rosbag2_b1_upstairs`：`avg = 6.426 ms`，`max = 10.202 ms`，`p95 = 8.839 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 12.60 ms`，`p95 = 13.15 ms`，`p99 = 13.91 ms`
+  - `160k points`：`avg = 22.38 ms`，`p95 = 24.95 ms`，`p99 = 24.99 ms`
+
+当前结论：
+
+- overhead evidence 归一化未造成 false obstacle 回潮，frozen false bags 仍全 0。
+- Miss ROI 结果与 Phase 4 fix plan 4 后基本一致；Setup A right 没有按 `phase_4_2_plan.md` 的预期从 `2 / 4 miss` 改善到 `<= 1 / 4 miss`。
+- Setup A left/right 和 Setup B left 仍未通过，Phase 4 功能验收尚未完成。
+- timing 未显示异常。
+- **仍然不能切换 solver 主判定权，不能进入 Phase 5。**
+
+下一步建议：
+
+- 不要再做全局 protrusion gain 或全局 overhead gain 调整；false frozen bags 对这种扩张很敏感。
+- Setup A right 仍需要继续调查 strong-evidence cell 与当前 ROI source samples 的空间错位，尤其是 `NoObstacleSourceSamplesInRoi` 那一帧。
+- Setup A left 仍是 dense side-board protrusion evidence 约 `0.32` 的单帧不足问题；如果继续修，应优先建模 source aggregation 或验收窗口边界，而不是放宽低净空 bridge。
+- Setup B left 仍是稀疏 2~3 点 source 和 step-range low-clearance height gate 的组合局限，不应直接套 dense source gate。

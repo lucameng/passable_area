@@ -50,6 +50,14 @@ float Quantile(const std::vector<float> &values, int begin, int end, float q) {
   return values[static_cast<size_t>(begin + offset)];
 }
 
+float ComputeOverheadEvidence(const Config &config, float clearance_gap) {
+  const float low_clearance_span = std::max(
+      config.geometry.min_clearance - config.geometry.max_step_up, 1e-3f);
+  return std::clamp((config.geometry.min_clearance - clearance_gap) /
+                        low_clearance_span,
+                    0.0f, 1.0f);
+}
+
 std::vector<HeightBand> SplitHeightBands(std::vector<float> values,
                                          float split_gap) {
   std::vector<HeightBand> bands;
@@ -248,11 +256,10 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
           protrusion_gain_scale});
     }
     if (overhead_triggered) {
+      const float clearance_gap = overhead_band->bottom - support_z;
       output.overhead_candidates.push_back(
           OverheadCandidate{cell, overhead_band->bottom,
-                            std::clamp(config_.geometry.min_clearance -
-                                           (overhead_band->bottom - support_z),
-                                       0.0f, 1.0f),
+                            ComputeOverheadEvidence(config_, clearance_gap),
                             1.0f});
     }
   }

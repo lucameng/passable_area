@@ -748,7 +748,7 @@ TEST(ProcessorTest, PolarFrontendFormsOverheadCandidateForLowClearanceBand) {
   ASSERT_EQ(output.overhead_candidates.size(), 1U);
   EXPECT_EQ(output.overhead_candidates.front().cell, cell);
   EXPECT_FLOAT_EQ(output.overhead_candidates.front().z, 0.20f);
-  EXPECT_GT(output.overhead_candidates.front().evidence, 0.0f);
+  EXPECT_FLOAT_EQ(output.overhead_candidates.front().evidence, 1.0f);
 }
 
 TEST(ProcessorTest, PolarFrontendDoesNotCreateProtrusionForSmallLayeredStep) {
