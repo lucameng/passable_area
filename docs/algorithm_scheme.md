@@ -767,7 +767,7 @@ obstacle 更新：
 
 - `block_reason` 是内部诊断和 Phase 4 切换前的对比信号，不是新的外部障碍真值。
 - 对下游导航仍以 `/terrain_obstacle_points` 为唯一外部障碍输出合同。
-- Low Clearance 到 obstacle point 发布的正式桥接放在 Phase 3b。
+- Phase 3b 后，`LowClearance` 和包含低净空的 `Mixed` cell 在 overhead evidence 达到发布阈值时，可驱动 `/terrain_obstacle_points` 发布。
 
 ### 8.8 `Processor::buildOutput`
 
@@ -787,9 +787,9 @@ obstacle 更新：
 - `obstacle_points`
 - `unknown_points`
 
-其中障碍调试点还会额外经过高度门控：
+其中障碍调试点还会额外经过 evidence / reasoner / 高度门控：
 
-- 障碍证据必须足够高
+- 兼容 `obstacle_evidence` 必须足够高，或 reasoner 给出低净空相关阻挡且 `overhead_evidence` 达到发布阈值
 - 点相对支撑参考的高度要够高
 - 点在 `base_link` 下的 z 又不能太高
 
@@ -851,7 +851,7 @@ obstacle 更新：
 
 语义：
 
-- 落在障碍证据已足够高的 cell 内的真实样本点
+- 落在障碍证据已足够高的 cell 内，或落在 reasoner 低净空相关阻挡 cell 内且 `overhead_evidence` 已足够高的真实样本点
 - 要求相对支撑参考高度至少为 `obstacle_points_min_height`
 - 同时要求样本在 `base_link` 下 z 不高于 `obstacle_points_max_height_in_base_link`
 - 当历史 `support_height` 不可用时，用当前帧该 cell 的 fallback `min_z` 作为支撑参考

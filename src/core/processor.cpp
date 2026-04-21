@@ -35,6 +35,31 @@ bool PassesObstaclePointPublishHeightGates(
              config.obstacle_points_max_height_in_base_link;
 }
 
+bool HasLowClearanceObstaclePointBridge(const TerrainLayers &layers,
+                                        const FrameOutput &output, int cell,
+                                        const Config &config) {
+  const auto index = static_cast<size_t>(cell);
+  if (index >= output.block_reason.size() ||
+      index >= layers.overhead_evidence.size()) {
+    return false;
+  }
+  const uint8_t reason = output.block_reason[index];
+  return (reason == static_cast<uint8_t>(BlockReason::kLowClearance) ||
+          reason == static_cast<uint8_t>(BlockReason::kMixed)) &&
+         layers.overhead_evidence[index] >= config.obstacle_points_min_evidence;
+}
+
+bool HasObstaclePointPublishEvidence(const TerrainLayers &layers,
+                                     const FrameOutput &output, int cell,
+                                     const Config &config) {
+  const auto index = static_cast<size_t>(cell);
+  const bool legacy_evidence =
+      index < layers.obstacle_evidence.size() &&
+      layers.obstacle_evidence[index] >= config.obstacle_points_min_evidence;
+  return legacy_evidence ||
+         HasLowClearanceObstaclePointBridge(layers, output, cell, config);
+}
+
 MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
   return MapGeometry{map.rows(), map.cols(), map.size(), map.resolution(),
                      map.origin()};
@@ -167,7 +192,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
     if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
-    if (layers.obstacle_evidence[cell] < config_.obstacle_points_min_evidence ||
+    if (!HasObstaclePointPublishEvidence(layers, output, cell, config_) ||
         std::isfinite(layers.support_height[cell])) {
       continue;
     }
@@ -206,8 +231,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
                         ? it->second
                         : std::numeric_limits<float>::infinity();
     }
-    if (layers.obstacle_evidence[cell] >=
-            config_.obstacle_points_min_evidence &&
+    if (HasObstaclePointPublishEvidence(layers, output, cell, config_) &&
         PassesObstaclePointPublishHeightGates(sample, support_ref, config_)) {
       output.obstacle_points.push_back(
           MakeCellDebugPoint(TransformMapPointToBaseGravity(

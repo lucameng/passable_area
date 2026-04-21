@@ -20,7 +20,7 @@
 
 这份文档里，“当前版本”指当前分支 `revert/base-line` 上、`16b43ed` 回退和 `8053800` 清理旧参数之后的状态。
 
-更新说明（2026-04-21）：本文末尾已追加 Phase 1 / Phase 2 / Phase 3a 完成状态。阅读时以后续完成状态为准；前文中关于“当前简单前端 / ObstacleCandidate / ambiguous_candidates / ObstacleReasoner 尚不存在”的描述保留为重构背景和历史基线说明，不再代表 Phase 3a 后的最新 runtime 事实。
+更新说明（2026-04-21）：本文末尾已追加 Phase 1 / Phase 2 / Phase 3a / Phase 3b 完成状态。阅读时以后续完成状态为准；前文中关于“当前简单前端 / ObstacleCandidate / ambiguous_candidates / ObstacleReasoner 尚不存在 / Low Clearance bridge 未完成”的描述保留为重构背景和历史基线说明，不再代表 Phase 3b 后的最新 runtime 事实。
 
 ## 2. 项目当前总体状态
 当前 `passable_area` 已经完成了比较大的工程化重构：主链是一个 **ROS-free core + 薄 ROS 接口** 的单节点 ROS 2 包，核心处理链是：
@@ -1554,3 +1554,31 @@ V2 不会回到旧 anchor tree，但会保留“历史 support 跟踪”这个�
 - `obstacle_point_publish_status` 当前表达发布意图 / gate 归因，但 `Processor` 的 obstacle point 筛选逻辑尚未改为消费该字段。
 - Phase 3b 的重点仍是 Low Clearance 到 `/terrain_obstacle_points` 的桥接，尤其要保持地面点不过滤进 obstacle points 的既有语义。
 - Phase 4 前还没有跑冻结 false obstacle bags 的 reasoner / solver 一致率统计；该验收仍待离线 bag 验证。
+
+## 18. Phase 3b 完成状态（2026-04-21）
+本次已按 `docs/implementation_plan.md` 的 Phase 3b 完成 Low Clearance 到 `/terrain_obstacle_points` 的最小桥接。
+
+已完成：
+
+- `Processor::buildOutput()` 新增 reasoner-aware obstacle point 发布资格判断：
+  - 保留原有 `obstacle_evidence >= obstacle_points_min_evidence` 兼容路径。
+  - 新增 `block_reason == LowClearance` 或包含低净空的 `Mixed`，且 `overhead_evidence >= obstacle_points_min_evidence` 的发布路径。
+- 低净空 bridge 仍复用既有 sample 高度门控：
+  - `sample.point_in_map.z >= support_ref + obstacle_points_min_height`
+  - `sample.point_in_base.z <= obstacle_points_max_height_in_base_link`
+- 因此 ground samples under low ceiling 仍不会进入 `/terrain_obstacle_points`。
+- 新增 `ProcessorTest.LowClearanceReasonerBridgePublishesOverheadObstaclePoints`，覆盖低净空 reasoner cell 能发布 overhead sample。
+- 保留既有 `ObstaclePointsExcludeGroundSamplesUnderLowCeiling`，验证地面点不进入 obstacle points。
+- 更新 `docs/algorithm_scheme.md`，说明低净空 reasoner bridge 已接入 obstacle point 发布合同。
+
+验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 90 tests, 0 errors, 0 failures, 0 skipped`。
+
+注意事项：
+
+- Phase 3b 只补齐低净空到外部 obstacle point 的桥，不切换 `TraversabilitySolver` 主判定权。
+- 当前 `obstacle_point_publish_status` 仍主要由 reasoner 按 evidence 预判，尚未根据实际 sample 是否通过高度门控回写为 `GatedByHeight` / `BlockedButNoSamples`。
+- Phase 4 仍需要跑冻结 false obstacle bags、miss obstacle Setup A/B 和 timing benchmark，再决定是否让 solver 消费 reasoner 输出。

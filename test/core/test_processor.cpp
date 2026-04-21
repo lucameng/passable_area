@@ -11,6 +11,7 @@
 
 namespace {
 
+using passable_area::core::BlockReason;
 using passable_area::core::DropoutAwareMapUpdater;
 using passable_area::core::FrameInput;
 using passable_area::core::FrameObservability;
@@ -20,6 +21,7 @@ using passable_area::core::FrontendOutput;
 using passable_area::core::LocalTerrainMap;
 using passable_area::core::MapGeometry;
 using passable_area::core::ObservabilityState;
+using passable_area::core::ObstacleEvidenceStage;
 using passable_area::core::OverheadCandidate;
 using passable_area::core::PassabilityState;
 using passable_area::core::PolarFrontend;
@@ -1097,6 +1099,46 @@ TEST(ProcessorTest, ObstaclePointsExcludeGroundSamplesUnderLowCeiling) {
   }
   EXPECT_NEAR(min_z, 0.2f, 1e-5f);
   EXPECT_NEAR(max_z, 0.2f, 1e-5f);
+}
+
+TEST(ProcessorTest, LowClearanceReasonerBridgePublishesOverheadObstaclePoints) {
+  auto config = MakeConfig();
+  config.preprocess.enable_downsample = false;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.08f;
+  config.obstacle_points_max_height_in_base_link = 0.25f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeLowCeilingFrame(0.12f, 1)).valid);
+  ASSERT_TRUE(processor.update(MakeLowCeilingFrame(0.12f, 100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeLowCeilingFrame(0.12f, 200000001)).valid);
+  const auto output = processor.update(MakeLowCeilingFrame(0.12f, 300000001));
+  ASSERT_TRUE(output.valid);
+
+  bool found_overhead_reasoner_cell = false;
+  for (int cell = 0; cell < output.rows * output.cols; ++cell) {
+    const bool low_clearance_blocked =
+        output.block_reason[cell] ==
+            static_cast<uint8_t>(BlockReason::kLowClearance) ||
+        output.block_reason[cell] == static_cast<uint8_t>(BlockReason::kMixed);
+    if (low_clearance_blocked &&
+        output.overhead_stage[cell] ==
+            static_cast<uint8_t>(ObstacleEvidenceStage::kBlocking) &&
+        output.overhead_evidence[cell] >= config.obstacle_points_min_evidence) {
+      found_overhead_reasoner_cell = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found_overhead_reasoner_cell);
+  ASSERT_FALSE(output.obstacle_points.empty());
+
+  for (const auto &point : output.obstacle_points) {
+    ASSERT_GE(point.source_cell, 0);
+    ASSERT_LT(point.source_cell, output.rows * output.cols);
+    EXPECT_EQ(output.overhead_stage[point.source_cell],
+              static_cast<uint8_t>(ObstacleEvidenceStage::kBlocking));
+    EXPECT_NEAR(point.point.z, 0.12f, 1e-5f);
+  }
 }
 
 TEST(ProcessorTest, ObstaclePointsExcludeSamplesAboveBaseLinkHeightCeiling) {
