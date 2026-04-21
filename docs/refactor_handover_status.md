@@ -2325,3 +2325,27 @@ timing：
 - solver 现在只整合 `UNKNOWN` 与 `ObstacleReasoner` 的阻挡结论，不再维护第二套几何阻挡真值。
 - frozen false / miss / timing 均未退化。
 - 允许把本轮作为 Phase 5 的正式收口状态。
+
+## 29. 后续试验：移除 obstacle point 发布路径的 `base_gravity` 下界过滤（2026-04-21 20:45 +0800）
+
+本轮是一个有意保留在工作树中的试验性行为改动，用于观察 `/terrain_obstacle_points` 在下行/低位样本上的实际输出变化：
+
+- `Processor::PassesObstaclePointPublishHeightGates()` 删除了这一条发布门控：
+  - `point_in_base_gravity.z >= -max_step_down + obstacle_points_min_height`
+- 当前 obstacle point 发布高度门控只剩：
+  - `sample.point_in_map.z >= support_ref + obstacle_points_min_height`
+  - `sample.point_in_base.z <= obstacle_points_max_height_in_base_link`
+- 这次改动没有触碰：
+  - solver 主判定权
+  - reasoner block_reason 语义
+  - `/terrain_obstacle_points` 作为下游唯一外部障碍输出合同
+
+自动化验证：
+
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `test_processor`、`test_false_obstacle_analyzer`、`test_miss_obstacle_analyzer` 均通过。
+
+当前结论：
+
+- 代码和单测层面无回归，适合继续做 bag 级效果验证。
+- 本轮尚未重跑 false frozen bags / miss ROIs / timing benchmark，因此还不能把该行为变更记为已完成离线验收。

@@ -675,7 +675,6 @@ obstacle 更新：
 - obstacle point 的样本高度门控同时要求：
   - 相对 support reference 高于 `obstacle_points_min_height`
   - 在 `base_link` 中不高于 `obstacle_points_max_height_in_base_link`
-  - 在最终发布坐标 `base_gravity` 中不低于 `-max_step_down + obstacle_points_min_height`
 
 当前实现不再按旧 explanation / 邻域否决字段清理障碍层。障碍层清理由证据衰减、support 重观测和 support 失效后的阈值判断触发。
 
@@ -865,7 +864,6 @@ obstacle 更新：
 - low-clearance bridge 只用于 `clearance > max_step_up` 的低净空障碍，不用于台阶量级投影
 - 要求相对支撑参考高度至少为 `obstacle_points_min_height`
 - 同时要求样本在 `base_link` 下 z 不高于 `obstacle_points_max_height_in_base_link`
-- 同时要求样本在 `base_gravity` 下 z 不低于 `-max_step_down + obstacle_points_min_height`，避免把明显低于机器人下行台阶范围的地形落差点发布为外部障碍
 - 当历史 `support_height` 不可用时，用当前帧该 cell 的 fallback `min_z` 作为支撑参考
 - 发布在 `base_gravity`
 

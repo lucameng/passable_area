@@ -30,12 +30,10 @@ bool PassesObstaclePointPublishHeightGates(
     const passable_area::core::Point3f &point_in_base_gravity,
     float support_ref,
     const passable_area::core::Config &config) {
+  (void)point_in_base_gravity;
   return std::isfinite(support_ref) &&
          sample.point_in_map.z >=
              support_ref + config.obstacle_points_min_height &&
-         point_in_base_gravity.z >=
-             -config.geometry.max_step_down +
-                 config.obstacle_points_min_height &&
          sample.point_in_base.z <=
              config.obstacle_points_max_height_in_base_link;
 }
