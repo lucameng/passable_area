@@ -2349,3 +2349,39 @@ timing：
 
 - 代码和单测层面无回归，适合继续做 bag 级效果验证。
 - 本轮尚未重跑 false frozen bags / miss ROIs / timing benchmark，因此还不能把该行为变更记为已完成离线验收。
+
+## 30. 后续试验：rear-dropout 下保留后方 obstacle points 1 帧（2026-04-21）
+
+本轮按用户要求增加了一个最小版 rear-dropout obstacle-point bridge，目标不是改变内部障碍真值，而是降低“后 lidar 整片 dropout 时后方 `/terrain_obstacle_points` 一闪一灭”的外部输出抖动。
+
+本轮行为改动：
+
+- `Processor` 新增仅驻留于输出层的后方 obstacle point 缓存，不写入地图层，不改变 reasoner / solver 语义。
+- bridge 只在以下最小条件同时满足时启用：
+  - `observability.rear_dropout == true`
+  - 当前帧后方没有原生 obstacle points
+  - 只复用上一帧缓存
+  - 最多只续 1 帧，不可连续续命
+  - 缓存点的 `source_cell` 仍在当前局部地图索引范围内
+- 当前**未启用**的后续增强 gate 仍保留为下一步候选：
+  - 基于当前 `block_reason` 的 gate
+  - 基于当前 `passability != Unknown` 的 gate
+  - 基于当前 protrusion / overhead evidence 的 gate
+- bridge 点不会回写缓存；缓存只由非 dropout 帧中的原生后方 obstacle points 刷新，避免多帧续命。
+
+新增测试：
+
+- `ProcessorTest.RearDropoutBridgesPreviousRearObstaclePointsForOneFrame`
+- `ProcessorTest.RearDropoutBridgeExpiresAfterOneFrame`
+
+验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install`：未跑
+- `colcon test --packages-select passable_area --event-handlers console_direct+`：待跑
+- 当前仅新增/更新了 processor 单测，尚未完成包级自动测试和 frozen false / miss / timing 离线验收
+
+当前结论：
+
+- 这是一个有意收敛的输出层 bridge，不改变内部 `block_reason`、`terrain_state` 或地图层证据语义。
+- 该版本只满足用户讨论中的 `1,2,3,6` 条件；`4,5` 相关 gate 仅记录为下一步增强项。
+- 在未完成 bag 级验证前，应将其视为临时行为改动，而不是已完成结构验收的最终合同。

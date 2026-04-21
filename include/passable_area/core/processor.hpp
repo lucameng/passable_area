@@ -22,10 +22,17 @@ public:
   const Config &config() const { return config_; }
 
 private:
+  struct RearObstaclePointCache {
+    bool valid = false;
+    bool consumed_for_bridge = false;
+    Timestamp stamp = 0;
+    std::vector<CellDebugPoint> points;
+  };
+
   FrameOutput buildOutput(const ProcessedFrame &frame,
                           const FrameObservability &observability,
                           const FrontendOutput &frontend_output,
-                          const ObstacleReasonerOutput &reasoner_output) const;
+                          const ObstacleReasonerOutput &reasoner_output);
 
   Config config_;
   FramePreprocessor preprocessor_;
@@ -37,6 +44,7 @@ private:
   TraversabilitySolver traversability_solver_;
   ObstacleReasoner obstacle_reasoner_;
   Timestamp last_stamp_ = 0;
+  RearObstaclePointCache rear_obstacle_point_cache_;
 };
 
 } // namespace passable_area::core

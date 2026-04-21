@@ -302,6 +302,12 @@ int CellIndex(const passable_area::core::FrameOutput &output, float x,
   return row * output.cols + col;
 }
 
+int CountRearObstaclePoints(const passable_area::core::FrameOutput &output) {
+  return static_cast<int>(std::count_if(
+      output.obstacle_points.begin(), output.obstacle_points.end(),
+      [](const auto &point) { return point.point.x < 0.0f; }));
+}
+
 passable_area::core::Config MakeConfig() {
   passable_area::core::Config config;
   config.map.length = 4.0f;
@@ -585,6 +591,53 @@ TEST(ProcessorTest, RearDropoutIsFlaggedAndSupportPersists) {
     }
   }
   EXPECT_GE(max_rear_support_conf, 0.05f);
+}
+
+TEST(ProcessorTest, RearDropoutBridgesPreviousRearObstaclePointsForOneFrame) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_GT(CountRearObstaclePoints(source_output), 0);
+
+  const auto dropout_output = processor.update(MakeFrontOnlyFrame(300000001));
+  ASSERT_TRUE(dropout_output.valid);
+  EXPECT_TRUE(dropout_output.observability.rear_dropout);
+  EXPECT_EQ(CountRearObstaclePoints(dropout_output),
+            CountRearObstaclePoints(source_output));
+}
+
+TEST(ProcessorTest, RearDropoutBridgeExpiresAfterOneFrame) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_GT(CountRearObstaclePoints(source_output), 0);
+
+  const auto first_dropout = processor.update(MakeFrontOnlyFrame(300000001));
+  ASSERT_TRUE(first_dropout.valid);
+  EXPECT_TRUE(first_dropout.observability.rear_dropout);
+  EXPECT_EQ(CountRearObstaclePoints(first_dropout),
+            CountRearObstaclePoints(source_output));
+
+  const auto second_dropout = processor.update(MakeFrontOnlyFrame(400000001));
+  ASSERT_TRUE(second_dropout.valid);
+  EXPECT_TRUE(second_dropout.observability.rear_dropout);
+  EXPECT_EQ(CountRearObstaclePoints(second_dropout), 0);
 }
 
 TEST(ProcessorTest, RearGapTriggersMissingByDropoutSectors) {

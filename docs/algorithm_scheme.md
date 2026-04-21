@@ -862,6 +862,11 @@ obstacle 更新：
 - 落在 `protrusion_evidence` 已足够高的 cell 内，落在 dense near-threshold protrusion source cell 内，或落在 reasoner 低净空相关阻挡 cell 内且 `overhead_evidence` 已足够高的真实样本点
 - 连续支撑上的纯 `LowClearance` cell 默认视作低净空地形投影，不通过普通 protrusion 阈值发布
 - low-clearance bridge 只用于 `clearance > max_step_up` 的低净空障碍，不用于台阶量级投影
+- 当前还额外保留一个最小版 rear-dropout obstacle-point bridge：
+  - 仅当 `rear_dropout == true` 且当前帧后方没有原生 obstacle points 时，允许复用上一帧已发布的后方 obstacle points
+  - 该 bridge 最多只续 1 帧，不可连续续命
+  - 当前只启用“rear dropout / 上一帧缓存 / 单帧生存期 / source cell index 仍在局部地图内”这组最小条件
+  - 基于当前 `block_reason`、`passability` 或 evidence 的额外 gate 仍保留为后续可选约束，暂未启用
 - 要求相对支撑参考高度至少为 `obstacle_points_min_height`
 - 同时要求样本在 `base_link` 下 z 不高于 `obstacle_points_max_height_in_base_link`
 - 当历史 `support_height` 不可用时，用当前帧该 cell 的 fallback `min_z` 作为支撑参考

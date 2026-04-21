@@ -25,11 +25,14 @@ bool IsNear(float lhs, float rhs, float tolerance) {
          std::abs(lhs - rhs) <= tolerance;
 }
 
+bool IsRearPointInBaseGravity(const CellDebugPoint &point) {
+  return point.point.x < 0.0f;
+}
+
 bool PassesObstaclePointPublishHeightGates(
     const passable_area::core::MapPointSample &sample,
     const passable_area::core::Point3f &point_in_base_gravity,
-    float support_ref,
-    const passable_area::core::Config &config) {
+    float support_ref, const passable_area::core::Config &config) {
   (void)point_in_base_gravity;
   return std::isfinite(support_ref) &&
          sample.point_in_map.z >=
@@ -89,8 +92,7 @@ bool HasObstaclePointPublishEvidence(const TerrainLayers &layers,
       output.block_reason[index] ==
           static_cast<uint8_t>(BlockReason::kLowClearance);
   const bool protrusion_publish =
-      !is_low_clearance &&
-      index < layers.protrusion_evidence.size() &&
+      !is_low_clearance && index < layers.protrusion_evidence.size() &&
       (layers.protrusion_evidence[index] >=
            config.obstacle_points_min_evidence ||
        HasDenseNearThresholdProtrusionSource(layers, output, cell, config));
@@ -142,7 +144,7 @@ FrameOutput
 Processor::buildOutput(const ProcessedFrame &frame,
                        const FrameObservability &observability,
                        const FrontendOutput &frontend_output,
-                       const ObstacleReasonerOutput &reasoner_output) const {
+                       const ObstacleReasonerOutput &reasoner_output) {
   FrameOutput output;
   output.stamp = frame.stamp;
   output.base_pose_in_map = frame.base_pose_in_map;
@@ -192,6 +194,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.support_points.reserve(frame.map_samples.size() / 4);
   output.obstacle_points.reserve(frame.map_samples.size() / 8);
   output.unknown_points.reserve(map_.size() / 4);
+  std::vector<CellDebugPoint> native_rear_obstacle_points;
   const float support_tolerance =
       std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
   std::unordered_map<int, float> fallback_support_ref_by_cell;
@@ -214,9 +217,8 @@ Processor::buildOutput(const ProcessedFrame &frame,
   }
 
   for (const auto &sample : frame.map_samples) {
-    const Point3f point_in_base_gravity =
-        TransformMapPointToBaseGravity(sample.point_in_map,
-                                       frame.base_pose_in_map);
+    const Point3f point_in_base_gravity = TransformMapPointToBaseGravity(
+        sample.point_in_map, frame.base_pose_in_map);
     if (config_.debug.publish_base_gravity_cloud) {
       output.base_gravity_cloud_points.push_back(
           MakeCellDebugPointWithoutSource(point_in_base_gravity));
@@ -243,10 +245,26 @@ Processor::buildOutput(const ProcessedFrame &frame,
     }
     if (HasObstaclePointPublishEvidence(layers, output, cell, config_) &&
         PassesObstaclePointPublishHeightGates(sample, point_in_base_gravity,
-                                             support_ref, config_)) {
-      output.obstacle_points.push_back(
-          MakeCellDebugPoint(point_in_base_gravity, cell));
+                                              support_ref, config_)) {
+      const auto point = MakeCellDebugPoint(point_in_base_gravity, cell);
+      output.obstacle_points.push_back(point);
+      if (IsRearPointInBaseGravity(point)) {
+        native_rear_obstacle_points.push_back(point);
+      }
     }
+  }
+
+  if (observability.rear_dropout && native_rear_obstacle_points.empty() &&
+      rear_obstacle_point_cache_.valid &&
+      !rear_obstacle_point_cache_.consumed_for_bridge) {
+    for (const auto &cached_point : rear_obstacle_point_cache_.points) {
+      if (cached_point.source_cell < 0 ||
+          cached_point.source_cell >= map_.size()) {
+        continue;
+      }
+      output.obstacle_points.push_back(cached_point);
+    }
+    rear_obstacle_point_cache_.consumed_for_bridge = true;
   }
 
   for (int cell = 0; cell < map_.size(); ++cell) {
@@ -261,6 +279,13 @@ Processor::buildOutput(const ProcessedFrame &frame,
                                          frame.base_pose_in_map),
           cell));
     }
+  }
+
+  if (!observability.rear_dropout) {
+    rear_obstacle_point_cache_.valid = !native_rear_obstacle_points.empty();
+    rear_obstacle_point_cache_.consumed_for_bridge = false;
+    rear_obstacle_point_cache_.stamp = frame.stamp;
+    rear_obstacle_point_cache_.points = std::move(native_rear_obstacle_points);
   }
 
   output.valid = true;
