@@ -10,7 +10,7 @@ namespace passable_area::core {
 namespace {
 
 Point3f TransformMapPointToBaseGravity(const Point3f &point_in_map,
-                                        const Pose3D &base_pose_in_map) {
+                                       const Pose3D &base_pose_in_map) {
   const float yaw = YawFromQuaternion(base_pose_in_map.orientation);
   const float cos_yaw = std::cos(yaw);
   const float sin_yaw = std::sin(yaw);
@@ -33,6 +33,11 @@ bool PassesObstaclePointPublishHeightGates(
              support_ref + config.obstacle_points_min_height &&
          sample.point_in_base.z <=
              config.obstacle_points_max_height_in_base_link;
+}
+
+MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
+  return MapGeometry{map.rows(), map.cols(), map.size(), map.resolution(),
+                     map.origin()};
 }
 
 } // namespace
@@ -59,7 +64,7 @@ FrameOutput Processor::update(const FrameInput &input) {
   const FrameObservability observability =
       observability_estimator_.estimate(preprocessed);
   const FrontendOutput frontend_output =
-      frontend_.run(preprocessed, observability, map_);
+      frontend_.run(preprocessed, observability, MakeMapGeometry(map_));
   const std::vector<int> dirty_cells =
       map_updater_.update(frontend_output, observability, map_);
   feature_updater_.update(dirty_cells, map_);
@@ -87,7 +92,10 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.traversal_cost = layers.traversal_cost;
   output.support_height = layers.support_height;
   output.overhead_height = layers.overhead_height;
+  output.protrusion_height = layers.protrusion_height;
   output.support_confidence = layers.support_confidence;
+  output.protrusion_evidence = layers.protrusion_evidence;
+  output.overhead_evidence = layers.overhead_evidence;
   output.obstacle_evidence = layers.obstacle_evidence;
   output.coverage_confidence = layers.coverage_confidence;
   output.slope = layers.slope;
@@ -149,8 +157,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
 
   for (const auto &sample : frame.map_samples) {
     int cell = -1;
-    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y,
-                          cell)) {
+    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
     if (layers.obstacle_evidence[cell] < config_.obstacle_points_min_evidence ||
@@ -172,8 +179,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
     }
 
     int cell = -1;
-    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y,
-                          cell)) {
+    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
 
@@ -212,7 +218,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
                           : 0.0f;
       output.unknown_points.push_back(MakeCellDebugPoint(
           TransformMapPointToBaseGravity(Point3f{xy.x(), xy.y(), z},
-                                          frame.base_pose_in_map),
+                                         frame.base_pose_in_map),
           cell));
     }
   }

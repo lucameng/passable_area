@@ -179,6 +179,7 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
       ResampleLayer(plan, output.traversal_cost, static_cast<int8_t>(-1));
   grid_map::GridMap map(
       {"support_height", "support_confidence", "overhead_height",
+       "protrusion_height", "protrusion_evidence", "overhead_evidence",
        "obstacle_evidence", "coverage_confidence", "slope", "step_up",
        "step_down", "roughness", "clearance", "support_continuity",
        "support_anchor_used", "sub_support_leak_count", "passability"});
@@ -193,6 +194,13 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
   AddLayer(map, "overhead_height", plan,
            ResampleLayer(plan, output.overhead_height,
                          std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "protrusion_height", plan,
+           ResampleLayer(plan, output.protrusion_height,
+                         std::numeric_limits<float>::quiet_NaN()));
+  AddLayer(map, "protrusion_evidence", plan,
+           ResampleLayer(plan, output.protrusion_evidence, 0.0f));
+  AddLayer(map, "overhead_evidence", plan,
+           ResampleLayer(plan, output.overhead_evidence, 0.0f));
   AddLayer(map, "obstacle_evidence", plan,
            ResampleLayer(plan, output.obstacle_evidence, 0.0f));
   AddLayer(map, "coverage_confidence", plan,

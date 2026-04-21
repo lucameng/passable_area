@@ -20,6 +20,8 @@
 
 这份文档里，“当前版本”指当前分支 `revert/base-line` 上、`16b43ed` 回退和 `8053800` 清理旧参数之后的状态。
 
+更新说明（2026-04-21）：本文末尾已追加 Phase 1 / Phase 2 完成状态。阅读时以后续完成状态为准；前文中关于“当前简单前端 / ObstacleCandidate / ambiguous_candidates”的描述保留为重构背景和历史基线说明，不再代表 Phase 2 后的最新 runtime 事实。
+
 ## 2. 项目当前总体状态
 当前 `passable_area` 已经完成了比较大的工程化重构：主链是一个 **ROS-free core + 薄 ROS 接口** 的单节点 ROS 2 包，核心处理链是：
 
@@ -1481,3 +1483,36 @@ V2 不会回到旧 anchor tree，但会保留“历史 support 跟踪”这个�
 - `obstacle_evidence` 仍是当前 solver 和 obstacle point publish 的主证据层；`protrusion_evidence` / `overhead_evidence` 目前只是 Phase 1 预留层，尚未参与运行时判定。
 - `obstacle_clear_partial_decay_scale` 参数仍存在，但当前二态观测路径不再消费它；是否删除应放到后续参数清理阶段统一处理。
 - `FrameOutput` / analyzer / grid_map 中的旧前端兼容字段尚未清理，仍按 Phase 5 处理。
+
+## 16. Phase 2 完成状态（2026-04-21）
+本次已按 `docs/implementation_plan.md` 的 Phase 2 完成 Frontend V2 双层摘要和 MapUpdater 三证据链的最小落地。
+
+已完成：
+
+- `PolarFrontend::run()` 接口从 `LocalTerrainMap` 收窄为 `MapGeometry`，前端不再能读取历史 map layers。
+- 新增 `profile_split_gap` 参数，已接入 `Config`、`config/passable_area.yaml` 和 `RosParamLoader`。
+- 前端按 cell 收集 z profile，按 `profile_split_gap` 分 band，并用 10% / 90% trimmed bounds 作为 band 高度摘要。
+- 前端输出从旧 `ObstacleCandidate` 改为：
+  - `SupportCandidate`
+  - `ProtrusionCandidate`
+  - `OverheadCandidate`
+- 前端保留旧 stage debug 字段置位，用于 analyzer 过渡期兼容。
+- `DropoutAwareMapUpdater` 分别维护：
+  - `support_height` / `support_confidence`
+  - `protrusion_height` / `protrusion_evidence`
+  - `overhead_height` / `overhead_confidence` / `overhead_evidence`
+- 过渡期 `obstacle_evidence` 改为 `max(protrusion_evidence, overhead_evidence)`，继续供当前 solver 与 obstacle point publish 使用。
+- `FrameOutput` 和 `grid_map` 暴露 `protrusion_height`、`protrusion_evidence`、`overhead_evidence`，便于后续 reasoner/analyzer 对齐。
+- 更新 `test/core/test_processor.cpp`，覆盖 ordinary support、protrusion、overhead、small layered step、sparse lower leak、dropout、三证据链独立更新，以及现有 wall / low ceiling / obstacle point publish 行为。
+
+验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 84 tests, 0 errors, 0 failures, 0 skipped`。
+
+注意事项：
+
+- 当前 `ObstacleReasoner` 仍未引入，solver 仍消费兼容 `obstacle_evidence`。
+- Low clearance 仍通过当前 `overhead_height -> clearance -> solver` 路径影响 passability；Phase 3b 才会正式补齐 low-clearance 到 `/terrain_obstacle_points` 的 reasoner bridge。
+- false / miss analyzer root cause 集合仍是旧合同，Phase 3a 需要转向 protrusion / overhead / reasoner / publish gate 解释链。

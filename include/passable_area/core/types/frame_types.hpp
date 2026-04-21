@@ -72,7 +72,8 @@ struct CellDebugPoint {
   int source_cell = -1;
 };
 
-inline CellDebugPoint MakeCellDebugPoint(const Point3f &point, int source_cell) {
+inline CellDebugPoint MakeCellDebugPoint(const Point3f &point,
+                                         int source_cell) {
   return CellDebugPoint{point, source_cell};
 }
 
@@ -96,7 +97,10 @@ struct FrameOutput {
   std::vector<int8_t> traversal_cost;
   std::vector<float> support_height;
   std::vector<float> overhead_height;
+  std::vector<float> protrusion_height;
   std::vector<float> support_confidence;
+  std::vector<float> protrusion_evidence;
+  std::vector<float> overhead_evidence;
   std::vector<float> obstacle_evidence;
   std::vector<float> coverage_confidence;
   std::vector<float> slope;

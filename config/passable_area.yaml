@@ -11,6 +11,7 @@ passable_area:
     max_step_down: 0.38
     max_support_roughness: 0.08
     min_clearance: 0.5
+    profile_split_gap: 0.10
 
     dropout_sector_gap_threshold: 8
     min_support_confidence: 0.2

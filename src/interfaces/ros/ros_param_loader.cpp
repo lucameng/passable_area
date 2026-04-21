@@ -53,6 +53,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "max_support_roughness", config.geometry.max_support_roughness);
   config.geometry.min_clearance =
       node.declare_parameter("min_clearance", config.geometry.min_clearance);
+  config.geometry.profile_split_gap = node.declare_parameter(
+      "profile_split_gap", config.geometry.profile_split_gap);
   config.obstacle_points_min_evidence = node.declare_parameter(
       "obstacle_points_min_evidence", config.obstacle_points_min_evidence);
   config.obstacle_points_min_height = node.declare_parameter(
@@ -136,13 +138,14 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
                              config.debug.publish_map_to_base_gravity_tf);
   if (const auto legacy_publish_tf =
           FindBoolParameterOverride(node, "publish_map_to_base_gravity_tf");
-      legacy_publish_tf &&
-      !FindBoolParameterOverride(node, "debug.publish_map_to_base_gravity_tf")) {
+      legacy_publish_tf && !FindBoolParameterOverride(
+                               node, "debug.publish_map_to_base_gravity_tf")) {
     config.debug.publish_map_to_base_gravity_tf = *legacy_publish_tf;
-    RCLCPP_WARN(node.get_logger(),
-                "Parameter 'publish_map_to_base_gravity_tf' is deprecated and "
-                "interpreted as 'debug.publish_map_to_base_gravity_tf'. "
-                "Update your config to use 'debug.publish_map_to_base_gravity_tf'.");
+    RCLCPP_WARN(
+        node.get_logger(),
+        "Parameter 'publish_map_to_base_gravity_tf' is deprecated and "
+        "interpreted as 'debug.publish_map_to_base_gravity_tf'. "
+        "Update your config to use 'debug.publish_map_to_base_gravity_tf'.");
   }
   topics.input_cloud_topic =
       node.declare_parameter("input_cloud_topic", topics.input_cloud_topic);
@@ -165,8 +168,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "output.unknown_mask_topic", topics.unknown_mask_topic);
   topics.observability_topic = node.declare_parameter(
       "output.observability_topic", topics.observability_topic);
-  topics.status_code_topic = node.declare_parameter(
-      "output.status_code_topic", topics.status_code_topic);
+  topics.status_code_topic = node.declare_parameter("output.status_code_topic",
+                                                    topics.status_code_topic);
   return params;
 }
 

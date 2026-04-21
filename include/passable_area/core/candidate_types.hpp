@@ -14,7 +14,14 @@ struct SupportCandidate {
   float confidence = 0.0f;
 };
 
-struct ObstacleCandidate {
+struct ProtrusionCandidate {
+  int cell = -1;
+  float z = 0.0f;
+  float evidence = 0.0f;
+  float gain_scale = 1.0f;
+};
+
+struct OverheadCandidate {
   int cell = -1;
   float z = 0.0f;
   float evidence = 0.0f;
@@ -23,7 +30,8 @@ struct ObstacleCandidate {
 
 struct FrontendOutput {
   std::vector<SupportCandidate> support_candidates;
-  std::vector<ObstacleCandidate> obstacle_candidates;
+  std::vector<ProtrusionCandidate> protrusion_candidates;
+  std::vector<OverheadCandidate> overhead_candidates;
   std::vector<float> support_anchor_used;
   std::vector<uint8_t> support_anchor_origin;
   std::vector<uint8_t> support_anchor_authority;

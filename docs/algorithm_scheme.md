@@ -510,18 +510,23 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 输出：
 
 - `support_candidates`
-- `obstacle_candidates`
+- `protrusion_candidates`
+- `overhead_candidates`
 - 一系列前端解释层
 
 #### 8.3.1 核心思路
 
-当前主线已经回退到接近 `f92759c` 的简单前端语义。
+当前主线已经从简单 `min_z / max_z` baseline 升级为 V2 轻量双层摘要。
 
-它的核心就是三件事：
+它的核心步骤是：
 
 1. 按 cell 聚合当前帧样本，统计 `min_z / max_z / count`
-2. 对非 dropout cell 输出 `support_candidates(cell, min_z, coverage)`
-3. 当 `vertical_span = max_z - min_z` 超过阈值时，直接形成 `obstacle_candidates`
+2. 按 `profile_split_gap` 对 cell 内 z profile 做 band split
+3. 用 band 内 10% / 90% trimmed bounds 形成稳定高度摘要
+4. 对非 dropout cell 输出 `support_candidates(cell, support_band.bottom, coverage)`
+5. 根据上层结构分别输出：
+   - `protrusion_candidates`
+   - `overhead_candidates`
 
 当前不再在前端主链里做：
 
@@ -533,19 +538,25 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 #### 8.3.2 支撑相关的几个关键概念
 
-当前真正参与主链判定的量已经收敛成两个：
+当前真正参与主链判定的量是：
 
 - `raw_min_z`
-  - 当前 cell 本帧样本的最低 z
+  - 当前 cell 本帧样本的最低 z，仅作为 debug 原始统计
 - `vertical_span`
-  - 当前 cell 本帧样本的竖直跨度 `max_z - min_z`
+  - 当前 cell 本帧样本的竖直跨度 `max_z - min_z`，用于单 tall band / protrusion 触发
+- `support_band`
+  - 当前 cell 的支撑层高度摘要
+- `upper_band`
+  - support 之上的上层结构摘要
 
 它们的用法是：
 
-- `raw_min_z`
-  - 直接作为 `support_candidates` 的高度来源
+- `support_band.bottom`
+  - 作为 `support_candidates` 的高度来源
 - `vertical_span`
-  - 直接作为 obstacle trigger 的依据
+  - 参与 protrusion trigger
+- `upper_band.bottom`
+  - 参与 overhead / low-clearance trigger
 
 当前 `FrameOutput` 里仍保留了很多历史解释字段，例如：
 
@@ -557,7 +568,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 - `aligned_neighbor_support_count`
 - `explanation_decision`
 
-这些字段现在主要是**兼容旧调试接口**，当前简单前端默认把它们保持为无效值或 0，不再作为障碍形成逻辑的一部分。
+这些字段现在主要是**兼容旧调试接口**，当前 V2 前端默认把它们保持为无效值或 0，不再作为障碍形成逻辑的一部分。
 
 #### 8.3.3 锚点的来源与拒绝逻辑
 
@@ -571,19 +582,21 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 当前支撑候选的来源就是：
 
-- 当前 cell 的本帧 `raw_min_z`
+- 当前 cell 的本帧 `support_band.bottom`
+- 如果最低 band 只有 1 个样本、且下一个 band 有至少 3 个样本，则把最低 band 视作 sparse lower leak，并用下一 band 作为 support
 
 #### 8.3.4 suspicious obstacle 只是第一步
 
-当前实现会先用单格内部竖向跨度触发可疑：
+当前实现会用 band 摘要触发可疑：
 
 - `vertical_span > max_step_up * 0.75`
+- 或 support 上方存在低于 `min_clearance` 的 upper band
 
 这时只会把 cell 标成：
 
 - `obstacle_suspicious`
 
-在当前简单前端里，`obstacle_suspicious` 与 `obstacle_candidate_cell` 已经同步形成，不再经过额外门控。
+在当前 V2 前端里，`obstacle_suspicious` 与 `obstacle_candidate_cell` 仍作为兼容 stage 字段同步形成，不再经过旧邻域门控。
 
 #### 8.3.5 当前障碍形成的真实门控
 
@@ -591,12 +604,15 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 主线判断就是：
 
-- 如果 `vertical_span > max_step_up * 0.75`
+- 如果 support 上方高度差超过 `max_step_up * 0.75`
+  - 输出 `protrusion_candidates`
+- 如果 support 上方存在 `upper_band.bottom - support_ref < min_clearance`
+  - 输出 `overhead_candidates`
+- 任一候选形成时：
   - 设置 `obstacle_local_triggered = 1`
   - 设置 `obstacle_suspicious = 1`
   - 设置 `obstacle_upper_patch_confirmed = 1` 作为兼容态
   - 设置 `obstacle_candidate_cell = 1`
-  - 直接输出 `obstacle_candidates`
 
 因此当前已经没有“固定 `3x3` upper-support neighborhood gate”。
 
@@ -621,7 +637,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 职责：
 
 - 把前端候选写进地图层
-- 维护 support / obstacle 证据的累积与衰减
+- 维护 support / protrusion / overhead 证据的累积与衰减
 - 根据观测状态决定负更新强度
 
 核心思想：
@@ -639,9 +655,9 @@ support 更新：
 
 obstacle 更新：
 
-- 写 `overhead_height`
-- 增加 `overhead_confidence`
-- 增加 `obstacle_evidence`
+- `protrusion_candidates` 写 `protrusion_height` / `protrusion_evidence`
+- `overhead_candidates` 写 `overhead_height` / `overhead_confidence` / `overhead_evidence`
+- 过渡期 `obstacle_evidence = max(protrusion_evidence, overhead_evidence)`，继续作为 solver 和 obstacle point publish 的兼容证据层
 
 当前实现还会显式清理两类旧障碍：
 
@@ -906,6 +922,7 @@ obstacle 更新：
 - `max_step_down`
 - `max_support_roughness`
 - `min_clearance`
+- `profile_split_gap`
 
 ### 12.3 观测参数
 
@@ -1008,7 +1025,7 @@ obstacle 更新：
 区别在于：
 
 - 这些场景不再通过复杂 `PolarFrontend` 规则栈处理
-- 当前先回到简单前端基线
+- 当前通过轻量双层摘要表达 support / protrusion / overhead
 - 稳定性主要靠 observability、地图更新、证据累计和输出门槛维持
 
 ### 13.3 工程化取舍
@@ -1019,7 +1036,7 @@ obstacle 更新：
 - 特征只在 dirty cells 及邻域增量更新
 - 坡度、粗糙度等用 3x3 邻域统计近似
 - 不做复杂地面拟合和全局优化
-- 把复杂前端解释整体拿掉，保持 `PolarFrontend` 简单且可维护
+- 把复杂前端解释整体拿掉，保持 `PolarFrontend` 轻量且可维护
 
 ### 13.4 当前主链没有做的事情
 
@@ -1033,7 +1050,7 @@ obstacle 更新：
 ### 13.5 后续维护时最需要小心的地方
 
 - `support_height`、`support_ref` 和一批历史兼容字段不要混淆
-- 当前前端里 `vertical_span` 已经直接形成 obstacle candidate
+- 当前前端里 `vertical_span` 只参与 protrusion trigger，低净空由 `overhead_candidates` 表达
 - 内部地图是 `map`，对外发布结果是 `base_gravity`
 - 不要再把复杂场景特化重新堆回 `PolarFrontend`
 

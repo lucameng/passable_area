@@ -19,6 +19,7 @@ struct GeometryConfig {
   float max_step_down = 0.25f;
   float max_support_roughness = 0.08f;
   float min_clearance = 0.35f;
+  float profile_split_gap = 0.10f;
 };
 
 struct ObservabilityConfig {

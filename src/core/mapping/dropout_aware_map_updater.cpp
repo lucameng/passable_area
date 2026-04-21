@@ -26,7 +26,8 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
   auto &layers = map.layers();
   std::unordered_set<int> dirty_set;
   dirty_set.reserve(frontend_output.support_candidates.size() +
-                    frontend_output.obstacle_candidates.size());
+                    frontend_output.protrusion_candidates.size() +
+                    frontend_output.overhead_candidates.size());
   std::vector<uint8_t> touched_support(map.size(), 0);
   std::vector<uint8_t> touched_obstacle(map.size(), 0);
 
@@ -64,17 +65,40 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
     dirty_set.insert(candidate.cell);
   }
 
-  for (const auto &candidate : frontend_output.obstacle_candidates) {
+  for (const auto &candidate : frontend_output.protrusion_candidates) {
+    const auto sector = sector_state_for_cell(candidate.cell);
+    const float evidence_gain = config_.persistence.obstacle_evidence_gain *
+                                std::max(1.0f, candidate.gain_scale);
+    layers.protrusion_height[candidate.cell] = candidate.z;
+    layers.protrusion_evidence[candidate.cell] =
+        std::clamp(layers.protrusion_evidence[candidate.cell] +
+                       evidence_gain * candidate.evidence,
+                   0.0f, 1.0f);
+    layers.obstacle_evidence[candidate.cell] =
+        std::max(layers.protrusion_evidence[candidate.cell],
+                 layers.overhead_evidence[candidate.cell]);
+    layers.coverage_confidence[candidate.cell] = std::max(
+        layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
+    layers.last_sector_state[candidate.cell] =
+        static_cast<uint8_t>(sector.state);
+    touched_obstacle[candidate.cell] = 1U;
+    dirty_set.insert(candidate.cell);
+  }
+
+  for (const auto &candidate : frontend_output.overhead_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
     const float evidence_gain = config_.persistence.obstacle_evidence_gain *
                                 std::max(1.0f, candidate.gain_scale);
     layers.overhead_height[candidate.cell] = candidate.z;
     layers.overhead_confidence[candidate.cell] = std::clamp(
         layers.overhead_confidence[candidate.cell] + evidence_gain, 0.0f, 1.0f);
-    layers.obstacle_evidence[candidate.cell] =
-        std::clamp(layers.obstacle_evidence[candidate.cell] +
+    layers.overhead_evidence[candidate.cell] =
+        std::clamp(layers.overhead_evidence[candidate.cell] +
                        evidence_gain * candidate.evidence,
                    0.0f, 1.0f);
+    layers.obstacle_evidence[candidate.cell] =
+        std::max(layers.protrusion_evidence[candidate.cell],
+                 layers.overhead_evidence[candidate.cell]);
     layers.coverage_confidence[candidate.cell] = std::max(
         layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
     layers.last_sector_state[candidate.cell] =
@@ -108,8 +132,6 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
       } else if (sector.state == ObservabilityState::kMissingByDropout) {
         obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.03f;
       }
-      layers.obstacle_evidence[cell] =
-          std::max(0.0f, layers.obstacle_evidence[cell] - obstacle_decay);
       if (obstacle_decay > 0.0f) {
         layers.overhead_confidence[cell] =
             std::max(0.0f, layers.overhead_confidence[cell] - obstacle_decay);
@@ -118,6 +140,8 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
         layers.overhead_evidence[cell] =
             std::max(0.0f, layers.overhead_evidence[cell] - obstacle_decay);
       }
+      layers.obstacle_evidence[cell] = std::max(
+          layers.protrusion_evidence[cell], layers.overhead_evidence[cell]);
     }
 
     if (touched_support[cell]) {
