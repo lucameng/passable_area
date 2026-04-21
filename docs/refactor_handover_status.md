@@ -2099,3 +2099,79 @@ timing：
 - 允许继续 Phase 5 后续清理，但建议分批做：
   - 先清理明显不再使用的 solver 旧障碍解释路径和文档表述。
   - 再逐步清理 `FrameOutput` / analyzer / grid_map 中旧前端兼容字段，避免一次性打断诊断工具。
+
+## 26. DenseProtrusionSource 删除尝试与保留结论（2026-04-21 17:45 +0800）
+
+本轮在正式继续 Phase 5 清理前，专门复核 `Processor::HasDenseNearThresholdProtrusionSource()` 是否可以删除。审查问题是：该路径中的 `0.1f` 不是物理阈值，而是把 `obstacle_points_min_evidence = 0.4` 在 dense source cell 上条件性放宽到默认约 `0.375`。
+
+本轮实际尝试：
+
+- 从 `src/core/processor.cpp` 删除 `HasDenseNearThresholdProtrusionSource()`，只允许：
+  - `protrusion_evidence >= obstacle_points_min_evidence`
+  - 或 low-clearance bridge
+  驱动 `/terrain_obstacle_points`。
+- 同步删除 analyzer / offline replay 中的 `DenseProtrusionSource` publish path 推断分支。
+- 将对应 processor 测试临时改成 dense near-threshold source 也不发布。
+- 同步删除 `docs/algorithm_scheme.md` 当前算法描述里的 DenseProtrusionSource bullet。
+
+删除态验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 97 tests, 0 errors, 0 failures, 0 skipped`。
+- false obstacle frozen bags 仍全 0。
+- miss obstacle frozen ROIs 出现退化：
+  - Setup A `left_board`：`1 / 4 miss`
+  - Setup A `right_board`：`2 / 4 miss`
+  - Setup B `left_side_board`：`2 / 3 miss`
+  - Setup B `right_side_board`：从 `0 / 3 miss` 退化到 `1 / 3 miss`
+- Setup B right 退化帧的代表 source cell 仍是 dense source，`raw_sample_count = 11~12`，`protrusion_evidence ~= 0.38 < 0.4`，与此前 DenseProtrusionSource 修复的目标一致。
+
+因此本轮已恢复 DenseProtrusionSource 路径，并在 `docs/algorithm_scheme.md` 中明确记录 `0.1f` 的依据：
+
+- 它不是物理高度阈值，也不是新障碍真值。
+- 它是单帧证据量化容差：`obstacle_evidence_gain * 0.1`。
+- 默认 `obstacle_evidence_gain = 0.25` 时，容差为 `0.025`，即默认发布阈值从 `0.4` 临时放宽到 `0.375`。
+- 仅在非 `LowClearance`、已有本帧 frontend obstacle candidate、且 `raw_sample_count >= min_points_per_sector - 1` 的 dense current source cell 上生效。
+- 若后续 evidence 累积/归一化架构能消除该短窗口量化误差，应优先删除该路径，而不是继续扩大容差。
+
+恢复态验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 97 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags：
+
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+
+miss obstacle frozen ROIs：
+
+- Setup A `left_board`：`1 / 4 miss`，root cause `EvidenceTooLow`
+- Setup A `right_board`：`2 / 4 miss`，root cause `EvidenceTooLow` 1 帧，`NoObstacleSourceSamplesInRoi` 1 帧
+- Setup B `left_side_board`：`2 / 3 miss`，root cause `EvidenceTooLow` 2 帧
+- Setup B `right_side_board`：`0 / 3 miss`
+
+timing：
+
+- `offline_replay --benchmark-timing`
+  - `rosbag2_open_short_upstairs`：`avg = 6.765 ms`，`max = 10.446 ms`，`p95 = 9.841 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 7.373 ms`，`max = 11.066 ms`，`p95 = 9.726 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 6.647 ms`，`max = 9.273 ms`，`p95 = 7.645 ms`
+  - `rosbag2_b1_upstairs`：`avg = 6.383 ms`，`max = 9.305 ms`，`p95 = 8.691 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 12.71 ms`，`p95 = 15.09 ms`，`p99 = 15.31 ms`
+  - `160k points`：`avg = 21.81 ms`，`p95 = 25.38 ms`，`p99 = 25.52 ms`
+
+当前结论：
+
+- DenseProtrusionSource 当前仍需要保留，否则 Setup B right frozen ROI 退化。
+- 允许继续 Phase 5 后续清理；但不要在同一轮删除 DenseProtrusionSource，除非同时引入新的 evidence 架构替代短窗口量化容差。

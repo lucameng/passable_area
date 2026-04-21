@@ -677,6 +677,12 @@ obstacle 更新：
   - `protrusion_evidence` 达阈值的 protrusion 发布路径；连续支撑上的纯 `LowClearance` 投影不会按普通 protrusion 阈值直接发布
   - 当前 source cell 有足够密集的真实样本，且 `protrusion_evidence` 只差一个很小的 evidence quantum 时，允许 `DenseProtrusionSource` 近阈值发布，用于对齐侧板 ROI 内 candidate 累积和当前 source samples
   - reasoner 低净空相关阻挡且 `overhead_evidence` 达阈值的 low-clearance bridge；该 bridge 还要求 `clearance > max_step_up`，避免把台阶量级的低净空地形投影发布到外部障碍点云
+- `DenseProtrusionSource` 不是新的障碍真值，也不改变 `terrain_state` / `terrain_cost`：
+  - 只在非 `LowClearance` source cell 上生效
+  - 必须已有本帧 frontend obstacle candidate
+  - `raw_sample_count >= min_points_per_sector - 1`，要求当前帧 ROI/source 样本足够密集
+  - 近阈值容差是 `obstacle_evidence_gain * 0.1`；这不是物理高度阈值，而是单帧证据量化容差，默认 `0.25 * 0.1 = 0.025`，即把默认发布阈值 `0.4` 临时放宽到 `0.375`
+  - 该容差用于覆盖短 ROI 窗口中 dense source cell 落在阈值下方一个很小证据 quantum 的情况；如果后续 evidence 累积/归一化架构能消除此量化误差，应优先删除该路径
 - obstacle point 的样本高度门控同时要求：
   - 相对 support reference 高于 `obstacle_points_min_height`
   - 在 `base_link` 中不高于 `obstacle_points_max_height_in_base_link`
