@@ -100,7 +100,6 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   const int active_cell_count = CountActiveCells(stats_by_cell);
   output.support_candidates.reserve(static_cast<size_t>(active_cell_count));
   output.obstacle_candidates.reserve(static_cast<size_t>(active_cell_count));
-  output.ambiguous_candidates.reserve(static_cast<size_t>(active_cell_count));
 
   const float suspicious_vertical_span = config_.geometry.max_step_up * 0.75f;
   const float yaw = YawFromQuaternion(frame.base_pose_in_map.orientation);
@@ -146,9 +145,6 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
       output.obstacle_candidates.push_back(ObstacleCandidate{
           cell, stats.max_z, std::clamp(vertical_span, 0.0f, 1.0f), 1.0f});
-    } else if (sector_state == ObservabilityState::kPartiallyObserved) {
-      output.ambiguous_candidates.push_back(
-          AmbiguousCandidate{cell, stats.min_z});
     }
   }
 

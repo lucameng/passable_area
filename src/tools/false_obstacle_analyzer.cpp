@@ -600,10 +600,7 @@ float FalseObstacleAnalyzer::computeHotspotSeverity(
   float observability_penalty = 0.0f;
   if (hotspot.has_observability) {
     if (hotspot.observability_state ==
-        passable_area::core::ObservabilityState::kPartiallyObserved) {
-      observability_penalty = 0.5f;
-    } else if (hotspot.observability_state ==
-               passable_area::core::ObservabilityState::kMissingByDropout) {
+        passable_area::core::ObservabilityState::kMissingByDropout) {
       observability_penalty = 1.0f;
     }
   }
@@ -681,8 +678,6 @@ const char *ToString(passable_area::core::ObservabilityState state) {
   switch (state) {
   case passable_area::core::ObservabilityState::kObserved:
     return "Observed";
-  case passable_area::core::ObservabilityState::kPartiallyObserved:
-    return "PartiallyObserved";
   case passable_area::core::ObservabilityState::kMissingByDropout:
     return "MissingByDropout";
   }

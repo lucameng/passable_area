@@ -55,7 +55,7 @@ struct ProcessedFrame {
 };
 
 struct SectorObservability {
-  ObservabilityState state = ObservabilityState::kPartiallyObserved;
+  ObservabilityState state = ObservabilityState::kObserved;
   float coverage_confidence = 0.0f;
 };
 

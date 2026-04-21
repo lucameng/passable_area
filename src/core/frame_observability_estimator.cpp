@@ -71,7 +71,7 @@ FrameObservabilityEstimator::estimate(const ProcessedFrame &frame) const {
       front_points += counts[sector];
     }
     if (counts[sector] == 0) {
-      state.state = ObservabilityState::kPartiallyObserved;
+      state.state = ObservabilityState::kObserved;
       result.frame_partial = true;
       if (rear) {
         ++current_rear_gap;
@@ -87,7 +87,7 @@ FrameObservabilityEstimator::estimate(const ProcessedFrame &frame) const {
     current_rear_gap = 0;
     current_gap_indices.clear();
     if (coverage < config_.observability.partial_sector_ratio) {
-      state.state = ObservabilityState::kPartiallyObserved;
+      state.state = ObservabilityState::kObserved;
       result.frame_partial = true;
     } else {
       state.state = ObservabilityState::kObserved;

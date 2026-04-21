@@ -515,8 +515,7 @@ TEST(ProcessorTest, NoBlindSectorStatesAreProduced) {
   const auto normal_output = processor.update(MakeFlatFrame(1));
   ASSERT_TRUE(normal_output.valid);
   for (const auto &sector : normal_output.observability.sectors) {
-    EXPECT_TRUE(sector.state == ObservabilityState::kObserved ||
-                sector.state == ObservabilityState::kPartiallyObserved);
+    EXPECT_EQ(sector.state, ObservabilityState::kObserved);
   }
 
   const auto dropout_output = processor.update(MakeFrontOnlyFrame(100000001));
@@ -524,7 +523,6 @@ TEST(ProcessorTest, NoBlindSectorStatesAreProduced) {
   EXPECT_TRUE(dropout_output.observability.rear_dropout);
   for (const auto &sector : dropout_output.observability.sectors) {
     EXPECT_TRUE(sector.state == ObservabilityState::kObserved ||
-                sector.state == ObservabilityState::kPartiallyObserved ||
                 sector.state == ObservabilityState::kMissingByDropout);
   }
 }
@@ -548,14 +546,16 @@ TEST(ProcessorTest, SparseCoverageCreatesUnknownButNotDropout) {
   const auto output = processor.update(MakeSparseFrame());
   ASSERT_TRUE(output.valid);
   EXPECT_FALSE(output.observability.rear_dropout);
+  EXPECT_TRUE(output.observability.frame_partial);
 
-  int partial_count = 0;
+  int observed_count = 0;
   for (const auto &sector : output.observability.sectors) {
-    if (sector.state == ObservabilityState::kPartiallyObserved) {
-      ++partial_count;
+    if (sector.state == ObservabilityState::kObserved) {
+      ++observed_count;
     }
+    EXPECT_NE(sector.state, ObservabilityState::kMissingByDropout);
   }
-  EXPECT_GT(partial_count, 0);
+  EXPECT_GT(observed_count, 0);
 }
 
 TEST(ProcessorTest, PolarFrontendCellSectorIsStableUnderSampleOrderChanges) {
@@ -714,36 +714,6 @@ TEST(ProcessorTest,
 }
 
 TEST(ProcessorTest,
-     PolarFrontendEmitsAmbiguousCandidateForPartiallyObservedNonTriggerCell) {
-  auto config = MakeConfig();
-  PolarFrontend frontend(config);
-  LocalTerrainMap map(config);
-  map.recenter(Eigen::Vector2f::Zero());
-
-  const auto observability =
-      MakeUniformObservability(config, ObservabilityState::kPartiallyObserved,
-                               0.35f);
-  const auto frame = MakeProcessedFrame({
-      {{0.25f, 0.25f, 0.02f}, {0.25f, 0.25f, 0.02f}},
-      {{0.25f, 0.25f, 0.10f}, {0.25f, 0.25f, 0.10f}},
-  });
-
-  const auto output = frontend.run(frame, observability, map);
-
-  int cell = -1;
-  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
-  ASSERT_EQ(output.support_candidates.size(), 1U);
-  EXPECT_EQ(output.support_candidates.front().cell, cell);
-  EXPECT_FLOAT_EQ(output.support_candidates.front().confidence, 0.35f);
-  EXPECT_TRUE(output.obstacle_candidates.empty());
-  ASSERT_EQ(output.ambiguous_candidates.size(), 1U);
-  EXPECT_EQ(output.ambiguous_candidates.front().cell, cell);
-  EXPECT_FLOAT_EQ(output.ambiguous_candidates.front().z, 0.02f);
-  EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 0U);
-  EXPECT_EQ(output.obstacle_candidate_cell[static_cast<size_t>(cell)], 0U);
-}
-
-TEST(ProcessorTest,
      PolarFrontendSuppressesSupportCandidateInMissingByDropoutSector) {
   auto config = MakeConfig();
   config.observability.sector_count = 4;
@@ -859,6 +829,26 @@ TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
   EXPECT_FLOAT_EQ(map.layers().support_confidence[shifted_index], 0.75f);
   EXPECT_EQ(map.layers().support_state[shifted_index],
             static_cast<uint8_t>(SupportState::kPersistent));
+}
+
+TEST(ProcessorTest, LocalTerrainMapInitializesReservedObstacleV2Layers) {
+  LocalTerrainMap map(MakeConfig());
+  ASSERT_GT(map.size(), 0);
+  ASSERT_EQ(map.layers().protrusion_height.size(),
+            static_cast<size_t>(map.size()));
+  ASSERT_EQ(map.layers().protrusion_evidence.size(),
+            static_cast<size_t>(map.size()));
+  ASSERT_EQ(map.layers().overhead_evidence.size(),
+            static_cast<size_t>(map.size()));
+
+  for (int cell = 0; cell < map.size(); ++cell) {
+    EXPECT_TRUE(std::isnan(
+        map.layers().protrusion_height[static_cast<size_t>(cell)]));
+    EXPECT_FLOAT_EQ(
+        map.layers().protrusion_evidence[static_cast<size_t>(cell)], 0.0f);
+    EXPECT_FLOAT_EQ(map.layers().overhead_evidence[static_cast<size_t>(cell)],
+                    0.0f);
+  }
 }
 
 TEST(ProcessorTest,

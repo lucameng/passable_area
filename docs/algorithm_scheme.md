@@ -38,7 +38,7 @@
 - `support_confidence` 跨帧累积和衰减
 - `obstacle_evidence` 跨帧累积和衰减
 - 地图随机器人平移，但不会每帧完全清空
-- `dropout` 和 `partial observability` 会直接影响衰减与负更新策略
+- `dropout` 会直接影响衰减与负更新策略；普通覆盖不足通过 `frame_partial` 记录，但 sector state 并入 `Observed`
 
 因此更准确的描述是：
 
@@ -188,7 +188,7 @@ TF：
 `sector_states` 编码：
 
 - `0` = `Observed`
-- `1` = `PartiallyObserved`
+- `1` = 保留编码空位，当前实现不再产生
 - `2` = `MissingByDropout`
 
 ### 5.6 输入假设
@@ -487,12 +487,11 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 当前状态分类：
 
 - `Observed`
-- `PartiallyObserved`
 - `MissingByDropout`
 
 实现特点：
 
-- 点数为 0 的扇区先视作 `PartiallyObserved`
+- 点数为 0 或覆盖不足的扇区会设置 `frame_partial`，但扇区状态仍并入 `Observed`
 - 如果后方整体点明显比前方少，且后向连续空扇区超过阈值，就升级成 `MissingByDropout`
 
 这一步的结果直接影响后续地图层的衰减和负更新强度。
@@ -512,7 +511,6 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 - `support_candidates`
 - `obstacle_candidates`
-- `ambiguous_candidates`
 - 一系列前端解释层
 
 #### 8.3.1 核心思路
@@ -610,9 +608,9 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 #### 8.3.7 `ambiguous_candidates`
 
-当前前端仍会输出 `ambiguous_candidates`，但当前 `DropoutAwareMapUpdater` 并没有使用它。
+当前前端已经删除 `ambiguous_candidates` 输出。
 
-因此在当前版本里它不是主链核心输入，更像预留结构和调试痕迹。
+历史版本中它用于标记 partial observed 且未触发 obstacle 的 cell，但该分支没有进入地图更新闭环。Phase 1 后，缺测下的保守性只由 `Observed / MissingByDropout` 二态观测、证据衰减和 persistence 机制承担。
 
 ### 8.4 `DropoutAwareMapUpdater`
 
@@ -629,7 +627,6 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 核心思想：
 
 - `Observed`：可以较正常地衰减和更新
-- `PartiallyObserved`：只做保守衰减
 - `MissingByDropout`：极弱衰减，避免因为掉点把地图刷空
 
 support 更新：
@@ -1031,7 +1028,7 @@ obstacle 更新：
 - BFS 可达域扩张
 - 全局 reachable set 求解
 - 多层地图持久建模
-- 把 `ambiguous_candidates` 纳入主链更新
+- `ambiguous_candidates`
 
 ### 13.5 后续维护时最需要小心的地方
 
@@ -1203,6 +1200,6 @@ source install/setup.bash
 
 1. 这次改动改变的是当前帧解释，还是长期地图记忆？
 2. 这次改动会不会把楼梯、分层地面或墙面重新误解释成障碍？
-3. 这次改动在 dropout、partial observability、短时失观测时是否仍然稳定？
+3. 这次改动在 dropout、覆盖不足、短时失观测时是否仍然稳定？
 
 只要这三件事始终盯住，基本就不会偏离当前实现的核心设计方向。

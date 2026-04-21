@@ -1453,3 +1453,31 @@ V2 不会回到旧 anchor tree，但会保留“历史 support 跟踪”这个�
 12. 工作区根 `AGENTS.md`
     - 只作为工程结构和开发流程参考
     - 其中关于当前 obstacle frontend 的描述已经落后，不能当主真值
+
+## 15. Phase 1 完成状态（2026-04-21）
+本次已按 `docs/implementation_plan.md` 的 Phase 1 完成类型、枚举、层合同和验收 ROI 冻结，范围保持在 V2 预备重构，不引入 Frontend V2 双层摘要或 reasoner 主链。
+
+已完成：
+
+- 删除 `ObservabilityState::kPartiallyObserved`，保留 `kObserved = 0` 与 `kMissingByDropout = 2` 的编码。
+- `SectorObservability` 默认状态改为 `kObserved`。
+- `FrameObservabilityEstimator` 不再产生 partial sector；覆盖不足仍通过 `frame_partial` 表达，后方连续缺测仍升级为 `kMissingByDropout`。
+- `DropoutAwareMapUpdater` 删除 partial 衰减分支，只保留 observed 与 missing-by-dropout 两级观测衰减。
+- 删除 `AmbiguousCandidate` 和 `FrontendOutput::ambiguous_candidates`，`PolarFrontend` 不再生成 ambiguous 输出。
+- 新增 `include/passable_area/core/types/obstacle_types.hpp`，冻结 `BlockReason` 与 `ObstaclePointPublishStatus`。
+- `TerrainLayers` 新增预留层：`protrusion_height`、`protrusion_evidence`、`overhead_evidence`，初始化/平移合同已接入 `LocalTerrainMap`。
+- 新增 `config/acceptance_rois.yaml`，冻结 false obstacle bags 来源、排除项、检测 box，以及 missed obstacle Setup A/B ROI。
+- 更新 `test/core/test_processor.cpp`，删除 ambiguous 旧 case，并新增 V2 预留 obstacle layers 初始化测试。
+- 同步更新 `tools/offline_replay.cpp` 与 `src/tools/false_obstacle_analyzer.cpp` 中的 partial observability 引用。
+
+验证结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 80 tests, 0 errors, 0 failures, 0 skipped`。
+
+注意事项：
+
+- `obstacle_evidence` 仍是当前 solver 和 obstacle point publish 的主证据层；`protrusion_evidence` / `overhead_evidence` 目前只是 Phase 1 预留层，尚未参与运行时判定。
+- `obstacle_clear_partial_decay_scale` 参数仍存在，但当前二态观测路径不再消费它；是否删除应放到后续参数清理阶段统一处理。
+- `FrameOutput` / analyzer / grid_map 中的旧前端兼容字段尚未清理，仍按 Phase 5 处理。

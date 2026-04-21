@@ -11,6 +11,9 @@ namespace {
 void ClearObstacleLayer(TerrainLayers &layers, int cell) {
   layers.overhead_height[cell] = std::numeric_limits<float>::quiet_NaN();
   layers.overhead_confidence[cell] = 0.0f;
+  layers.protrusion_height[cell] = std::numeric_limits<float>::quiet_NaN();
+  layers.protrusion_evidence[cell] = 0.0f;
+  layers.overhead_evidence[cell] = 0.0f;
 }
 
 } // namespace
@@ -89,8 +92,6 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
       float support_decay = 0.0f;
       if (sector.state == ObservabilityState::kObserved) {
         support_decay = config_.persistence.support_confidence_decay * 0.8f;
-      } else if (sector.state == ObservabilityState::kPartiallyObserved) {
-        support_decay = config_.persistence.support_confidence_decay * 0.2f;
       } else if (sector.state == ObservabilityState::kMissingByDropout) {
         support_decay = config_.persistence.support_confidence_decay * 0.05f;
       }
@@ -102,14 +103,8 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
       const bool support_reobserved = touched_support[cell] != 0U;
       if (support_reobserved && sector.state == ObservabilityState::kObserved) {
         obstacle_decay = config_.persistence.obstacle_clear_observed_decay;
-      } else if (support_reobserved &&
-                 sector.state == ObservabilityState::kPartiallyObserved) {
-        obstacle_decay = config_.persistence.obstacle_clear_observed_decay *
-                         config_.persistence.obstacle_clear_partial_decay_scale;
       } else if (sector.state == ObservabilityState::kObserved) {
         obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.4f;
-      } else if (sector.state == ObservabilityState::kPartiallyObserved) {
-        obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.1f;
       } else if (sector.state == ObservabilityState::kMissingByDropout) {
         obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.03f;
       }
@@ -118,6 +113,10 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
       if (obstacle_decay > 0.0f) {
         layers.overhead_confidence[cell] =
             std::max(0.0f, layers.overhead_confidence[cell] - obstacle_decay);
+        layers.protrusion_evidence[cell] =
+            std::max(0.0f, layers.protrusion_evidence[cell] - obstacle_decay);
+        layers.overhead_evidence[cell] =
+            std::max(0.0f, layers.overhead_evidence[cell] - obstacle_decay);
       }
     }
 

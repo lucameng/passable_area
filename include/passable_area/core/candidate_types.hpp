@@ -21,15 +21,9 @@ struct ObstacleCandidate {
   float gain_scale = 1.0f;
 };
 
-struct AmbiguousCandidate {
-  int cell = -1;
-  float z = 0.0f;
-};
-
 struct FrontendOutput {
   std::vector<SupportCandidate> support_candidates;
   std::vector<ObstacleCandidate> obstacle_candidates;
-  std::vector<AmbiguousCandidate> ambiguous_candidates;
   std::vector<float> support_anchor_used;
   std::vector<uint8_t> support_anchor_origin;
   std::vector<uint8_t> support_anchor_authority;

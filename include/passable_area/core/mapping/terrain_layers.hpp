@@ -12,6 +12,9 @@ struct TerrainLayers {
   std::vector<float> support_confidence;
   std::vector<float> overhead_height;
   std::vector<float> overhead_confidence;
+  std::vector<float> protrusion_height;
+  std::vector<float> protrusion_evidence;
+  std::vector<float> overhead_evidence;
   std::vector<float> obstacle_evidence;
   std::vector<float> coverage_confidence;
   std::vector<float> slope;

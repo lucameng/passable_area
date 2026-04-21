@@ -293,9 +293,6 @@ ScenarioResult RunScenario(const ScenarioSpec &spec) {
     if (sector.state == ObservabilityState::kMissingByDropout) {
       ++result.missing_sector_count;
     }
-    if (sector.state == ObservabilityState::kPartiallyObserved) {
-      ++result.partial_sector_count;
-    }
   }
   for (const auto state : output.passability) {
     if (state == static_cast<int8_t>(PassabilityState::kPassable)) {
@@ -438,8 +435,6 @@ std::string ObservabilityColor(passable_area::core::ObservabilityState state) {
   switch (state) {
   case passable_area::core::ObservabilityState::kObserved:
     return "\033[32m";
-  case passable_area::core::ObservabilityState::kPartiallyObserved:
-    return "\033[33m";
   case passable_area::core::ObservabilityState::kMissingByDropout:
     return "\033[31m";
   }

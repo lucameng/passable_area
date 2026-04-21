@@ -53,6 +53,10 @@ void LocalTerrainMap::clearLayers() {
   Fill(layers_.overhead_height, std::numeric_limits<float>::quiet_NaN(),
        cell_count);
   Fill(layers_.overhead_confidence, 0.0f, cell_count);
+  Fill(layers_.protrusion_height, std::numeric_limits<float>::quiet_NaN(),
+       cell_count);
+  Fill(layers_.protrusion_evidence, 0.0f, cell_count);
+  Fill(layers_.overhead_evidence, 0.0f, cell_count);
   Fill(layers_.obstacle_evidence, 0.0f, cell_count);
   Fill(layers_.coverage_confidence, 0.0f, cell_count);
   Fill(layers_.slope, 0.0f, cell_count);
@@ -67,8 +71,7 @@ void LocalTerrainMap::clearLayers() {
        static_cast<int8_t>(PassabilityState::kUnknown), cell_count);
   Fill(layers_.traversal_cost, static_cast<int8_t>(-1), cell_count);
   Fill(layers_.last_sector_state,
-       static_cast<uint8_t>(ObservabilityState::kPartiallyObserved),
-       cell_count);
+       static_cast<uint8_t>(ObservabilityState::kObserved), cell_count);
   Fill(layers_.last_observed_age, static_cast<uint16_t>(0), cell_count);
   Fill(layers_.last_reliable_age, static_cast<uint16_t>(0), cell_count);
 }
@@ -90,6 +93,12 @@ void LocalTerrainMap::shiftLayers(int row_shift, int col_shift) {
              std::numeric_limits<float>::quiet_NaN());
   ShiftLayer(layers_.overhead_confidence, rows_, cols_, row_shift, col_shift,
              0.0f);
+  ShiftLayer(layers_.protrusion_height, rows_, cols_, row_shift, col_shift,
+             std::numeric_limits<float>::quiet_NaN());
+  ShiftLayer(layers_.protrusion_evidence, rows_, cols_, row_shift, col_shift,
+             0.0f);
+  ShiftLayer(layers_.overhead_evidence, rows_, cols_, row_shift, col_shift,
+             0.0f);
   ShiftLayer(layers_.obstacle_evidence, rows_, cols_, row_shift, col_shift,
              0.0f);
   ShiftLayer(layers_.coverage_confidence, rows_, cols_, row_shift, col_shift,
@@ -109,7 +118,7 @@ void LocalTerrainMap::shiftLayers(int row_shift, int col_shift) {
   ShiftLayer(layers_.traversal_cost, rows_, cols_, row_shift, col_shift,
              static_cast<int8_t>(-1));
   ShiftLayer(layers_.last_sector_state, rows_, cols_, row_shift, col_shift,
-             static_cast<uint8_t>(ObservabilityState::kPartiallyObserved));
+             static_cast<uint8_t>(ObservabilityState::kObserved));
   ShiftLayer(layers_.last_observed_age, rows_, cols_, row_shift, col_shift,
              static_cast<uint16_t>(0));
   ShiftLayer(layers_.last_reliable_age, rows_, cols_, row_shift, col_shift,

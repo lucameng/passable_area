@@ -7,7 +7,6 @@ namespace passable_area::core {
 
 enum class ObservabilityState : uint8_t {
   kObserved = 0,
-  kPartiallyObserved = 1,
   kMissingByDropout = 2,
 };
 
