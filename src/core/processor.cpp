@@ -178,44 +178,14 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.overhead_stage = reasoner_output.overhead_stage;
   output.obstacle_point_publish_status =
       reasoner_output.obstacle_point_publish_status;
-  output.support_anchor_used = frontend_output.support_anchor_used;
-  output.support_anchor_origin = frontend_output.support_anchor_origin;
-  output.support_anchor_authority = frontend_output.support_anchor_authority;
-  output.anchor_leak_suppression_enabled =
-      frontend_output.anchor_leak_suppression_enabled;
-  output.sub_support_leak_count = frontend_output.sub_support_leak_count;
-  output.anchor_below_observation_count =
-      frontend_output.anchor_below_observation_count;
-  output.stale_anchor_residual_filtered_count =
-      frontend_output.stale_anchor_residual_filtered_count;
   output.raw_sample_min_z = frontend_output.raw_sample_min_z;
   output.raw_sample_max_z = frontend_output.raw_sample_max_z;
   output.raw_sample_count = frontend_output.raw_sample_count;
   output.filtered_sample_min_z = frontend_output.filtered_sample_min_z;
   output.filtered_sample_max_z = frontend_output.filtered_sample_max_z;
   output.filtered_sample_count = frontend_output.filtered_sample_count;
-  output.raw_upper_support_cell = frontend_output.raw_upper_support_cell;
-  output.explanation_adjusted_upper_support_cell =
-      frontend_output.explanation_adjusted_upper_support_cell;
-  output.upper_support_cell = frontend_output.upper_support_cell;
-  output.obstacle_local_triggered = frontend_output.obstacle_local_triggered;
-  output.obstacle_upper_patch_confirmed =
-      frontend_output.obstacle_upper_patch_confirmed;
-  output.obstacle_explanation_rejected =
-      frontend_output.obstacle_explanation_rejected;
   output.obstacle_suspicious = frontend_output.obstacle_suspicious;
   output.obstacle_candidate_cell = frontend_output.obstacle_candidate_cell;
-  output.obstacle_rejected_by_neighbor_support =
-      frontend_output.obstacle_rejected_by_neighbor_support;
-  output.neighbor_upper_support_count =
-      frontend_output.neighbor_upper_support_count;
-  output.aligned_neighbor_support_count =
-      frontend_output.aligned_neighbor_support_count;
-  output.explanation_decision = frontend_output.explanation_decision;
-  output.facade_lower_upper_coexisting =
-      frontend_output.facade_lower_upper_coexisting;
-  output.facade_upper_edge_aligned_with_supported_neighbors =
-      frontend_output.facade_upper_edge_aligned_with_supported_neighbors;
   output.support_state = layers.support_state;
 
   if (config_.debug.publish_base_gravity_cloud) {

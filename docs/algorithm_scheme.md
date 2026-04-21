@@ -385,15 +385,8 @@ TF：
 - `protrusion_stage`
 - `overhead_stage`
 - `obstacle_point_publish_status`
-- `support_anchor_used`
-- `sub_support_leak_count`
-- `raw_upper_support_cell`
-- `explanation_adjusted_upper_support_cell`
-- `upper_support_cell`
 - `obstacle_suspicious`
 - `obstacle_candidate_cell`
-- `obstacle_rejected_by_neighbor_support`
-- `neighbor_upper_support_count`
 - `support_state`
 - `base_gravity_cloud_points`
 - `support_points`
@@ -569,27 +562,27 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 - `upper_band.bottom`
   - 参与 overhead / low-clearance trigger
 
-当前 `FrameOutput` 里仍保留了很多历史解释字段，例如：
+当前 `FrameOutput` / `FrontendOutput` 已经不再携带旧 explanation / anchor 兼容字段。
 
-- `support_anchor_used`
-- `raw_upper_support_cell`
-- `explanation_adjusted_upper_support_cell`
-- `upper_support_cell`
-- `neighbor_upper_support_count`
-- `aligned_neighbor_support_count`
-- `explanation_decision`
+当前主线只保留：
 
-这些字段现在主要是**兼容旧调试接口**，当前 V2 前端默认把它们保持为无效值或 0，不再作为障碍形成逻辑的一部分。
+- 原始/过滤后的 sample 统计
+- `obstacle_suspicious`
+- `obstacle_candidate_cell`
+- reasoner 的 `block_reason`
+- `protrusion_stage` / `overhead_stage`
+- `obstacle_point_publish_status`
 
 #### 8.3.3 锚点的来源与拒绝逻辑
 
-当前主线前端已经不再做锚点解析。
+当前主线前端已经不做锚点解析，相关兼容字段也已移除。
 
 也就是说：
 
 - 不再使用历史 `support_height` 给当前帧借锚
 - 不再区分 local / borrowed support anchor
 - 不再做 stale / wall-only anchor reject
+- analyzer / grid_map 也不再暴露这些历史锚点状态
 
 当前支撑候选的来源就是：
 
@@ -624,9 +617,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
   - candidate evidence 使用 `(min_clearance - clearance_gap) / max(min_clearance - max_step_up, 1e-3)` 归一化并 clamp 到 `[0, 1]`
   - 这表示在 `max_step_up..min_clearance` 这段不可通行净空区间内归一化证据；是否发布到 `/terrain_obstacle_points` 仍由后续 low-clearance bridge 的 `clearance > max_step_up` 和 evidence 阈值共同决定
 - 任一候选形成时：
-  - 设置 `obstacle_local_triggered = 1`
   - 设置 `obstacle_suspicious = 1`
-  - 设置 `obstacle_upper_patch_confirmed = 1` 作为兼容态
   - 设置 `obstacle_candidate_cell = 1`
 
 因此当前已经没有“固定 `3x3` upper-support neighborhood gate”。

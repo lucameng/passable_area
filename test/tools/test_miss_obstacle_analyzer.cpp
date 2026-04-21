@@ -43,18 +43,15 @@ FrameOutput MakeOutput() {
   output.base_pose_in_map.position = Eigen::Vector3f::Zero();
   output.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
   output.obstacle_evidence.assign(9, 0.0f);
+  output.protrusion_evidence.assign(9, 0.0f);
+  output.overhead_evidence.assign(9, 0.0f);
+  output.block_reason.assign(9, 0U);
+  output.obstacle_point_publish_status.assign(9, 0U);
   output.clearance.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_continuity.assign(9, 1.0f);
   output.overhead_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_height.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.support_confidence.assign(9, 0.0f);
-  output.support_anchor_used.assign(9, std::numeric_limits<float>::quiet_NaN());
-  output.support_anchor_origin.assign(9, 0U);
-  output.support_anchor_authority.assign(9, 0U);
-  output.anchor_leak_suppression_enabled.assign(9, 0U);
-  output.sub_support_leak_count.assign(9, 0U);
-  output.anchor_below_observation_count.assign(9, 0U);
-  output.stale_anchor_residual_filtered_count.assign(9, 0U);
   output.raw_sample_min_z.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.raw_sample_max_z.assign(9, std::numeric_limits<float>::quiet_NaN());
   output.raw_sample_count.assign(9, 0U);
@@ -63,20 +60,8 @@ FrameOutput MakeOutput() {
   output.filtered_sample_max_z.assign(9,
                                       std::numeric_limits<float>::quiet_NaN());
   output.filtered_sample_count.assign(9, 0U);
-  output.raw_upper_support_cell.assign(9, 0U);
-  output.explanation_adjusted_upper_support_cell.assign(9, 0U);
-  output.upper_support_cell.assign(9, 0U);
-  output.obstacle_local_triggered.assign(9, 0U);
-  output.obstacle_upper_patch_confirmed.assign(9, 0U);
-  output.obstacle_explanation_rejected.assign(9, 0U);
   output.obstacle_suspicious.assign(9, 0U);
   output.obstacle_candidate_cell.assign(9, 0U);
-  output.obstacle_rejected_by_neighbor_support.assign(9, 0U);
-  output.neighbor_upper_support_count.assign(9, 0);
-  output.aligned_neighbor_support_count.assign(9, 0);
-  output.explanation_decision.assign(9, 0U);
-  output.facade_lower_upper_coexisting.assign(9, 0U);
-  output.facade_upper_edge_aligned_with_supported_neighbors.assign(9, 0U);
   output.observability.sectors.resize(8);
   for (auto &sector : output.observability.sectors) {
     sector.state = ObservabilityState::kObserved;
@@ -125,79 +110,22 @@ TEST(MissObstacleAnalyzerTest, ReturnsNoFrontendSuspicionWhenSamplesStayFlat) {
 }
 
 TEST(MissObstacleAnalyzerTest,
-     ReturnsRejectedByNeighborSupportWhenSuspiciousCellsAreRejected) {
+     ReturnsReasonerNotBlockedWhenFrontendCandidateIsNotBlocked) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
-  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
+  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.35f}});
   const int cell = CenterCellIndex(output);
   output.obstacle_suspicious[cell] = 1U;
-  output.obstacle_upper_patch_confirmed[cell] = 1U;
-  output.obstacle_explanation_rejected[cell] = 1U;
-  output.obstacle_rejected_by_neighbor_support[cell] = 1U;
-  output.neighbor_upper_support_count[cell] = 1;
-  output.aligned_neighbor_support_count[cell] = 2;
-  output.explanation_decision[cell] = 3U;
+  output.obstacle_candidate_cell[cell] = 1U;
+  output.obstacle_evidence[cell] = 0.3f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
   ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification,
-            MissObstacleRootCause::kRejectedByNeighborSupport);
-  EXPECT_EQ(analysis->rejected_suspicious_cell_count, 1);
+  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kReasonerNotBlocked);
   ASSERT_FALSE(analysis->representative_cells.empty());
-  EXPECT_EQ(
-      analysis->representative_cells.front().aligned_neighbor_support_count, 2);
-  EXPECT_EQ(analysis->representative_cells.front().explanation_decision, 3U);
   EXPECT_NE(analysis->representative_cells.front().explanation.find(
-                "rejected during explanation"),
+                "reasoner did not mark"),
             std::string::npos);
-  EXPECT_NE(analysis->explanation.find("failed upper-patch confirmation or "
-                                       "were rejected during explanation"),
-            std::string::npos);
-}
-
-TEST(
-    MissObstacleAnalyzerTest,
-    SurfacesNoExplicitKeepExplanationWhenConfirmationPassedButNoCandidateFormed) {
-  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
-  auto output = MakeOutput();
-  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
-  const int cell = CenterCellIndex(output);
-  output.obstacle_suspicious[cell] = 1U;
-  output.obstacle_local_triggered[cell] = 1U;
-  output.obstacle_upper_patch_confirmed[cell] = 1U;
-  output.explanation_decision[cell] = 0U;
-
-  const auto analysis = analyzer.analyzeFrame(output, frame);
-  ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification, MissObstacleRootCause::kUnknownOrMixed);
-  ASSERT_FALSE(analysis->representative_cells.empty());
-  EXPECT_EQ(analysis->representative_cells.front().explanation_decision, 0U);
-  EXPECT_NE(analysis->representative_cells.front().explanation.find(
-                "no explicit keep explanation"),
-            std::string::npos);
-}
-
-TEST(MissObstacleAnalyzerTest,
-     PreservesRawAdjustedAndLegacyUpperSupportVisibility) {
-  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
-  auto output = MakeOutput();
-  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.3f}});
-  const int cell = CenterCellIndex(output);
-  output.obstacle_suspicious[cell] = 1U;
-  output.obstacle_upper_patch_confirmed[cell] = 1U;
-  output.obstacle_explanation_rejected[cell] = 1U;
-  output.obstacle_rejected_by_neighbor_support[cell] = 1U;
-  output.raw_upper_support_cell[cell] = 1U;
-  output.explanation_adjusted_upper_support_cell[cell] = 0U;
-  output.upper_support_cell[cell] = 0U;
-
-  const auto analysis = analyzer.analyzeFrame(output, frame);
-  ASSERT_TRUE(analysis.has_value());
-  ASSERT_FALSE(analysis->representative_cells.empty());
-  EXPECT_TRUE(analysis->representative_cells.front().raw_upper_support_cell);
-  EXPECT_FALSE(
-      analysis->representative_cells.front().adjusted_upper_support_cell);
-  EXPECT_FALSE(analysis->representative_cells.front().upper_support_cell);
 }
 
 TEST(
@@ -209,6 +137,7 @@ TEST(
   const int cell = CenterCellIndex(output);
   output.obstacle_suspicious[cell] = 1U;
   output.obstacle_candidate_cell[cell] = 1U;
+  output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.25f;
   output.support_height[cell] = 0.0f;
 
@@ -227,6 +156,7 @@ TEST(MissObstacleAnalyzerTest,
   const int cell = CenterCellIndex(output);
   output.obstacle_suspicious[cell] = 1U;
   output.obstacle_candidate_cell[cell] = 1U;
+  output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.6f;
   output.support_height[cell] = 0.0f;
 
@@ -241,34 +171,16 @@ TEST(MissObstacleAnalyzerTest,
 }
 
 TEST(MissObstacleAnalyzerTest,
-     ReturnsOutputHeightGateNotMetWhenSamplesExceedBaseLinkHeightCeiling) {
-  auto config = MakeConfig();
-  config.obstacle_points_min_height = 0.1f;
-  config.obstacle_points_max_height_in_base_link = 0.2f;
-  MissObstacleAnalyzer analyzer(config, MakeAnalyzerConfig());
-  auto output = MakeOutput();
-  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.25f}});
-  const int cell = CenterCellIndex(output);
-  output.obstacle_suspicious[cell] = 1U;
-  output.obstacle_candidate_cell[cell] = 1U;
-  output.obstacle_evidence[cell] = 0.6f;
-  output.support_height[cell] = 0.0f;
-
-  const auto analysis = analyzer.analyzeFrame(output, frame);
-  ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification,
-            MissObstacleRootCause::kOutputHeightGateNotMet);
-}
-
-TEST(
-    MissObstacleAnalyzerTest,
-    ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {
+     ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
   output.resolution = 0.5f;
   output.origin = Eigen::Vector2f(-0.75f, -0.75f);
   const auto frame = MakeProcessedFrame({Point3f{-0.49f, 0.0f, 0.10f}});
   const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_candidate_cell[cell] = 1U;
+  output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.7f;
   output.support_height[cell] = 0.0f;
 
@@ -276,47 +188,6 @@ TEST(
   ASSERT_TRUE(analysis.has_value());
   EXPECT_EQ(analysis->classification,
             MissObstacleRootCause::kNoObstacleSourceSamplesInRoi);
-}
-
-TEST(MissObstacleAnalyzerTest,
-     ReturnsLeakFilteredRootCauseWhenOnlyLeakEvidenceRemains) {
-  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
-  auto output = MakeOutput();
-  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, -0.30f}});
-  const int cell = CenterCellIndex(output);
-  output.support_anchor_origin[cell] = static_cast<uint8_t>(
-      passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor);
-  output.support_anchor_authority[cell] = static_cast<uint8_t>(
-      passable_area::core::SupportAnchorAuthority::kExplanationOnly);
-  output.anchor_leak_suppression_enabled[cell] = 0U;
-  output.sub_support_leak_count[cell] = 2U;
-  output.anchor_below_observation_count[cell] = 2U;
-  output.raw_sample_min_z[cell] = -0.30f;
-  output.raw_sample_max_z[cell] = 0.00f;
-  output.raw_sample_count[cell] = 2U;
-  output.filtered_sample_min_z[cell] = 0.00f;
-  output.filtered_sample_max_z[cell] = 0.00f;
-  output.filtered_sample_count[cell] = 1U;
-  output.support_anchor_used[cell] = 0.0f;
-
-  const auto analysis = analyzer.analyzeFrame(output, frame);
-  ASSERT_TRUE(analysis.has_value());
-  EXPECT_EQ(analysis->classification,
-            MissObstacleRootCause::kLeakFilteredToNoCandidate);
-  ASSERT_FALSE(analysis->representative_cells.empty());
-  EXPECT_EQ(analysis->representative_cells.front().support_anchor_origin,
-            static_cast<uint8_t>(
-                passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor));
-  EXPECT_EQ(analysis->representative_cells.front().support_anchor_authority,
-            static_cast<uint8_t>(
-                passable_area::core::SupportAnchorAuthority::kExplanationOnly));
-  EXPECT_FALSE(
-      analysis->representative_cells.front().anchor_leak_suppression_enabled);
-  EXPECT_EQ(
-      analysis->representative_cells.front().anchor_below_observation_count,
-      2U);
-  EXPECT_EQ(analysis->representative_cells.front().raw_sample_count, 2U);
-  EXPECT_EQ(analysis->representative_cells.front().filtered_sample_count, 1U);
 }
 
 TEST(MissObstacleAnalyzerTest,

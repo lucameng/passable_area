@@ -66,25 +66,6 @@ int RootCauseIndex(MissObstacleRootCause cause) {
   return static_cast<int>(cause);
 }
 
-const char *ToExplanationDecisionString(
-    passable_area::core::FrontendExplanationDecision decision) {
-  switch (decision) {
-  case passable_area::core::FrontendExplanationDecision::kNone:
-    return "None";
-  case passable_area::core::FrontendExplanationDecision::kBelowRobotStairMix:
-    return "BelowRobotStairMix";
-  case passable_area::core::FrontendExplanationDecision::
-      kBelowRobotGroundLayerMix:
-    return "BelowRobotGroundLayerMix";
-  case passable_area::core::FrontendExplanationDecision::
-      kBelowRobotUpstairGroundMix:
-    return "BelowRobotUpstairGroundMix";
-  case passable_area::core::FrontendExplanationDecision::kKeepAsObstacle:
-    return "KeepAsObstacle";
-  }
-  return "Unknown";
-}
-
 } // namespace
 
 MissObstacleAnalyzer::MissObstacleAnalyzer(
@@ -159,9 +140,6 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
   int strong_evidence_cell_count = 0;
   int strong_evidence_cells_with_samples = 0;
   int publishable_sample_count = 0;
-  int upper_patch_failed_suspicious_cell_count = 0;
-  int explanation_rejected_suspicious_cell_count = 0;
-  int no_keep_explanation_suspicious_cell_count = 0;
   int reasoner_blocked_cell_count = 0;
   int reasoner_candidate_not_blocked_count = 0;
   std::vector<std::pair<float, MissObstacleRepresentativeCell>> ranked_cells;
@@ -194,30 +172,7 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       if (output.obstacle_candidate_cell[idx] != 0U) {
         ++analysis.obstacle_candidate_cell_count;
       }
-      const bool obstacle_suspicious = output.obstacle_suspicious[idx] != 0U;
-      const bool upper_patch_confirmed =
-          !output.obstacle_upper_patch_confirmed.empty() &&
-          output.obstacle_upper_patch_confirmed[idx] != 0U;
-      const bool explanation_rejected =
-          !output.obstacle_explanation_rejected.empty() &&
-          output.obstacle_explanation_rejected[idx] != 0U;
-      if (obstacle_suspicious &&
-          (!upper_patch_confirmed || explanation_rejected)) {
-        ++analysis.rejected_suspicious_cell_count;
-      }
-      if (obstacle_suspicious && !upper_patch_confirmed) {
-        ++upper_patch_failed_suspicious_cell_count;
-      }
-      if (obstacle_suspicious && explanation_rejected) {
-        ++explanation_rejected_suspicious_cell_count;
-      }
-      if (obstacle_suspicious && upper_patch_confirmed &&
-          !explanation_rejected && output.obstacle_candidate_cell[idx] == 0U &&
-          output.explanation_decision[idx] ==
-              static_cast<uint8_t>(
-                  passable_area::core::FrontendExplanationDecision::kNone)) {
-        ++no_keep_explanation_suspicious_cell_count;
-      }
+
       analysis.max_obstacle_evidence = std::max(analysis.max_obstacle_evidence,
                                                 output.obstacle_evidence[idx]);
       const uint8_t block_reason =
@@ -265,13 +220,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       const bool interesting =
           has_samples || output.obstacle_suspicious[idx] != 0U ||
           output.obstacle_candidate_cell[idx] != 0U ||
-          (!output.obstacle_local_triggered.empty() &&
-           output.obstacle_local_triggered[idx] != 0U) ||
-          (!output.obstacle_upper_patch_confirmed.empty() &&
-           output.obstacle_upper_patch_confirmed[idx] != 0U) ||
-          (!output.obstacle_explanation_rejected.empty() &&
-           output.obstacle_explanation_rejected[idx] != 0U) ||
-          output.upper_support_cell[idx] != 0U ||
+          block_reason != 0U ||
+          (!output.obstacle_point_publish_status.empty() &&
+           output.obstacle_point_publish_status[idx] != 0U) ||
           output.obstacle_evidence[idx] > 0.0f ||
           std::isfinite(output.overhead_height[idx]);
       if (!interesting) {
@@ -298,34 +249,13 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                                    ? 0.0f
                                    : output.overhead_evidence[idx];
       cell.obstacle_evidence = output.obstacle_evidence[idx];
-      cell.block_reason =
-          output.block_reason.empty() ? 0U : output.block_reason[idx];
+      cell.block_reason = block_reason;
       cell.obstacle_point_publish_status =
           output.obstacle_point_publish_status.empty()
               ? 0U
               : output.obstacle_point_publish_status[idx];
       cell.support_confidence = output.support_confidence[idx];
       cell.support_continuity = output.support_continuity[idx];
-      cell.support_anchor_used = output.support_anchor_used[idx];
-      cell.support_anchor_origin = output.support_anchor_origin.empty()
-                                       ? 0U
-                                       : output.support_anchor_origin[idx];
-      cell.support_anchor_authority =
-          output.support_anchor_authority.empty()
-              ? 0U
-              : output.support_anchor_authority[idx];
-      cell.anchor_leak_suppression_enabled =
-          !output.anchor_leak_suppression_enabled.empty() &&
-          output.anchor_leak_suppression_enabled[idx] != 0U;
-      cell.sub_support_leak_count = output.sub_support_leak_count[idx];
-      cell.anchor_below_observation_count =
-          output.anchor_below_observation_count.empty()
-              ? 0U
-              : output.anchor_below_observation_count[idx];
-      cell.stale_anchor_residual_filtered_count =
-          output.stale_anchor_residual_filtered_count.empty()
-              ? 0U
-              : output.stale_anchor_residual_filtered_count[idx];
       cell.raw_sample_min_z = output.raw_sample_min_z.empty()
                                   ? std::numeric_limits<float>::quiet_NaN()
                                   : output.raw_sample_min_z[idx];
@@ -343,102 +273,44 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       cell.filtered_sample_count = output.filtered_sample_count.empty()
                                        ? 0U
                                        : output.filtered_sample_count[idx];
-      cell.raw_upper_support_cell = output.raw_upper_support_cell[idx] != 0U;
-      cell.adjusted_upper_support_cell =
-          output.explanation_adjusted_upper_support_cell[idx] != 0U;
-      cell.upper_support_cell = output.upper_support_cell[idx] != 0U;
-      cell.obstacle_local_triggered =
-          !output.obstacle_local_triggered.empty() &&
-          output.obstacle_local_triggered[idx] != 0U;
-      cell.obstacle_upper_patch_confirmed =
-          !output.obstacle_upper_patch_confirmed.empty() &&
-          output.obstacle_upper_patch_confirmed[idx] != 0U;
-      cell.obstacle_explanation_rejected =
-          !output.obstacle_explanation_rejected.empty() &&
-          output.obstacle_explanation_rejected[idx] != 0U;
       cell.obstacle_suspicious = output.obstacle_suspicious[idx] != 0U;
       cell.obstacle_candidate_cell = output.obstacle_candidate_cell[idx] != 0U;
-      cell.obstacle_rejected_by_neighbor_support =
-          output.obstacle_rejected_by_neighbor_support[idx] != 0U;
-      cell.neighbor_upper_support_count =
-          output.neighbor_upper_support_count[idx];
-      cell.aligned_neighbor_support_count =
-          output.aligned_neighbor_support_count[idx];
-      cell.explanation_decision = output.explanation_decision[idx];
-      cell.facade_lower_upper_coexisting =
-          !output.facade_lower_upper_coexisting.empty() &&
-          output.facade_lower_upper_coexisting[idx] != 0U;
-      cell.facade_upper_edge_aligned_with_supported_neighbors =
-          !output.facade_upper_edge_aligned_with_supported_neighbors.empty() &&
-          output.facade_upper_edge_aligned_with_supported_neighbors[idx] != 0U;
       cell.max_sample_z_minus_support_ref =
           (has_samples && sample_stats.sample_count > 0 &&
            std::isfinite(support_ref))
               ? sample_stats.max_z - support_ref
               : std::numeric_limits<float>::quiet_NaN();
 
-      if (cell.obstacle_suspicious && !cell.obstacle_upper_patch_confirmed) {
-        cell.explanation =
-            "suspicious obstacle failed upper-patch confirmation before keep "
-            "evaluation";
-      } else if (cell.obstacle_explanation_rejected) {
-        cell.explanation =
-            "suspicious obstacle was rejected during explanation";
-        if (cell.explanation_decision !=
-            static_cast<uint8_t>(
-                passable_area::core::FrontendExplanationDecision::kNone)) {
-          cell.explanation += " via ";
-          cell.explanation += ToExplanationDecisionString(
-              static_cast<passable_area::core::FrontendExplanationDecision>(
-                  cell.explanation_decision));
-        }
-      } else if (cell.obstacle_candidate_cell &&
-                 cell.explanation_decision ==
-                     static_cast<uint8_t>(
-                         passable_area::core::FrontendExplanationDecision::
-                             kKeepAsObstacle) &&
-                 cell.obstacle_evidence <
-                     config_.obstacle_points_min_evidence) {
-        cell.explanation = "explicit keep verdict formed a candidate, but "
-                           "obstacle evidence is still below publish threshold";
-      } else if (output.obstacle_evidence[idx] >=
-                     config_.obstacle_points_min_evidence &&
-                 (!PassesObstaclePointPublishHeightGates(config_, support_ref,
-                                                         sample_stats))) {
-        cell.explanation = "obstacle evidence is high enough but samples fail "
-                           "the obstacle-point publish height gates";
-      } else if (cell.sub_support_leak_count > 0U &&
-                 !cell.obstacle_candidate_cell &&
-                 cell.obstacle_upper_patch_confirmed &&
-                 !cell.obstacle_explanation_rejected) {
-        cell.explanation = "support anchor filtered lower-layer leak samples "
-                           "before obstacle promotion";
-      } else if (!cell.obstacle_suspicious) {
+      if (!cell.obstacle_suspicious) {
         cell.explanation = "samples did not create enough vertical separation "
                            "to become suspicious";
-      } else if (cell.explanation_decision ==
-                 static_cast<uint8_t>(
-                     passable_area::core::FrontendExplanationDecision::
-                         kKeepAsObstacle)) {
-        cell.explanation = "candidate kept as obstacle by facade evidence";
-      } else if (cell.obstacle_upper_patch_confirmed &&
-                 !cell.obstacle_candidate_cell &&
-                 !cell.obstacle_explanation_rejected) {
+      } else if (!cell.obstacle_candidate_cell) {
         cell.explanation =
-            "confirmation passed, but no explicit keep explanation was "
-            "established";
+            "cell became suspicious, but frontend did not retain an obstacle "
+            "candidate";
+      } else if (cell.block_reason == 0U) {
+        cell.explanation =
+            "frontend candidate exists, but reasoner did not mark the cell as "
+            "blocked";
+      } else if (cell.obstacle_evidence <
+                 config_.obstacle_points_min_evidence) {
+        cell.explanation =
+            "candidate formed, but obstacle evidence is still below publish "
+            "threshold";
+      } else if (cell.obstacle_evidence >=
+                     config_.obstacle_points_min_evidence &&
+                 !PassesObstaclePointPublishHeightGates(config_, support_ref,
+                                                        sample_stats)) {
+        cell.explanation = "obstacle evidence is high enough but samples fail "
+                           "the obstacle-point publish height gates";
       } else {
         cell.explanation = "mixed local evidence";
       }
 
       float score = static_cast<float>(cell.sample_count);
-      score += (!cell.obstacle_upper_patch_confirmed ||
-                cell.obstacle_explanation_rejected)
-                   ? 4.0f
-                   : 0.0f;
-      score += cell.obstacle_candidate_cell ? 3.0f : 0.0f;
+      score += cell.obstacle_candidate_cell ? 4.0f : 0.0f;
       score += cell.obstacle_suspicious ? 2.0f : 0.0f;
-      score += cell.upper_support_cell ? 1.0f : 0.0f;
+      score += block_reason != 0U ? 1.0f : 0.0f;
       score += 4.0f * std::clamp(cell.obstacle_evidence, 0.0f, 1.0f);
       ranked_cells.push_back({score, cell});
     }
@@ -456,53 +328,12 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.explanation =
         "roi contains no odom samples, so obstacle points cannot be published";
     analysis.evidence_lines.push_back("roi_sample_count=0");
-  } else if (analysis.rejected_suspicious_cell_count > 0 &&
-             analysis.obstacle_candidate_cell_count == 0) {
-    analysis.classification = MissObstacleRootCause::kRejectedByNeighborSupport;
-    analysis.explanation = "roi contains suspicious obstacle cells, but all "
-                           "failed upper-patch confirmation or were rejected "
-                           "during explanation";
-    analysis.evidence_lines.push_back(
-        "rejected_suspicious_cells=" +
-        std::to_string(analysis.rejected_suspicious_cell_count));
-    analysis.evidence_lines.push_back(
-        "upper_patch_failed_suspicious_cells=" +
-        std::to_string(upper_patch_failed_suspicious_cell_count));
-    analysis.evidence_lines.push_back(
-        "explanation_rejected_suspicious_cells=" +
-        std::to_string(explanation_rejected_suspicious_cell_count));
-    analysis.evidence_lines.push_back(
-        "obstacle_candidate_cells=" +
-        std::to_string(analysis.obstacle_candidate_cell_count));
-    int cells_with_explicit_explanation = 0;
-    for (const auto &cell : analysis.representative_cells) {
-      if (cell.explanation_decision !=
-          static_cast<uint8_t>(
-              passable_area::core::FrontendExplanationDecision::kNone)) {
-        ++cells_with_explicit_explanation;
-      }
-    }
-    analysis.evidence_lines.push_back(
-        "rejected_cells_with_explicit_explanation=" +
-        std::to_string(cells_with_explicit_explanation));
-  } else if (no_keep_explanation_suspicious_cell_count > 0 &&
-             analysis.obstacle_candidate_cell_count == 0) {
-    analysis.classification = MissObstacleRootCause::kUnknownOrMixed;
-    analysis.explanation =
-        "suspicious roi cells passed confirmation, but no explicit keep "
-        "explanation was established";
-    analysis.evidence_lines.push_back(
-        "no_keep_explanation_suspicious_cells=" +
-        std::to_string(no_keep_explanation_suspicious_cell_count));
-    analysis.evidence_lines.push_back(
-        "obstacle_candidate_cells=" +
-        std::to_string(analysis.obstacle_candidate_cell_count));
   } else if (reasoner_candidate_not_blocked_count > 0 &&
              reasoner_blocked_cell_count == 0) {
     analysis.classification = MissObstacleRootCause::kReasonerNotBlocked;
     analysis.explanation =
-        "frontend or map evidence exists in the roi, but shadow reasoner did "
-        "not mark any roi cell as blocked";
+        "frontend or map evidence exists in the roi, but the reasoner did not "
+        "mark any roi cell as blocked";
     analysis.evidence_lines.push_back(
         "reasoner_candidate_not_blocked_cells=" +
         std::to_string(reasoner_candidate_not_blocked_count));
@@ -536,27 +367,12 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     }
   } else if (analysis.obstacle_suspicious_cell_count == 0 &&
              analysis.obstacle_candidate_cell_count == 0) {
-    uint32_t leak_total = 0U;
-    for (const auto &[cell, _] : sample_stats_by_cell) {
-      leak_total += output.sub_support_leak_count[static_cast<size_t>(cell)];
-    }
-    if (leak_total > 0U) {
-      analysis.classification =
-          MissObstacleRootCause::kLeakFilteredToNoCandidate;
-      analysis.explanation =
-          "support-anchor leak suppression removed lower-layer samples before "
-          "obstacle candidates formed";
-      analysis.evidence_lines.push_back("sub_support_leak_count_total=" +
-                                        std::to_string(leak_total));
-    } else {
-      analysis.classification =
-          MissObstacleRootCause::kNoFrontendObstacleSuspicion;
-      analysis.explanation = "roi has samples, but no cell reached the "
-                             "frontend suspicious-obstacle trigger";
-      analysis.evidence_lines.push_back(
-          "obstacle_suspicious_cells=" +
-          std::to_string(analysis.obstacle_suspicious_cell_count));
-    }
+    analysis.classification = MissObstacleRootCause::kNoFrontendObstacleSuspicion;
+    analysis.explanation = "roi has samples, but no cell reached the frontend "
+                           "suspicious-obstacle trigger";
+    analysis.evidence_lines.push_back(
+        "obstacle_suspicious_cells=" +
+        std::to_string(analysis.obstacle_suspicious_cell_count));
   } else if (analysis.max_obstacle_evidence <
              config_.obstacle_points_min_evidence) {
     analysis.classification = MissObstacleRootCause::kObstacleEvidenceTooLow;
@@ -601,7 +417,6 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       static_cast<float>(analysis.roi_sample_count) +
       2.0f * static_cast<float>(analysis.obstacle_suspicious_cell_count) +
       3.0f * static_cast<float>(analysis.obstacle_candidate_cell_count) +
-      4.0f * static_cast<float>(analysis.rejected_suspicious_cell_count) +
       4.0f * std::clamp(analysis.max_obstacle_evidence, 0.0f, 1.0f);
   return analysis;
 }
@@ -630,10 +445,6 @@ const char *ToString(MissObstacleRootCause cause) {
     return "NoSamplesInRoi";
   case MissObstacleRootCause::kNoFrontendCandidate:
     return "NoFrontendCandidate";
-  case MissObstacleRootCause::kRejectedByNeighborSupport:
-    return "RejectedByNeighborSupport";
-  case MissObstacleRootCause::kLeakFilteredToNoCandidate:
-    return "LeakFilteredToNoCandidate";
   case MissObstacleRootCause::kEvidenceTooLow:
     return "EvidenceTooLow";
   case MissObstacleRootCause::kPublishHeightGated:

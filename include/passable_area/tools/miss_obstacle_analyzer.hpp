@@ -22,15 +22,13 @@ enum class MissObstacleRootCause : uint8_t {
   kNoSamplesInRoi = 0,
   kNoFrontendCandidate = 1,
   kNoFrontendObstacleSuspicion = kNoFrontendCandidate,
-  kRejectedByNeighborSupport = 2,
-  kLeakFilteredToNoCandidate = 3,
-  kEvidenceTooLow = 4,
+  kEvidenceTooLow = 2,
   kObstacleEvidenceTooLow = kEvidenceTooLow,
-  kPublishHeightGated = 5,
+  kPublishHeightGated = 3,
   kOutputHeightGateNotMet = kPublishHeightGated,
-  kNoObstacleSourceSamplesInRoi = 6,
-  kUnknownOrMixed = 7,
-  kReasonerNotBlocked = 8,
+  kNoObstacleSourceSamplesInRoi = 4,
+  kUnknownOrMixed = 5,
+  kReasonerNotBlocked = 6,
 };
 
 struct MissObstacleAnalyzerConfig {
@@ -54,34 +52,15 @@ struct MissObstacleRepresentativeCell {
   uint8_t obstacle_point_publish_status = 0U;
   float support_confidence = 0.0f;
   float support_continuity = 0.0f;
-  float support_anchor_used = 0.0f;
-  uint8_t support_anchor_origin = 0U;
-  uint8_t support_anchor_authority = 0U;
-  bool anchor_leak_suppression_enabled = false;
   float max_sample_z_minus_support_ref = 0.0f;
-  uint16_t sub_support_leak_count = 0U;
-  uint16_t anchor_below_observation_count = 0U;
-  uint16_t stale_anchor_residual_filtered_count = 0U;
   float raw_sample_min_z = 0.0f;
   float raw_sample_max_z = 0.0f;
   uint16_t raw_sample_count = 0U;
   float filtered_sample_min_z = 0.0f;
   float filtered_sample_max_z = 0.0f;
   uint16_t filtered_sample_count = 0U;
-  bool raw_upper_support_cell = false;
-  bool adjusted_upper_support_cell = false;
-  bool upper_support_cell = false;
-  bool obstacle_local_triggered = false;
-  bool obstacle_upper_patch_confirmed = false;
-  bool obstacle_explanation_rejected = false;
   bool obstacle_suspicious = false;
   bool obstacle_candidate_cell = false;
-  bool obstacle_rejected_by_neighbor_support = false;
-  int8_t neighbor_upper_support_count = 0;
-  int8_t aligned_neighbor_support_count = 0;
-  uint8_t explanation_decision = 0U;
-  bool facade_lower_upper_coexisting = false;
-  bool facade_upper_edge_aligned_with_supported_neighbors = false;
   std::string explanation;
 };
 
@@ -93,7 +72,6 @@ struct MissObstacleFrameAnalysis {
   int roi_obstacle_point_count = 0;
   int obstacle_suspicious_cell_count = 0;
   int obstacle_candidate_cell_count = 0;
-  int rejected_suspicious_cell_count = 0;
   float max_obstacle_evidence = 0.0f;
   float max_support_confidence = 0.0f;
   float min_clearance = 0.0f;
@@ -109,7 +87,7 @@ struct MissObstacleBagSummary {
   MissObstacleDetectionBox detection_box;
   int total_frames = 0;
   int missed_frames = 0;
-  std::array<int, 9> root_cause_counts = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+  std::array<int, 7> root_cause_counts = {0, 0, 0, 0, 0, 0, 0};
   std::vector<MissObstacleFrameAnalysis> ranked_frames;
 };
 

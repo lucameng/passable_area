@@ -110,37 +110,14 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   FrontendOutput output;
   const size_t cell_count = static_cast<size_t>(geo.size);
   const float nan = std::numeric_limits<float>::quiet_NaN();
-  output.support_anchor_used.assign(cell_count, nan);
-  output.support_anchor_origin.assign(
-      cell_count, static_cast<uint8_t>(SupportAnchorOrigin::kNone));
-  output.support_anchor_authority.assign(
-      cell_count, static_cast<uint8_t>(SupportAnchorAuthority::kInvalid));
-  output.anchor_leak_suppression_enabled.assign(cell_count, 0U);
-  output.sub_support_leak_count.assign(cell_count, 0U);
-  output.anchor_below_observation_count.assign(cell_count, 0U);
-  output.stale_anchor_residual_filtered_count.assign(cell_count, 0U);
   output.raw_sample_min_z.assign(cell_count, nan);
   output.raw_sample_max_z.assign(cell_count, nan);
   output.raw_sample_count.assign(cell_count, 0U);
   output.filtered_sample_min_z.assign(cell_count, nan);
   output.filtered_sample_max_z.assign(cell_count, nan);
   output.filtered_sample_count.assign(cell_count, 0U);
-  output.raw_upper_support_cell.assign(cell_count, 0U);
-  output.explanation_adjusted_upper_support_cell.assign(cell_count, 0U);
-  output.upper_support_cell.assign(cell_count, 0U);
-  output.obstacle_local_triggered.assign(cell_count, 0U);
-  output.obstacle_upper_patch_confirmed.assign(cell_count, 0U);
-  output.obstacle_explanation_rejected.assign(cell_count, 0U);
   output.obstacle_suspicious.assign(cell_count, 0U);
   output.obstacle_candidate_cell.assign(cell_count, 0U);
-  output.obstacle_rejected_by_neighbor_support.assign(cell_count, 0U);
-  output.neighbor_upper_support_count.assign(cell_count, 0);
-  output.aligned_neighbor_support_count.assign(cell_count, 0);
-  output.explanation_decision.assign(
-      cell_count, static_cast<uint8_t>(FrontendExplanationDecision::kNone));
-  output.facade_lower_upper_coexisting.assign(cell_count, 0U);
-  output.facade_upper_edge_aligned_with_supported_neighbors.assign(cell_count,
-                                                                   0U);
 
   std::vector<CellStats> stats_by_cell(cell_count);
   for (const auto &sample : frame.map_samples) {
@@ -241,8 +218,6 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     const bool overhead_triggered = overhead_band != nullptr;
 
     if (protrusion_triggered || overhead_triggered) {
-      output.obstacle_local_triggered[static_cast<size_t>(cell)] = 1U;
-      output.obstacle_upper_patch_confirmed[static_cast<size_t>(cell)] = 1U;
       output.obstacle_suspicious[static_cast<size_t>(cell)] = 1U;
       output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
     }

@@ -96,25 +96,6 @@ int64_t MakeBinKey(int x_bin, int y_bin) {
   return (static_cast<int64_t>(x_bin) << 32) ^ static_cast<uint32_t>(y_bin);
 }
 
-const char *ToExplanationDecisionString(
-    passable_area::core::FrontendExplanationDecision decision) {
-  switch (decision) {
-  case passable_area::core::FrontendExplanationDecision::kNone:
-    return "None";
-  case passable_area::core::FrontendExplanationDecision::kBelowRobotStairMix:
-    return "BelowRobotStairMix";
-  case passable_area::core::FrontendExplanationDecision::
-      kBelowRobotGroundLayerMix:
-    return "BelowRobotGroundLayerMix";
-  case passable_area::core::FrontendExplanationDecision::
-      kBelowRobotUpstairGroundMix:
-    return "BelowRobotUpstairGroundMix";
-  case passable_area::core::FrontendExplanationDecision::kKeepAsObstacle:
-    return "KeepAsObstacle";
-  }
-  return "Unknown";
-}
-
 bool IsLowClearanceBridgeEligible(
     const passable_area::core::Config &config, uint8_t block_reason,
     float clearance, float overhead_evidence) {
@@ -214,36 +195,6 @@ std::optional<FalseObstacleFrameAnalysis> FalseObstacleAnalyzer::analyzeFrame(
   analysis.min_local_clearance = std::numeric_limits<float>::infinity();
   analysis.min_local_support_continuity =
       std::numeric_limits<float>::infinity();
-  analysis.rejected_suspicious_cell_count = 0;
-
-  for (size_t cell = 0;
-       cell < output.obstacle_rejected_by_neighbor_support.size(); ++cell) {
-    const bool obstacle_suspicious = cell < output.obstacle_suspicious.size() &&
-                                     output.obstacle_suspicious[cell] != 0U;
-    const bool upper_patch_confirmed =
-        cell < output.obstacle_upper_patch_confirmed.size() &&
-        output.obstacle_upper_patch_confirmed[cell] != 0U;
-    const bool explanation_rejected =
-        cell < output.obstacle_explanation_rejected.size() &&
-        output.obstacle_explanation_rejected[cell] != 0U;
-    if (!obstacle_suspicious ||
-        (upper_patch_confirmed && !explanation_rejected)) {
-      continue;
-    }
-    const int row = static_cast<int>(cell) / output.cols;
-    const int col = static_cast<int>(cell) % output.cols;
-    const float map_x = output.origin.x() +
-                        (static_cast<float>(col) + 0.5f) * output.resolution;
-    const float map_y = output.origin.y() +
-                        (static_cast<float>(row) + 0.5f) * output.resolution;
-    const auto point_in_base_gravity =
-        TransformMapPointToBaseGravity(map_x, map_y, output.base_pose_in_map);
-    if (IsInsideDetectionBox(analysis_config_.detection_box,
-                             point_in_base_gravity.x,
-                             point_in_base_gravity.y)) {
-      ++analysis.rejected_suspicious_cell_count;
-    }
-  }
 
   for (const auto &[key, bin] : bins) {
     (void)key;
@@ -342,81 +293,15 @@ FalseObstacleAnalyzer::lookupLocalContext(
   const bool source_cell_valid = source_cell >= 0 && source_cell < total_cells;
   context.source_cell = source_cell_valid ? source_cell : -1;
   if (source_cell_valid) {
-    if (output.raw_upper_support_cell.size() >
-        static_cast<size_t>(source_cell)) {
-      context.raw_upper_support_cell =
-          output.raw_upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
-    }
-    if (output.explanation_adjusted_upper_support_cell.size() >
-        static_cast<size_t>(source_cell)) {
-      context.adjusted_upper_support_cell =
-          output.explanation_adjusted_upper_support_cell[static_cast<size_t>(
-              source_cell)] != 0U;
-    }
-    if (output.upper_support_cell.size() > static_cast<size_t>(source_cell)) {
-      context.upper_support_cell =
-          output.upper_support_cell[static_cast<size_t>(source_cell)] != 0U;
-    }
-    if (output.obstacle_local_triggered.size() >
-        static_cast<size_t>(source_cell)) {
-      context.obstacle_local_triggered =
-          output.obstacle_local_triggered[static_cast<size_t>(source_cell)] !=
-          0U;
-    }
-    if (output.obstacle_upper_patch_confirmed.size() >
-        static_cast<size_t>(source_cell)) {
-      context.obstacle_upper_patch_confirmed =
-          output.obstacle_upper_patch_confirmed[static_cast<size_t>(
-              source_cell)] != 0U;
-    }
-    if (output.obstacle_explanation_rejected.size() >
-        static_cast<size_t>(source_cell)) {
-      context.obstacle_explanation_rejected =
-          output.obstacle_explanation_rejected[static_cast<size_t>(
-              source_cell)] != 0U;
-    }
     if (output.obstacle_suspicious.size() > static_cast<size_t>(source_cell)) {
       context.obstacle_suspicious =
           output.obstacle_suspicious[static_cast<size_t>(source_cell)] != 0U;
-    }
-    if (output.obstacle_rejected_by_neighbor_support.size() >
-        static_cast<size_t>(source_cell)) {
-      context.obstacle_rejected_by_neighbor_support =
-          output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(
-              source_cell)] != 0U;
     }
     if (output.obstacle_candidate_cell.size() >
         static_cast<size_t>(source_cell)) {
       context.obstacle_candidate_cell =
           output.obstacle_candidate_cell[static_cast<size_t>(source_cell)] !=
           0U;
-    }
-    if (output.neighbor_upper_support_count.size() >
-        static_cast<size_t>(source_cell)) {
-      context.neighbor_upper_support_count =
-          output.neighbor_upper_support_count[static_cast<size_t>(source_cell)];
-    }
-    if (output.aligned_neighbor_support_count.size() >
-        static_cast<size_t>(source_cell)) {
-      context.aligned_neighbor_support_count =
-          output
-              .aligned_neighbor_support_count[static_cast<size_t>(source_cell)];
-    }
-    if (output.explanation_decision.size() > static_cast<size_t>(source_cell)) {
-      context.explanation_decision =
-          output.explanation_decision[static_cast<size_t>(source_cell)];
-    }
-    if (output.facade_lower_upper_coexisting.size() >
-        static_cast<size_t>(source_cell)) {
-      context.facade_lower_upper_coexisting =
-          output.facade_lower_upper_coexisting[static_cast<size_t>(
-              source_cell)] != 0U;
-    }
-    if (output.facade_upper_edge_aligned_with_supported_neighbors.size() >
-        static_cast<size_t>(source_cell)) {
-      context.facade_upper_edge_aligned_with_supported_neighbors =
-          output.facade_upper_edge_aligned_with_supported_neighbors
-              [static_cast<size_t>(source_cell)] != 0U;
     }
     if (output.obstacle_evidence.size() > static_cast<size_t>(source_cell)) {
       context.source_obstacle_evidence =
@@ -472,26 +357,6 @@ FalseObstacleAnalyzer::lookupLocalContext(
                          context.source_clearance,
                          context.source_support_continuity,
                          context.source_block_reason, source_raw_sample_count);
-    if (output.support_anchor_used.size() > static_cast<size_t>(source_cell)) {
-      context.source_support_anchor_used =
-          output.support_anchor_used[static_cast<size_t>(source_cell)];
-    }
-    if (output.support_anchor_origin.size() >
-        static_cast<size_t>(source_cell)) {
-      context.support_anchor_origin =
-          output.support_anchor_origin[static_cast<size_t>(source_cell)];
-    }
-    if (output.support_anchor_authority.size() >
-        static_cast<size_t>(source_cell)) {
-      context.support_anchor_authority =
-          output.support_anchor_authority[static_cast<size_t>(source_cell)];
-    }
-    if (output.anchor_leak_suppression_enabled.size() >
-        static_cast<size_t>(source_cell)) {
-      context.anchor_leak_suppression_enabled =
-          output.anchor_leak_suppression_enabled[static_cast<size_t>(
-              source_cell)] != 0U;
-    }
   }
 
   const auto point_in_map =
@@ -519,43 +384,6 @@ FalseObstacleAnalyzer::lookupLocalContext(
         output.support_continuity[static_cast<size_t>(center_cell)];
     context.overhead_height =
         output.overhead_height[static_cast<size_t>(center_cell)];
-    if (output.support_anchor_used.size() > static_cast<size_t>(center_cell)) {
-      context.support_anchor_used =
-          output.support_anchor_used[static_cast<size_t>(center_cell)];
-    }
-    if (output.support_anchor_origin.size() >
-        static_cast<size_t>(center_cell)) {
-      context.support_anchor_origin =
-          output.support_anchor_origin[static_cast<size_t>(center_cell)];
-    }
-    if (output.support_anchor_authority.size() >
-        static_cast<size_t>(center_cell)) {
-      context.support_anchor_authority =
-          output.support_anchor_authority[static_cast<size_t>(center_cell)];
-    }
-    if (output.anchor_leak_suppression_enabled.size() >
-        static_cast<size_t>(center_cell)) {
-      context.anchor_leak_suppression_enabled =
-          output.anchor_leak_suppression_enabled[static_cast<size_t>(
-              center_cell)] != 0U;
-    }
-    if (output.sub_support_leak_count.size() >
-        static_cast<size_t>(center_cell)) {
-      context.sub_support_leak_count =
-          output.sub_support_leak_count[static_cast<size_t>(center_cell)];
-    }
-    if (output.anchor_below_observation_count.size() >
-        static_cast<size_t>(center_cell)) {
-      context.anchor_below_observation_count =
-          output
-              .anchor_below_observation_count[static_cast<size_t>(center_cell)];
-    }
-    if (output.stale_anchor_residual_filtered_count.size() >
-        static_cast<size_t>(center_cell)) {
-      context.stale_anchor_residual_filtered_count =
-          output.stale_anchor_residual_filtered_count[static_cast<size_t>(
-              center_cell)];
-    }
     if (output.raw_sample_min_z.size() > static_cast<size_t>(center_cell)) {
       context.raw_sample_min_z =
           output.raw_sample_min_z[static_cast<size_t>(center_cell)];
@@ -616,11 +444,6 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.clearance = context.clearance;
   hotspot.support_continuity = context.support_continuity;
   hotspot.overhead_height = context.overhead_height;
-  hotspot.support_anchor_used = context.support_anchor_used;
-  hotspot.support_anchor_origin = context.support_anchor_origin;
-  hotspot.support_anchor_authority = context.support_anchor_authority;
-  hotspot.anchor_leak_suppression_enabled =
-      context.anchor_leak_suppression_enabled;
   hotspot.source_obstacle_evidence = context.source_obstacle_evidence;
   hotspot.source_protrusion_evidence = context.source_protrusion_evidence;
   hotspot.source_overhead_evidence = context.source_overhead_evidence;
@@ -628,42 +451,20 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.source_support_continuity = context.source_support_continuity;
   hotspot.source_support_height = context.source_support_height;
   hotspot.source_overhead_height = context.source_overhead_height;
-  hotspot.source_support_anchor_used = context.source_support_anchor_used;
   hotspot.source_block_reason = context.source_block_reason;
   hotspot.source_obstacle_point_publish_status =
       context.source_obstacle_point_publish_status;
   hotspot.source_low_clearance_bridge_eligible =
       context.source_low_clearance_bridge_eligible;
   hotspot.source_publish_path = context.source_publish_path;
-  hotspot.sub_support_leak_count = context.sub_support_leak_count;
-  hotspot.anchor_below_observation_count =
-      context.anchor_below_observation_count;
-  hotspot.stale_anchor_residual_filtered_count =
-      context.stale_anchor_residual_filtered_count;
   hotspot.raw_sample_min_z = context.raw_sample_min_z;
   hotspot.raw_sample_max_z = context.raw_sample_max_z;
   hotspot.raw_sample_count = context.raw_sample_count;
   hotspot.filtered_sample_min_z = context.filtered_sample_min_z;
   hotspot.filtered_sample_max_z = context.filtered_sample_max_z;
   hotspot.filtered_sample_count = context.filtered_sample_count;
-  hotspot.raw_upper_support_cell = context.raw_upper_support_cell;
-  hotspot.adjusted_upper_support_cell = context.adjusted_upper_support_cell;
-  hotspot.upper_support_cell = context.upper_support_cell;
-  hotspot.obstacle_local_triggered = context.obstacle_local_triggered;
-  hotspot.obstacle_upper_patch_confirmed =
-      context.obstacle_upper_patch_confirmed;
-  hotspot.obstacle_explanation_rejected = context.obstacle_explanation_rejected;
   hotspot.obstacle_suspicious = context.obstacle_suspicious;
   hotspot.obstacle_candidate_cell = context.obstacle_candidate_cell;
-  hotspot.obstacle_rejected_by_neighbor_support =
-      context.obstacle_rejected_by_neighbor_support;
-  hotspot.neighbor_upper_support_count = context.neighbor_upper_support_count;
-  hotspot.aligned_neighbor_support_count =
-      context.aligned_neighbor_support_count;
-  hotspot.explanation_decision = context.explanation_decision;
-  hotspot.facade_lower_upper_coexisting = context.facade_lower_upper_coexisting;
-  hotspot.facade_upper_edge_aligned_with_supported_neighbors =
-      context.facade_upper_edge_aligned_with_supported_neighbors;
   hotspot.has_observability = context.has_observability;
   hotspot.block_reason = context.block_reason;
   hotspot.observability_state = context.observability_state;
@@ -692,18 +493,6 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   case FalseObstacleRootCause::kUnknownOrMixed:
     hotspot.explanation = "mixed or insufficient local evidence";
     break;
-  }
-  if (!hotspot.obstacle_upper_patch_confirmed) {
-    hotspot.explanation += " (upper patch not confirmed)";
-  } else if (hotspot.obstacle_explanation_rejected &&
-             hotspot.explanation_decision !=
-                 static_cast<uint8_t>(
-                     passable_area::core::FrontendExplanationDecision::kNone)) {
-    hotspot.explanation += " (explanation rejected via ";
-    hotspot.explanation += ToExplanationDecisionString(
-        static_cast<passable_area::core::FrontendExplanationDecision>(
-            hotspot.explanation_decision));
-    hotspot.explanation += ")";
   }
   return hotspot;
 }

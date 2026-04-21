@@ -2175,3 +2175,88 @@ timing：
 
 - DenseProtrusionSource 当前仍需要保留，否则 Setup B right frozen ROI 退化。
 - 允许继续 Phase 5 后续清理；但不要在同一轮删除 DenseProtrusionSource，除非同时引入新的 evidence 架构替代短窗口量化容差。
+
+## 27. Phase 5 清理：移除旧前端兼容字段与历史 grid_map/debug 合同（2026-04-21 19:25 +0800）
+
+本轮继续推进 Phase 5，不改 runtime 障碍判定和 `/terrain_obstacle_points` 外部合同，只清理已经失效的旧前端兼容字段、analyzer 解释链和 ROS debug 输出。
+
+本轮代码改动：
+
+- 从 `FrontendOutput` / `FrameOutput` 删除旧前端兼容字段：
+  - `support_anchor_used`, `support_anchor_origin`, `support_anchor_authority`
+  - `anchor_leak_suppression_enabled`, `sub_support_leak_count`
+  - `anchor_below_observation_count`, `stale_anchor_residual_filtered_count`
+  - `raw_upper_support_cell`, `explanation_adjusted_upper_support_cell`, `upper_support_cell`
+  - `obstacle_local_triggered`, `obstacle_upper_patch_confirmed`, `obstacle_explanation_rejected`
+  - `obstacle_rejected_by_neighbor_support`
+  - `neighbor_upper_support_count`, `aligned_neighbor_support_count`
+  - `explanation_decision`
+  - `facade_lower_upper_coexisting`, `facade_upper_edge_aligned_with_supported_neighbors`
+- `PolarFrontend` / `Processor::buildOutput()` 不再初始化和透传这些 inert compatibility payload。
+- `false_obstacle_analyzer` 与 `miss_obstacle_analyzer` 改成只消费当前 V2 合同：
+  - `obstacle_suspicious`
+  - `obstacle_candidate_cell`
+  - `obstacle_evidence` / `protrusion_evidence` / `overhead_evidence`
+  - `block_reason`
+  - `obstacle_point_publish_status`
+  - raw / filtered sample 统计
+- `miss_obstacle_analyzer` root cause 缩减为当前有效集合：
+  - `NoSamplesInRoi`
+  - `NoFrontendCandidate`
+  - `EvidenceTooLow`
+  - `PublishHeightGated`
+  - `NoObstacleSourceSamplesInRoi`
+  - `UnknownOrMixed`
+  - `ReasonerNotBlocked`
+- `offline_replay` 的 false / miss 打印与 ROI inspect 输出同步删掉旧 explanation / anchor / neighbor-support 字段，只保留当前有效状态。
+- `output_converter` 不再向 `grid_map` 发布 `support_anchor_used` / `sub_support_leak_count` 历史层。
+- 对应 core/tool/ROS tests 已同步改成守当前合同，不再断言 inert compatibility 默认值。
+
+自动化验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 97 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags：
+
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+
+miss obstacle frozen ROIs：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`1 / 4 miss`
+    - root cause：`EvidenceTooLow`
+  - `right_board`：`2 / 4 miss`
+    - root cause：`EvidenceTooLow` 1 帧，`NoObstacleSourceSamplesInRoi` 1 帧
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`2 / 3 miss`
+    - root cause：`EvidenceTooLow` 2 帧
+  - `right_side_board`：`0 / 3 miss`
+
+timing：
+
+- `offline_replay --benchmark-timing --bag ...`
+  - `rosbag2_open_short_upstairs`：`avg = 6.591 ms`，`max = 10.026 ms`，`p95 = 9.407 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 6.422 ms`，`max = 8.735 ms`，`p95 = 7.771 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 6.439 ms`，`max = 8.413 ms`，`p95 = 7.320 ms`
+  - `rosbag2_b1_upstairs`：`avg = 5.779 ms`，`max = 8.668 ms`，`p95 = 8.042 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 12.46 ms`，`p95 = 12.74 ms`，`p99 = 13.32 ms`
+  - `160k points`：`avg = 21.67 ms`，`p95 = 24.91 ms`，`p99 = 26.08 ms`
+
+当前结论：
+
+- solver 主判定权已在 Phase 5 起步阶段切到 reasoner，本轮不回退。
+- `/terrain_obstacle_points` 外部障碍输出合同未变，false frozen bags 仍全 0。
+- frozen miss ROI 结果未退化。
+- timing 无异常。
+- 允许继续 Phase 5 后续清理；下一步可以继续收缩 docs 中残余“旧 explanation 语义仍在现役”的表述，并检查外部是否仍有人消费已删除的历史 grid_map 层。

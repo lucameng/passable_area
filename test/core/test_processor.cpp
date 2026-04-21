@@ -18,7 +18,6 @@ using passable_area::core::DropoutAwareMapUpdater;
 using passable_area::core::FrameInput;
 using passable_area::core::FrameObservability;
 using passable_area::core::FramePreprocessor;
-using passable_area::core::FrontendExplanationDecision;
 using passable_area::core::FrontendOutput;
 using passable_area::core::LocalTerrainMap;
 using passable_area::core::MapGeometry;
@@ -31,8 +30,6 @@ using passable_area::core::PolarFrontend;
 using passable_area::core::ProcessedFrame;
 using passable_area::core::Processor;
 using passable_area::core::ProtrusionCandidate;
-using passable_area::core::SupportAnchorAuthority;
-using passable_area::core::SupportAnchorOrigin;
 using passable_area::core::SupportCandidate;
 using passable_area::core::SupportState;
 using passable_area::core::TraversabilitySolver;
@@ -743,26 +740,8 @@ TEST(
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().z, 0.45f);
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().evidence, 1.0f);
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().gain_scale, 1.5f);
-  EXPECT_EQ(output.obstacle_local_triggered[static_cast<size_t>(cell)], 1U);
-  EXPECT_EQ(output.obstacle_upper_patch_confirmed[static_cast<size_t>(cell)],
-            1U);
-  EXPECT_EQ(output.obstacle_explanation_rejected[static_cast<size_t>(cell)],
-            0U);
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
   EXPECT_EQ(output.obstacle_candidate_cell[static_cast<size_t>(cell)], 1U);
-  EXPECT_EQ(
-      output.obstacle_rejected_by_neighbor_support[static_cast<size_t>(cell)],
-      0U);
-  EXPECT_EQ(output.neighbor_upper_support_count[static_cast<size_t>(cell)], 0);
-  EXPECT_EQ(output.aligned_neighbor_support_count[static_cast<size_t>(cell)],
-            0);
-  EXPECT_EQ(output.explanation_decision[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(FrontendExplanationDecision::kNone));
-  EXPECT_EQ(output.raw_upper_support_cell[static_cast<size_t>(cell)], 0U);
-  EXPECT_EQ(
-      output.explanation_adjusted_upper_support_cell[static_cast<size_t>(cell)],
-      0U);
-  EXPECT_EQ(output.upper_support_cell[static_cast<size_t>(cell)], 0U);
 }
 
 TEST(ProcessorTest,
@@ -887,15 +866,6 @@ TEST(ProcessorTest,
   ASSERT_EQ(output.support_candidates.size(), 1U);
   EXPECT_EQ(output.support_candidates.front().cell, cell);
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, 0.05f);
-  EXPECT_TRUE(
-      std::isnan(output.support_anchor_used[static_cast<size_t>(cell)]));
-  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(SupportAnchorOrigin::kNone));
-  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(SupportAnchorAuthority::kInvalid));
-  EXPECT_EQ(output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)],
-            0U);
-  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
   ASSERT_EQ(output.protrusion_candidates.size(), 1U);
   EXPECT_EQ(output.protrusion_candidates.front().cell, cell);
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().z, 0.35f);
@@ -960,38 +930,6 @@ TEST(ProcessorTest,
                   0.35f);
   EXPECT_EQ(output.raw_sample_count[static_cast<size_t>(cell)], 3U);
   EXPECT_EQ(output.filtered_sample_count[static_cast<size_t>(cell)], 3U);
-}
-
-TEST(ProcessorTest,
-     PolarFrontendLeavesCompatibilityFieldsInactiveForObstacleCells) {
-  auto config = MakeConfig();
-  PolarFrontend frontend(config);
-  LocalTerrainMap map(config);
-  map.recenter(Eigen::Vector2f::Zero());
-
-  const auto observability =
-      MakeUniformObservability(config, ObservabilityState::kObserved);
-  const auto frame = MakeProcessedFrame({
-      {{0.25f, 0.25f, -0.10f}, {0.25f, 0.25f, -0.10f}},
-      {{0.25f, 0.25f, 0.30f}, {0.25f, 0.25f, 0.30f}},
-  });
-
-  const auto output = frontend.run(frame, observability, MakeMapGeometry(map));
-
-  int cell = -1;
-  ASSERT_TRUE(map.mapToIndex(0.25f, 0.25f, cell));
-  EXPECT_EQ(output.support_anchor_origin[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(SupportAnchorOrigin::kNone));
-  EXPECT_EQ(output.support_anchor_authority[static_cast<size_t>(cell)],
-            static_cast<uint8_t>(SupportAnchorAuthority::kInvalid));
-  EXPECT_EQ(output.anchor_leak_suppression_enabled[static_cast<size_t>(cell)],
-            0U);
-  EXPECT_EQ(output.sub_support_leak_count[static_cast<size_t>(cell)], 0U);
-  EXPECT_EQ(output.anchor_below_observation_count[static_cast<size_t>(cell)],
-            0U);
-  EXPECT_EQ(
-      output.stale_anchor_residual_filtered_count[static_cast<size_t>(cell)],
-      0U);
 }
 
 TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {

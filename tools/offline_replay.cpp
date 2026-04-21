@@ -48,12 +48,6 @@ using passable_area::core::ObservabilityState;
 using passable_area::core::PassabilityState;
 using passable_area::core::ProcessedFrame;
 
-const char *ToExplanationDecisionString(
-    passable_area::core::FrontendExplanationDecision decision);
-const char *ToSupportAnchorOriginString(
-    passable_area::core::SupportAnchorOrigin origin);
-const char *ToSupportAnchorAuthorityString(
-    passable_area::core::SupportAnchorAuthority authority);
 const char *ToBlockReasonString(passable_area::core::BlockReason reason);
 const char *ToObstaclePointPublishStatusString(
     passable_area::core::ObstaclePointPublishStatus status);
@@ -614,8 +608,6 @@ void PrintFalseObstacleFrame(
   PrintKeyValueLine("min_clearance", FormatFloat(frame.min_local_clearance));
   PrintKeyValueLine("min_support_continuity",
                     FormatFloat(frame.min_local_support_continuity));
-  PrintKeyValueLine("rejected_suspicious_cells",
-                    std::to_string(frame.rejected_suspicious_cell_count));
 
   for (size_t i = 0; i < frame.hotspots.size(); ++i) {
     const auto &hotspot = frame.hotspots[i];
@@ -691,29 +683,6 @@ void PrintFalseObstacleFrame(
               << (hotspot.source_low_clearance_bridge_eligible ? "true"
                                                                : "false")
               << '\n';
-    std::cout << "    source_support_anchor_used: "
-              << FormatFloat(hotspot.source_support_anchor_used) << '\n';
-    std::cout << "    support_anchor_used: "
-              << FormatFloat(hotspot.support_anchor_used)
-              << "  support_anchor_origin: "
-              << ToSupportAnchorOriginString(
-                     static_cast<passable_area::core::SupportAnchorOrigin>(
-                         hotspot.support_anchor_origin))
-              << "  support_anchor_authority: "
-              << ToSupportAnchorAuthorityString(
-                     static_cast<passable_area::core::SupportAnchorAuthority>(
-                         hotspot.support_anchor_authority))
-              << '\n';
-    std::cout << "    anchor_leak_suppression_enabled: "
-              << (hotspot.anchor_leak_suppression_enabled ? "true" : "false")
-              << "  sub_support_leak_count: "
-              << std::to_string(hotspot.sub_support_leak_count)
-              << "  anchor_below_observation_count: "
-              << std::to_string(hotspot.anchor_below_observation_count)
-              << "  stale_anchor_residual_filtered_count: "
-              << std::to_string(
-                     hotspot.stale_anchor_residual_filtered_count)
-              << '\n';
     std::cout << "    raw_sample_z: [" << FormatFloat(hotspot.raw_sample_min_z)
               << ", " << FormatFloat(hotspot.raw_sample_max_z)
               << "]  raw_sample_count: "
@@ -723,41 +692,11 @@ void PrintFalseObstacleFrame(
               << FormatFloat(hotspot.filtered_sample_max_z)
               << "]  filtered_sample_count: "
               << std::to_string(hotspot.filtered_sample_count) << '\n';
-    std::cout << "    raw_upper_support_cell: "
-              << (hotspot.raw_upper_support_cell ? "true" : "false")
-              << "  adjusted_upper_support_cell: "
-              << (hotspot.adjusted_upper_support_cell ? "true" : "false")
-              << "  upper_support_cell: "
-              << (hotspot.upper_support_cell ? "true" : "false")
-              << "  obstacle_local_triggered: "
-              << (hotspot.obstacle_local_triggered ? "true" : "false")
-              << "  obstacle_upper_patch_confirmed: "
-              << (hotspot.obstacle_upper_patch_confirmed ? "true" : "false")
-              << "  obstacle_explanation_rejected: "
-              << (hotspot.obstacle_explanation_rejected ? "true" : "false")
-              << '\n';
     std::cout
         << "    obstacle_suspicious: "
         << (hotspot.obstacle_suspicious ? "true" : "false")
         << "  obstacle_candidate_cell: "
         << (hotspot.obstacle_candidate_cell ? "true" : "false")
-        << "  neighbor_upper_support_count: "
-        << std::to_string(hotspot.neighbor_upper_support_count)
-        << "  aligned_neighbor_support_count: "
-        << std::to_string(hotspot.aligned_neighbor_support_count)
-        << "  legacy_reject_summary_compat: "
-        << (hotspot.obstacle_rejected_by_neighbor_support ? "true" : "false")
-        << "  explanation_decision: "
-        << ToExplanationDecisionString(
-               static_cast<passable_area::core::FrontendExplanationDecision>(
-                   hotspot.explanation_decision))
-        << '\n';
-    std::cout << "    facade_lower_upper_coexisting: "
-              << (hotspot.facade_lower_upper_coexisting ? "true" : "false")
-              << "  facade_upper_edge_aligned_with_supported_neighbors: "
-              << (hotspot.facade_upper_edge_aligned_with_supported_neighbors
-                      ? "true"
-                      : "false")
               << '\n';
   }
   std::cout << Colorize("╚" + RepeatGlyph("═", kCardColumns) + "╝", "\033[36m",
@@ -848,10 +787,6 @@ MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
   case passable_area::tools::MissObstacleRootCause::
       kNoFrontendObstacleSuspicion:
     return "\033[36m";
-  case passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport:
-    return "\033[33m";
-  case passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate:
-    return "\033[35m";
   case passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow:
     return "\033[31m";
   case passable_area::tools::MissObstacleRootCause::kOutputHeightGateNotMet:
@@ -865,51 +800,6 @@ MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
     return "\033[35m";
   }
   return "\033[37m";
-}
-
-const char *ToExplanationDecisionString(
-    passable_area::core::FrontendExplanationDecision decision) {
-  switch (decision) {
-  case passable_area::core::FrontendExplanationDecision::kNone:
-    return "None";
-  case passable_area::core::FrontendExplanationDecision::kBelowRobotStairMix:
-    return "BelowRobotStairMix";
-  case passable_area::core::FrontendExplanationDecision::
-      kBelowRobotGroundLayerMix:
-    return "BelowRobotGroundLayerMix";
-  case passable_area::core::FrontendExplanationDecision::
-      kBelowRobotUpstairGroundMix:
-    return "BelowRobotUpstairGroundMix";
-  case passable_area::core::FrontendExplanationDecision::kKeepAsObstacle:
-    return "KeepAsObstacle";
-  }
-  return "Unknown";
-}
-
-const char *ToSupportAnchorOriginString(
-    passable_area::core::SupportAnchorOrigin origin) {
-  switch (origin) {
-  case passable_area::core::SupportAnchorOrigin::kNone:
-    return "None";
-  case passable_area::core::SupportAnchorOrigin::kLocalSupport:
-    return "LocalSupport";
-  case passable_area::core::SupportAnchorOrigin::kBorrowedNeighbor:
-    return "BorrowedNeighbor";
-  }
-  return "Unknown";
-}
-
-const char *ToSupportAnchorAuthorityString(
-    passable_area::core::SupportAnchorAuthority authority) {
-  switch (authority) {
-  case passable_area::core::SupportAnchorAuthority::kInvalid:
-    return "Invalid";
-  case passable_area::core::SupportAnchorAuthority::kExplanationOnly:
-    return "ExplanationOnly";
-  case passable_area::core::SupportAnchorAuthority::kLeakEligible:
-    return "LeakEligible";
-  }
-  return "Unknown";
 }
 
 const char *ToBlockReasonString(passable_area::core::BlockReason reason) {
@@ -976,8 +866,6 @@ void PrintMissObstacleFrame(
                     std::to_string(frame.obstacle_suspicious_cell_count));
   PrintKeyValueLine("obstacle_candidate_cells",
                     std::to_string(frame.obstacle_candidate_cell_count));
-  PrintKeyValueLine("rejected_suspicious_cells",
-                    std::to_string(frame.rejected_suspicious_cell_count));
   PrintKeyValueLine("max_obstacle_evidence",
                     FormatFloat(frame.max_obstacle_evidence));
   PrintKeyValueLine("max_support_confidence",
@@ -1024,29 +912,9 @@ void PrintMissObstacleFrame(
     std::cout << "    support_confidence: "
               << FormatFloat(cell.support_confidence)
               << "  support_continuity: "
-              << FormatFloat(cell.support_continuity)
-              << "  support_anchor_used: "
-              << FormatFloat(cell.support_anchor_used) << '\n';
-    std::cout << "    support_anchor_origin: "
-              << ToSupportAnchorOriginString(
-                     static_cast<passable_area::core::SupportAnchorOrigin>(
-                         cell.support_anchor_origin))
-              << "  support_anchor_authority: "
-              << ToSupportAnchorAuthorityString(
-                     static_cast<passable_area::core::SupportAnchorAuthority>(
-                         cell.support_anchor_authority))
-              << "  anchor_leak_suppression_enabled: "
-              << (cell.anchor_leak_suppression_enabled ? "true" : "false")
-              << '\n';
+              << FormatFloat(cell.support_continuity) << '\n';
     std::cout << "    max_sample_z_minus_support_ref: "
-              << FormatFloat(cell.max_sample_z_minus_support_ref)
-              << "  sub_support_leak_count: "
-              << std::to_string(cell.sub_support_leak_count)
-              << "  anchor_below_observation_count: "
-              << std::to_string(cell.anchor_below_observation_count)
-              << "  stale_anchor_residual_filtered_count: "
-              << std::to_string(cell.stale_anchor_residual_filtered_count)
-              << '\n';
+              << FormatFloat(cell.max_sample_z_minus_support_ref) << '\n';
     std::cout << "    raw_sample_z: [" << FormatFloat(cell.raw_sample_min_z)
               << ", " << FormatFloat(cell.raw_sample_max_z)
               << "]  raw_sample_count: "
@@ -1056,41 +924,10 @@ void PrintMissObstacleFrame(
               << FormatFloat(cell.filtered_sample_max_z)
               << "]  filtered_sample_count: "
               << std::to_string(cell.filtered_sample_count) << '\n';
-    std::cout << "    raw_upper_support_cell: "
-              << (cell.raw_upper_support_cell ? "true" : "false")
-              << "  adjusted_upper_support_cell: "
-              << (cell.adjusted_upper_support_cell ? "true" : "false")
-              << "  upper_support_cell: "
-              << (cell.upper_support_cell ? "true" : "false")
-              << "  obstacle_local_triggered: "
-              << (cell.obstacle_local_triggered ? "true" : "false")
-              << "  obstacle_upper_patch_confirmed: "
-              << (cell.obstacle_upper_patch_confirmed ? "true" : "false")
-              << "  obstacle_explanation_rejected: "
-              << (cell.obstacle_explanation_rejected ? "true" : "false")
-              << '\n';
     std::cout << "    obstacle_suspicious: "
               << (cell.obstacle_suspicious ? "true" : "false")
               << "  obstacle_candidate_cell: "
-              << (cell.obstacle_candidate_cell ? "true" : "false") << '\n';
-    std::cout
-        << "    legacy_reject_summary_compat: "
-        << (cell.obstacle_rejected_by_neighbor_support ? "true" : "false")
-        << "  neighbor_upper_support_count: "
-        << std::to_string(cell.neighbor_upper_support_count)
-        << "  aligned_neighbor_support_count: "
-        << std::to_string(cell.aligned_neighbor_support_count)
-        << "  explanation_decision: "
-        << ToExplanationDecisionString(
-               static_cast<passable_area::core::FrontendExplanationDecision>(
-                   cell.explanation_decision))
-        << '\n';
-    std::cout << "    facade_lower_upper_coexisting: "
-              << (cell.facade_lower_upper_coexisting ? "true" : "false")
-              << "  facade_upper_edge_aligned_with_supported_neighbors: "
-              << (cell.facade_upper_edge_aligned_with_supported_neighbors
-                      ? "true"
-                      : "false")
+              << (cell.obstacle_candidate_cell ? "true" : "false")
               << '\n';
     std::cout << "    why: " << Colorize(cell.explanation, "\033[1;37m", style)
               << '\n';
@@ -1139,10 +976,6 @@ void PrintMissObstacleSummary(
       passable_area::tools::MissObstacleRootCause::kNoSamplesInRoi);
   print_root_cause(passable_area::tools::MissObstacleRootCause::
                        kNoFrontendObstacleSuspicion);
-  print_root_cause(
-      passable_area::tools::MissObstacleRootCause::kRejectedByNeighborSupport);
-  print_root_cause(
-      passable_area::tools::MissObstacleRootCause::kLeakFilteredToNoCandidate);
   print_root_cause(
       passable_area::tools::MissObstacleRootCause::kObstacleEvidenceTooLow);
   print_root_cause(
@@ -1882,16 +1715,11 @@ void PrintRoiFrameInspection(
       } else {
         ++roi_unknown;
       }
-      const bool upper_patch_confirmed =
-          !output.obstacle_upper_patch_confirmed.empty() &&
-          output.obstacle_upper_patch_confirmed[idx] != 0U;
-      const bool explanation_rejected =
-          !output.obstacle_explanation_rejected.empty() &&
-          output.obstacle_explanation_rejected[idx] != 0U;
-      if (!upper_patch_confirmed || explanation_rejected) {
+      if (output.obstacle_suspicious[idx] != 0U &&
+          output.obstacle_candidate_cell[idx] == 0U) {
         ++roi_rejected;
       }
-      if (output.upper_support_cell[idx] != 0U) {
+      if (output.block_reason[idx] != 0U) {
         ++roi_upper;
       }
       roi_max_obstacle_evidence =
@@ -1992,56 +1820,14 @@ void PrintRoiFrameInspection(
           << " publish_path=" << publish_path
           << " low_clearance_bridge_hit="
           << static_cast<int>(low_clearance_bridge)
-          << " support_anchor=" << output.support_anchor_used[idx]
-          << " support_anchor_origin="
-          << ToSupportAnchorOriginString(
-                 static_cast<passable_area::core::SupportAnchorOrigin>(
-                     output.support_anchor_origin[idx]))
-          << " support_anchor_authority="
-          << ToSupportAnchorAuthorityString(
-                 static_cast<passable_area::core::SupportAnchorAuthority>(
-                     output.support_anchor_authority[idx]))
-          << " leak_enabled="
-          << static_cast<int>(output.anchor_leak_suppression_enabled[idx])
-          << " leak_count=" << output.sub_support_leak_count[idx]
-          << " below_anchor_observed="
-          << output.anchor_below_observation_count[idx]
-          << " stale_residual_filtered="
-          << output.stale_anchor_residual_filtered_count[idx]
           << " raw_min_z=" << output.raw_sample_min_z[idx]
           << " raw_max_z=" << output.raw_sample_max_z[idx]
           << " raw_count=" << output.raw_sample_count[idx]
           << " filtered_min_z=" << output.filtered_sample_min_z[idx]
           << " filtered_max_z=" << output.filtered_sample_max_z[idx]
           << " filtered_count=" << output.filtered_sample_count[idx]
-          << " raw_upper="
-          << static_cast<int>(output.raw_upper_support_cell[idx])
-          << " adjusted_upper="
-          << static_cast<int>(
-                 output.explanation_adjusted_upper_support_cell[idx])
-          << " upper=" << static_cast<int>(output.upper_support_cell[idx])
-          << " local_trigger="
-          << static_cast<int>(output.obstacle_local_triggered[idx])
-          << " upper_patch_confirmed="
-          << static_cast<int>(output.obstacle_upper_patch_confirmed[idx])
-          << " explanation_rejected="
-          << static_cast<int>(output.obstacle_explanation_rejected[idx])
           << " suspicious=" << static_cast<int>(output.obstacle_suspicious[idx])
-          << " legacy_reject_compat="
-          << static_cast<int>(output.obstacle_rejected_by_neighbor_support[idx])
-          << " neighbor_upper="
-          << static_cast<int>(output.neighbor_upper_support_count[idx])
-          << " aligned_neighbor="
-          << static_cast<int>(output.aligned_neighbor_support_count[idx])
-          << " explanation_decision="
-          << ToExplanationDecisionString(
-                 static_cast<passable_area::core::FrontendExplanationDecision>(
-                     output.explanation_decision[idx]))
-          << " facade_lower_upper_coexisting="
-          << static_cast<int>(output.facade_lower_upper_coexisting[idx])
-          << " facade_upper_edge_aligned_with_supported_neighbors="
-          << static_cast<int>(
-                 output.facade_upper_edge_aligned_with_supported_neighbors[idx])
+          << " candidate=" << static_cast<int>(output.obstacle_candidate_cell[idx])
           << " coverage=" << output.coverage_confidence[idx]
           << " support_conf=" << output.support_confidence[idx] << "\n";
     }

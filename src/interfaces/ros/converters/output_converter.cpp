@@ -204,8 +204,6 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
                          "protrusion_stage",
                          "overhead_stage",
                          "obstacle_point_publish_status",
-                         "support_anchor_used",
-                         "sub_support_leak_count",
                          "passability"});
   map.setFrameId(header.frame_id);
   map.setGeometry(plan.geometry.length, plan.geometry.resolution,
@@ -251,17 +249,6 @@ OutputConverter::toMapOutputs(const passable_area::core::FrameOutput &output,
       map, "obstacle_point_publish_status", plan,
       ToFloatLayer(ResampleLayer(plan, output.obstacle_point_publish_status,
                                  static_cast<uint8_t>(0))));
-  AddLayer(map, "support_anchor_used", plan,
-           ResampleLayer(plan, output.support_anchor_used,
-                         std::numeric_limits<float>::quiet_NaN()));
-  std::vector<float> sub_support_leak_count_float(
-      output.sub_support_leak_count.size(), 0.0f);
-  for (size_t i = 0; i < output.sub_support_leak_count.size(); ++i) {
-    sub_support_leak_count_float[i] =
-        static_cast<float>(output.sub_support_leak_count[i]);
-  }
-  AddLayer(map, "sub_support_leak_count", plan,
-           ResampleLayer(plan, sub_support_leak_count_float, 0.0f));
 
   std::vector<float> passability_float(passability.begin(), passability.end());
   AddLayer(map, "passability", plan, passability_float);
