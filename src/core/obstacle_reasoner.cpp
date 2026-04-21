@@ -47,8 +47,17 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
         overhead_evidence >= config_.obstacle_points_min_evidence;
     const bool low_clearance =
         std::isfinite(clearance) && clearance < config_.geometry.min_clearance;
+    const float protrusion_height = cell < layers.protrusion_height.size()
+                                        ? layers.protrusion_height[cell]
+                                        : 0.0f;
+    const float support_height = cell < layers.support_height.size()
+                                    ? layers.support_height[cell]
+                                    : 0.0f;
+    const bool tall_protrusion =
+        std::isfinite(protrusion_height) && std::isfinite(support_height) &&
+        (protrusion_height - support_height) > config_.geometry.max_step_up;
     const bool protrusion_blocking =
-        protrusion_evidence > 0.4f && continuity < 0.3f;
+        protrusion_evidence > 0.4f && (continuity < 0.3f || tall_protrusion);
     const bool geometry_failure =
         slope > config_.geometry.max_support_slope_deg ||
         step_up > config_.geometry.max_step_up ||
