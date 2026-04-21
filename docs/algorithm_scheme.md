@@ -617,6 +617,8 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 - 如果 support 上方高度差超过 `max_step_up * 0.75`
   - 输出 `protrusion_candidates`
+  - candidate evidence 使用 `height_above_support / max_step_up` 归一化并 clamp 到 `[0, 1]`
+  - 无 overhead 共存的 pure protrusion 使用 `1.5` 的证据累积倍率；有 overhead 共存时保持 `1.0`
 - 如果 support 上方存在 `upper_band.bottom - support_ref < min_clearance`
   - 输出 `overhead_candidates`
 - 任一候选形成时：
@@ -668,7 +670,15 @@ obstacle 更新：
 
 - `protrusion_candidates` 写 `protrusion_height` / `protrusion_evidence`
 - `overhead_candidates` 写 `overhead_height` / `overhead_confidence` / `overhead_evidence`
-- 过渡期 `obstacle_evidence = max(protrusion_evidence, overhead_evidence)`，继续作为 solver 和 obstacle point publish 的兼容证据层
+- 过渡期 `obstacle_evidence = max(protrusion_evidence, overhead_evidence)`，继续作为 solver 的兼容证据层
+- `/terrain_obstacle_points` 发布侧拆成两条证据入口：
+  - `protrusion_evidence` 达阈值的 protrusion 发布路径；连续支撑上的纯 `LowClearance` 投影不会按普通 protrusion 阈值直接发布
+  - 当前 source cell 有足够密集的真实样本，且 `protrusion_evidence` 只差一个很小的 evidence quantum 时，允许 `DenseProtrusionSource` 近阈值发布，用于对齐侧板 ROI 内 candidate 累积和当前 source samples
+  - reasoner 低净空相关阻挡且 `overhead_evidence` 达阈值的 low-clearance bridge；该 bridge 还要求 `clearance > max_step_up`，避免把台阶量级的低净空地形投影发布到外部障碍点云
+- obstacle point 的样本高度门控同时要求：
+  - 相对 support reference 高于 `obstacle_points_min_height`
+  - 在 `base_link` 中不高于 `obstacle_points_max_height_in_base_link`
+  - 在最终发布坐标 `base_gravity` 中不低于 `-max_step_down + obstacle_points_min_height`
 
 当前实现不再按旧 explanation / 邻域否决字段清理障碍层。障碍层清理由证据衰减、support 重观测和 support 失效后的阈值判断触发。
 
@@ -789,7 +799,7 @@ obstacle 更新：
 
 其中障碍调试点还会额外经过 evidence / reasoner / 高度门控：
 
-- 兼容 `obstacle_evidence` 必须足够高，或 reasoner 给出低净空相关阻挡且 `overhead_evidence` 达到发布阈值
+- `protrusion_evidence` 必须足够高，或 reasoner 给出低净空相关阻挡且 `overhead_evidence` 达到发布阈值
 - 点相对支撑参考的高度要够高
 - 点在 `base_link` 下的 z 又不能太高
 
@@ -851,9 +861,12 @@ obstacle 更新：
 
 语义：
 
-- 落在障碍证据已足够高的 cell 内，或落在 reasoner 低净空相关阻挡 cell 内且 `overhead_evidence` 已足够高的真实样本点
+- 落在 `protrusion_evidence` 已足够高的 cell 内，落在 dense near-threshold protrusion source cell 内，或落在 reasoner 低净空相关阻挡 cell 内且 `overhead_evidence` 已足够高的真实样本点
+- 连续支撑上的纯 `LowClearance` cell 默认视作低净空地形投影，不通过普通 protrusion 阈值发布
+- low-clearance bridge 只用于 `clearance > max_step_up` 的低净空障碍，不用于台阶量级投影
 - 要求相对支撑参考高度至少为 `obstacle_points_min_height`
 - 同时要求样本在 `base_link` 下 z 不高于 `obstacle_points_max_height_in_base_link`
+- 同时要求样本在 `base_gravity` 下 z 不低于 `-max_step_down + obstacle_points_min_height`，避免把明显低于机器人下行台阶范围的地形落差点发布为外部障碍
 - 当历史 `support_height` 不可用时，用当前帧该 cell 的 fallback `min_z` 作为支撑参考
 - 发布在 `base_gravity`
 

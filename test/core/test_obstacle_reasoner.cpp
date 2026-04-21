@@ -49,7 +49,7 @@ Config MakeConfig() {
 
 TEST(ObstacleReasonerTest, LowClearanceBlocksAndRequestsOverheadPublish) {
   auto layers = MakeLayers();
-  layers.clearance[0] = 0.2f;
+  layers.clearance[0] = 0.3f;
   layers.overhead_evidence[0] = 0.5f;
 
   const auto output = ObstacleReasoner(MakeConfig()).evaluate(layers);
@@ -61,6 +61,19 @@ TEST(ObstacleReasonerTest, LowClearanceBlocksAndRequestsOverheadPublish) {
   EXPECT_EQ(
       output.obstacle_point_publish_status[0],
       static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByOverhead));
+}
+
+TEST(ObstacleReasonerTest, LowClearanceGatedByStepRangeHeight) {
+  auto layers = MakeLayers();
+  layers.clearance[0] = 0.15f;
+  layers.overhead_evidence[0] = 0.5f;
+
+  const auto output = ObstacleReasoner(MakeConfig()).evaluate(layers);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kLowClearance));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByHeight));
 }
 
 TEST(ObstacleReasonerTest, ProtrusionBlocksWhenEvidenceAndContinuityAgree) {

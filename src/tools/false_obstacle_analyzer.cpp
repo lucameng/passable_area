@@ -115,6 +115,56 @@ const char *ToExplanationDecisionString(
   return "Unknown";
 }
 
+bool IsLowClearanceBridgeEligible(
+    const passable_area::core::Config &config, uint8_t block_reason,
+    float clearance, float overhead_evidence) {
+  return block_reason ==
+         static_cast<uint8_t>(
+             passable_area::core::BlockReason::kLowClearance) &&
+     std::isfinite(clearance) && clearance > config.geometry.max_step_up &&
+         overhead_evidence >= config.obstacle_points_min_evidence;
+}
+
+bool IsDenseNearThresholdProtrusionSource(
+    const passable_area::core::Config &config, float protrusion_evidence,
+    uint16_t raw_sample_count) {
+  const float near_threshold =
+      std::max(0.0f, config.obstacle_points_min_evidence -
+                         config.persistence.obstacle_evidence_gain * 0.1f);
+  const int dense_source_count =
+      std::max(1, config.observability.min_points_per_sector - 1);
+  return protrusion_evidence >= near_threshold &&
+         raw_sample_count >= dense_source_count;
+}
+
+std::string InferPublishPath(const passable_area::core::Config &config,
+                             float obstacle_evidence,
+                             float protrusion_evidence, float overhead_evidence,
+                             float clearance, float support_continuity,
+                             uint8_t block_reason,
+                             uint16_t raw_sample_count) {
+  const bool is_low_clearance =
+      block_reason ==
+      static_cast<uint8_t>(passable_area::core::BlockReason::kLowClearance);
+  if (!is_low_clearance &&
+      protrusion_evidence >= config.obstacle_points_min_evidence) {
+    return "ProtrusionEvidence";
+  }
+  if (!is_low_clearance &&
+      IsDenseNearThresholdProtrusionSource(config, protrusion_evidence,
+                                           raw_sample_count)) {
+    return "DenseProtrusionSource";
+  }
+  if (IsLowClearanceBridgeEligible(config, block_reason, clearance,
+                                   overhead_evidence)) {
+    return "LowClearanceBridge";
+  }
+  if (obstacle_evidence >= config.obstacle_points_min_evidence) {
+    return "LegacyObstacleEvidenceOnly";
+  }
+  return "None";
+}
+
 } // namespace
 
 FalseObstacleAnalyzer::FalseObstacleAnalyzer(
@@ -380,10 +430,48 @@ FalseObstacleAnalyzer::lookupLocalContext(
       context.source_overhead_evidence =
           output.overhead_evidence[static_cast<size_t>(source_cell)];
     }
+    if (output.clearance.size() > static_cast<size_t>(source_cell)) {
+      context.source_clearance =
+          output.clearance[static_cast<size_t>(source_cell)];
+    }
+    if (output.support_continuity.size() > static_cast<size_t>(source_cell)) {
+      context.source_support_continuity =
+          output.support_continuity[static_cast<size_t>(source_cell)];
+    }
+    if (output.support_height.size() > static_cast<size_t>(source_cell)) {
+      context.source_support_height =
+          output.support_height[static_cast<size_t>(source_cell)];
+    }
     if (output.overhead_height.size() > static_cast<size_t>(source_cell)) {
       context.source_overhead_height =
           output.overhead_height[static_cast<size_t>(source_cell)];
     }
+    if (output.block_reason.size() > static_cast<size_t>(source_cell)) {
+      context.source_block_reason =
+          output.block_reason[static_cast<size_t>(source_cell)];
+    }
+    if (output.obstacle_point_publish_status.size() >
+        static_cast<size_t>(source_cell)) {
+      context.source_obstacle_point_publish_status =
+          output.obstacle_point_publish_status[static_cast<size_t>(
+              source_cell)];
+    }
+    uint16_t source_raw_sample_count = 0U;
+    if (output.raw_sample_count.size() > static_cast<size_t>(source_cell)) {
+      source_raw_sample_count =
+          output.raw_sample_count[static_cast<size_t>(source_cell)];
+    }
+    context.source_low_clearance_bridge_eligible =
+        IsLowClearanceBridgeEligible(config_, context.source_block_reason,
+                                     context.source_clearance,
+                                     context.source_overhead_evidence);
+    context.source_publish_path =
+        InferPublishPath(config_, context.source_obstacle_evidence,
+                         context.source_protrusion_evidence,
+                         context.source_overhead_evidence,
+                         context.source_clearance,
+                         context.source_support_continuity,
+                         context.source_block_reason, source_raw_sample_count);
     if (output.support_anchor_used.size() > static_cast<size_t>(source_cell)) {
       context.source_support_anchor_used =
           output.support_anchor_used[static_cast<size_t>(source_cell)];
@@ -536,8 +624,17 @@ FalseObstacleHotspot FalseObstacleAnalyzer::buildHotspot(
   hotspot.source_obstacle_evidence = context.source_obstacle_evidence;
   hotspot.source_protrusion_evidence = context.source_protrusion_evidence;
   hotspot.source_overhead_evidence = context.source_overhead_evidence;
+  hotspot.source_clearance = context.source_clearance;
+  hotspot.source_support_continuity = context.source_support_continuity;
+  hotspot.source_support_height = context.source_support_height;
   hotspot.source_overhead_height = context.source_overhead_height;
   hotspot.source_support_anchor_used = context.source_support_anchor_used;
+  hotspot.source_block_reason = context.source_block_reason;
+  hotspot.source_obstacle_point_publish_status =
+      context.source_obstacle_point_publish_status;
+  hotspot.source_low_clearance_bridge_eligible =
+      context.source_low_clearance_bridge_eligible;
+  hotspot.source_publish_path = context.source_publish_path;
   hotspot.sub_support_leak_count = context.sub_support_leak_count;
   hotspot.anchor_below_observation_count =
       context.anchor_below_observation_count;

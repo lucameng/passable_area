@@ -239,9 +239,13 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
     }
     if (protrusion_triggered) {
+      const float protrusion_gain_scale = overhead_triggered ? 1.0f : 1.5f;
+      const float step_reference =
+          std::max(config_.geometry.max_step_up, 1e-3f);
       output.protrusion_candidates.push_back(ProtrusionCandidate{
-          cell, obstacle_z, std::clamp(height_above_support, 0.0f, 1.0f),
-          1.0f});
+          cell, obstacle_z,
+          std::clamp(height_above_support / step_reference, 0.0f, 1.0f),
+          protrusion_gain_scale});
     }
     if (overhead_triggered) {
       output.overhead_candidates.push_back(

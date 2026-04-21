@@ -85,9 +85,13 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
                            ? ObstaclePointPublishStatus::kPublishedByProtrusion
                            : ObstaclePointPublishStatus::kGatedByEvidence;
     } else if (reason == BlockReason::kLowClearance) {
-      publish_status = overhead_evidence_high
-                           ? ObstaclePointPublishStatus::kPublishedByOverhead
-                           : ObstaclePointPublishStatus::kGatedByEvidence;
+      if (clearance > config_.geometry.max_step_up) {
+        publish_status = overhead_evidence_high
+                             ? ObstaclePointPublishStatus::kPublishedByOverhead
+                             : ObstaclePointPublishStatus::kGatedByEvidence;
+      } else {
+        publish_status = ObstaclePointPublishStatus::kGatedByHeight;
+      }
     }
     output.obstacle_point_publish_status[cell] =
         static_cast<uint8_t>(publish_status);

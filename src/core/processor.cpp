@@ -26,11 +26,16 @@ bool IsNear(float lhs, float rhs, float tolerance) {
 }
 
 bool PassesObstaclePointPublishHeightGates(
-    const passable_area::core::MapPointSample &sample, float support_ref,
+    const passable_area::core::MapPointSample &sample,
+    const passable_area::core::Point3f &point_in_base_gravity,
+    float support_ref,
     const passable_area::core::Config &config) {
   return std::isfinite(support_ref) &&
          sample.point_in_map.z >=
              support_ref + config.obstacle_points_min_height &&
+         point_in_base_gravity.z >=
+             -config.geometry.max_step_down +
+                 config.obstacle_points_min_height &&
          sample.point_in_base.z <=
              config.obstacle_points_max_height_in_base_link;
 }
@@ -43,20 +48,55 @@ bool HasLowClearanceObstaclePointBridge(const TerrainLayers &layers,
       index >= layers.overhead_evidence.size()) {
     return false;
   }
-  const uint8_t reason = output.block_reason[index];
-  return (reason == static_cast<uint8_t>(BlockReason::kLowClearance) ||
-          reason == static_cast<uint8_t>(BlockReason::kMixed)) &&
-         layers.overhead_evidence[index] >= config.obstacle_points_min_evidence;
+  if (output.block_reason[index] !=
+      static_cast<uint8_t>(BlockReason::kLowClearance)) {
+    return false;
+  }
+  const float clearance = index < layers.clearance.size()
+                              ? layers.clearance[index]
+                              : std::numeric_limits<float>::quiet_NaN();
+  if (!std::isfinite(clearance) || clearance <= config.geometry.max_step_up) {
+    return false;
+  }
+  return layers.overhead_evidence[index] >= config.obstacle_points_min_evidence;
+}
+
+bool HasDenseNearThresholdProtrusionSource(const TerrainLayers &layers,
+                                           const FrameOutput &output, int cell,
+                                           const Config &config) {
+  const auto index = static_cast<size_t>(cell);
+  if (index >= layers.protrusion_evidence.size() ||
+      index >= output.raw_sample_count.size() ||
+      index >= output.obstacle_candidate_cell.size()) {
+    return false;
+  }
+  if (output.obstacle_candidate_cell[index] == 0U) {
+    return false;
+  }
+  const float near_threshold =
+      std::max(0.0f, config.obstacle_points_min_evidence -
+                         config.persistence.obstacle_evidence_gain * 0.1f);
+  const int dense_source_count =
+      std::max(1, config.observability.min_points_per_sector - 1);
+  return layers.protrusion_evidence[index] >= near_threshold &&
+         output.raw_sample_count[index] >= dense_source_count;
 }
 
 bool HasObstaclePointPublishEvidence(const TerrainLayers &layers,
                                      const FrameOutput &output, int cell,
                                      const Config &config) {
   const auto index = static_cast<size_t>(cell);
-  const bool legacy_evidence =
-      index < layers.obstacle_evidence.size() &&
-      layers.obstacle_evidence[index] >= config.obstacle_points_min_evidence;
-  return legacy_evidence ||
+  const bool is_low_clearance =
+      index < output.block_reason.size() &&
+      output.block_reason[index] ==
+          static_cast<uint8_t>(BlockReason::kLowClearance);
+  const bool protrusion_publish =
+      !is_low_clearance &&
+      index < layers.protrusion_evidence.size() &&
+      (layers.protrusion_evidence[index] >=
+           config.obstacle_points_min_evidence ||
+       HasDenseNearThresholdProtrusionSource(layers, output, cell, config));
+  return protrusion_publish ||
          HasLowClearanceObstaclePointBridge(layers, output, cell, config);
 }
 
@@ -204,10 +244,12 @@ Processor::buildOutput(const ProcessedFrame &frame,
   }
 
   for (const auto &sample : frame.map_samples) {
+    const Point3f point_in_base_gravity =
+        TransformMapPointToBaseGravity(sample.point_in_map,
+                                       frame.base_pose_in_map);
     if (config_.debug.publish_base_gravity_cloud) {
       output.base_gravity_cloud_points.push_back(
-          MakeCellDebugPointWithoutSource(TransformMapPointToBaseGravity(
-              sample.point_in_map, frame.base_pose_in_map)));
+          MakeCellDebugPointWithoutSource(point_in_base_gravity));
     }
 
     int cell = -1;
@@ -219,9 +261,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
         IsNear(sample.point_in_map.z, layers.support_height[cell],
                support_tolerance)) {
       output.support_points.push_back(
-          MakeCellDebugPoint(TransformMapPointToBaseGravity(
-                                 sample.point_in_map, frame.base_pose_in_map),
-                             cell));
+          MakeCellDebugPoint(point_in_base_gravity, cell));
     }
 
     float support_ref = layers.support_height[cell];
@@ -232,11 +272,10 @@ Processor::buildOutput(const ProcessedFrame &frame,
                         : std::numeric_limits<float>::infinity();
     }
     if (HasObstaclePointPublishEvidence(layers, output, cell, config_) &&
-        PassesObstaclePointPublishHeightGates(sample, support_ref, config_)) {
+        PassesObstaclePointPublishHeightGates(sample, point_in_base_gravity,
+                                             support_ref, config_)) {
       output.obstacle_points.push_back(
-          MakeCellDebugPoint(TransformMapPointToBaseGravity(
-                                 sample.point_in_map, frame.base_pose_in_map),
-                             cell));
+          MakeCellDebugPoint(point_in_base_gravity, cell));
     }
   }
 

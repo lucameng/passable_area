@@ -2,6 +2,7 @@
 #include "passable_area/interfaces/ros/converters/pointcloud_converter.hpp"
 #include "passable_area/interfaces/ros/ros_param_loader.hpp"
 #include "passable_area/passable_area.hpp"
+#include "passable_area/core/types/obstacle_types.hpp"
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
 #include "passable_area/tools/miss_obstacle_analyzer.hpp"
 
@@ -53,6 +54,58 @@ const char *ToSupportAnchorOriginString(
     passable_area::core::SupportAnchorOrigin origin);
 const char *ToSupportAnchorAuthorityString(
     passable_area::core::SupportAnchorAuthority authority);
+const char *ToBlockReasonString(passable_area::core::BlockReason reason);
+const char *ToObstaclePointPublishStatusString(
+    passable_area::core::ObstaclePointPublishStatus status);
+
+bool IsLowClearanceBridgeEligible(const passable_area::core::Config &config,
+                                  uint8_t block_reason,
+                                  float clearance,
+                                  float overhead_evidence) {
+  return block_reason ==
+         static_cast<uint8_t>(
+             passable_area::core::BlockReason::kLowClearance) &&
+     std::isfinite(clearance) && clearance > config.geometry.max_step_up &&
+         overhead_evidence >= config.obstacle_points_min_evidence;
+}
+
+bool IsDenseNearThresholdProtrusionSource(
+    const passable_area::core::Config &config, float protrusion_evidence,
+    uint16_t raw_sample_count) {
+  const float near_threshold =
+      std::max(0.0f, config.obstacle_points_min_evidence -
+                         config.persistence.obstacle_evidence_gain * 0.1f);
+  const int dense_source_count =
+      std::max(1, config.observability.min_points_per_sector - 1);
+  return protrusion_evidence >= near_threshold &&
+         raw_sample_count >= dense_source_count;
+}
+
+std::string InferObstaclePointPublishPath(
+    const passable_area::core::Config &config, float obstacle_evidence,
+    float protrusion_evidence, float overhead_evidence, float clearance,
+    float support_continuity, uint8_t block_reason, uint16_t raw_sample_count) {
+  const bool is_low_clearance =
+      block_reason ==
+      static_cast<uint8_t>(passable_area::core::BlockReason::kLowClearance);
+  if (!is_low_clearance &&
+      protrusion_evidence >= config.obstacle_points_min_evidence) {
+    return "ProtrusionEvidence";
+  }
+  if (!is_low_clearance &&
+      IsDenseNearThresholdProtrusionSource(config, protrusion_evidence,
+                                           raw_sample_count)) {
+    return "DenseProtrusionSource";
+  }
+  if (IsLowClearanceBridgeEligible(config, block_reason, clearance,
+                                   overhead_evidence)) {
+    return "LowClearanceBridge";
+  }
+  if (obstacle_evidence >= config.obstacle_points_min_evidence) {
+    return "LegacyObstacleEvidenceOnly";
+  }
+  return "None";
+}
 
 std::string DefaultParamsFile();
 std::vector<std::string> DefaultParamsFiles();
@@ -598,14 +651,47 @@ void PrintFalseObstacleFrame(
               << Colorize(hotspot.explanation, "\033[1;37m", style) << '\n';
     std::cout << "    obstacle_evidence: "
               << FormatFloat(hotspot.obstacle_evidence)
+              << "  protrusion_evidence: "
+              << FormatFloat(hotspot.protrusion_evidence)
+              << "  overhead_evidence: "
+              << FormatFloat(hotspot.overhead_evidence)
               << "  clearance: " << FormatFloat(hotspot.clearance)
               << "  support_continuity: "
               << FormatFloat(hotspot.support_continuity) << '\n';
+    std::cout << "    block_reason: "
+              << ToBlockReasonString(
+                     static_cast<passable_area::core::BlockReason>(
+                         hotspot.block_reason))
+              << '\n';
     std::cout << "    source_obstacle_evidence: "
               << FormatFloat(hotspot.source_obstacle_evidence)
+              << "  source_protrusion_evidence: "
+              << FormatFloat(hotspot.source_protrusion_evidence)
+              << "  source_overhead_evidence: "
+              << FormatFloat(hotspot.source_overhead_evidence) << '\n';
+    std::cout << "    source_clearance: "
+              << FormatFloat(hotspot.source_clearance)
+              << "  source_support_continuity: "
+              << FormatFloat(hotspot.source_support_continuity)
+              << "  source_support_height: "
+              << FormatFloat(hotspot.source_support_height)
               << "  source_overhead_height: "
-              << FormatFloat(hotspot.source_overhead_height)
-              << "  source_support_anchor_used: "
+              << FormatFloat(hotspot.source_overhead_height) << '\n';
+    std::cout << "    source_block_reason: "
+              << ToBlockReasonString(
+                     static_cast<passable_area::core::BlockReason>(
+                         hotspot.source_block_reason))
+              << "  source_publish_status: "
+              << ToObstaclePointPublishStatusString(
+                     static_cast<
+                         passable_area::core::ObstaclePointPublishStatus>(
+                         hotspot.source_obstacle_point_publish_status))
+              << "  source_publish_path: " << hotspot.source_publish_path
+              << "  low_clearance_bridge_hit: "
+              << (hotspot.source_low_clearance_bridge_eligible ? "true"
+                                                               : "false")
+              << '\n';
+    std::cout << "    source_support_anchor_used: "
               << FormatFloat(hotspot.source_support_anchor_used) << '\n';
     std::cout << "    support_anchor_used: "
               << FormatFloat(hotspot.support_anchor_used)
@@ -731,6 +817,10 @@ void PrintFalseObstacleSummary(
       passable_area::tools::FalseObstacleRootCause::kObservabilityInfluenced);
   print_root_cause(
       passable_area::tools::FalseObstacleRootCause::kUnknownOrMixed);
+  print_root_cause(
+      passable_area::tools::FalseObstacleRootCause::kProtrusionEvidenceDriven);
+  print_root_cause(
+      passable_area::tools::FalseObstacleRootCause::kOverheadEvidenceDriven);
 
   PrintSectionHeader("Ranked Frames", style);
   if (summary.ranked_frames.empty()) {
@@ -771,6 +861,8 @@ MissRootCauseColor(passable_area::tools::MissObstacleRootCause cause) {
     return "\033[33m";
   case passable_area::tools::MissObstacleRootCause::kUnknownOrMixed:
     return "\033[37m";
+  case passable_area::tools::MissObstacleRootCause::kReasonerNotBlocked:
+    return "\033[35m";
   }
   return "\033[37m";
 }
@@ -816,6 +908,41 @@ const char *ToSupportAnchorAuthorityString(
     return "ExplanationOnly";
   case passable_area::core::SupportAnchorAuthority::kLeakEligible:
     return "LeakEligible";
+  }
+  return "Unknown";
+}
+
+const char *ToBlockReasonString(passable_area::core::BlockReason reason) {
+  switch (reason) {
+  case passable_area::core::BlockReason::kNone:
+    return "None";
+  case passable_area::core::BlockReason::kProtrusion:
+    return "Protrusion";
+  case passable_area::core::BlockReason::kLowClearance:
+    return "LowClearance";
+  case passable_area::core::BlockReason::kGeometryFailure:
+    return "GeometryFailure";
+  case passable_area::core::BlockReason::kMixed:
+    return "Mixed";
+  }
+  return "Unknown";
+}
+
+const char *ToObstaclePointPublishStatusString(
+    passable_area::core::ObstaclePointPublishStatus status) {
+  switch (status) {
+  case passable_area::core::ObstaclePointPublishStatus::kNotApplicable:
+    return "NotApplicable";
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByProtrusion:
+    return "PublishedByProtrusion";
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
+    return "PublishedByOverhead";
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
+    return "GatedByEvidence";
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByHeight:
+    return "GatedByHeight";
+  case passable_area::core::ObstaclePointPublishStatus::kBlockedButNoSamples:
+    return "BlockedButNoSamples";
   }
   return "Unknown";
 }
@@ -879,8 +1006,25 @@ void PrintMissObstacleFrame(
               << "  overhead_height: " << FormatFloat(cell.overhead_height)
               << '\n';
     std::cout << "    obstacle_evidence: "
-              << FormatFloat(cell.obstacle_evidence) << "  support_confidence: "
+              << FormatFloat(cell.obstacle_evidence)
+              << "  protrusion_evidence: "
+              << FormatFloat(cell.protrusion_evidence)
+              << "  overhead_evidence: " << FormatFloat(cell.overhead_evidence)
+              << '\n';
+    std::cout << "    block_reason: "
+              << ToBlockReasonString(
+                     static_cast<passable_area::core::BlockReason>(
+                         cell.block_reason))
+              << "  obstacle_point_publish_status: "
+              << ToObstaclePointPublishStatusString(
+                     static_cast<
+                         passable_area::core::ObstaclePointPublishStatus>(
+                         cell.obstacle_point_publish_status))
+              << '\n';
+    std::cout << "    support_confidence: "
               << FormatFloat(cell.support_confidence)
+              << "  support_continuity: "
+              << FormatFloat(cell.support_continuity)
               << "  support_anchor_used: "
               << FormatFloat(cell.support_anchor_used) << '\n';
     std::cout << "    support_anchor_origin: "
@@ -1007,6 +1151,8 @@ void PrintMissObstacleSummary(
                        kNoObstacleSourceSamplesInRoi);
   print_root_cause(
       passable_area::tools::MissObstacleRootCause::kUnknownOrMixed);
+  print_root_cause(
+      passable_area::tools::MissObstacleRootCause::kReasonerNotBlocked);
 
   PrintSectionHeader("Ranked Frames", style);
   if (summary.ranked_frames.empty()) {
@@ -1617,7 +1763,8 @@ RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
 void PrintRoiFrameInspection(
     const FrameOutput &output, const passable_area::core::Pose3D &base_pose,
     const passable_area::core::ProcessedFrame &processed_frame,
-    double start_offset_sec, const RoiInspectArgs &args) {
+    double start_offset_sec, const RoiInspectArgs &args,
+    const passable_area::core::Config &config) {
   std::cout << std::fixed << std::setprecision(3);
   const float yaw = std::atan2(
       2.0f * (base_pose.orientation.w() * base_pose.orientation.z() +
@@ -1659,12 +1806,22 @@ void PrintRoiFrameInspection(
   int roi_rejected = 0;
   int roi_upper = 0;
   float roi_max_obstacle_evidence = 0.0f;
+  float roi_max_protrusion_evidence = 0.0f;
+  float roi_max_overhead_evidence = 0.0f;
+  int roi_protrusion_publish_cells = 0;
+  int roi_low_clearance_bridge_cells = 0;
   std::vector<int> roi_sample_count_by_cell(
       static_cast<size_t>(output.rows * output.cols), 0);
   std::vector<float> roi_sample_min_z_by_cell(
       static_cast<size_t>(output.rows * output.cols),
       std::numeric_limits<float>::infinity());
   std::vector<float> roi_sample_max_z_by_cell(
+      static_cast<size_t>(output.rows * output.cols),
+      -std::numeric_limits<float>::infinity());
+  std::vector<float> roi_sample_min_base_z_by_cell(
+      static_cast<size_t>(output.rows * output.cols),
+      std::numeric_limits<float>::infinity());
+  std::vector<float> roi_sample_max_base_z_by_cell(
       static_cast<size_t>(output.rows * output.cols),
       -std::numeric_limits<float>::infinity());
   for (const auto &sample : processed_frame.map_samples) {
@@ -1693,6 +1850,12 @@ void PrintRoiFrameInspection(
     roi_sample_max_z_by_cell[static_cast<size_t>(cell)] =
         std::max(roi_sample_max_z_by_cell[static_cast<size_t>(cell)],
                  sample.point_in_map.z);
+    roi_sample_min_base_z_by_cell[static_cast<size_t>(cell)] =
+        std::min(roi_sample_min_base_z_by_cell[static_cast<size_t>(cell)],
+                 sample.point_in_base.z);
+    roi_sample_max_base_z_by_cell[static_cast<size_t>(cell)] =
+        std::max(roi_sample_max_base_z_by_cell[static_cast<size_t>(cell)],
+                 sample.point_in_base.z);
   }
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
@@ -1733,13 +1896,37 @@ void PrintRoiFrameInspection(
       }
       roi_max_obstacle_evidence =
           std::max(roi_max_obstacle_evidence, output.obstacle_evidence[idx]);
+      const float protrusion_evidence =
+          output.protrusion_evidence.empty() ? 0.0f
+                                             : output.protrusion_evidence[idx];
+      const float overhead_evidence =
+          output.overhead_evidence.empty() ? 0.0f : output.overhead_evidence[idx];
+      const uint8_t block_reason =
+          output.block_reason.empty() ? 0U : output.block_reason[idx];
+      roi_max_protrusion_evidence =
+          std::max(roi_max_protrusion_evidence, protrusion_evidence);
+      roi_max_overhead_evidence =
+          std::max(roi_max_overhead_evidence, overhead_evidence);
+      if (protrusion_evidence >= config.obstacle_points_min_evidence) {
+        ++roi_protrusion_publish_cells;
+      }
+      if (IsLowClearanceBridgeEligible(config, block_reason,
+                                       output.clearance[idx],
+                                       overhead_evidence)) {
+        ++roi_low_clearance_bridge_cells;
+      }
     }
   }
   std::cout << "roi_summary total=" << roi_total
             << " impassable=" << roi_impassable << " passable=" << roi_passable
             << " unknown=" << roi_unknown << " rejected=" << roi_rejected
             << " upper_support=" << roi_upper
-            << " max_obstacle_evidence=" << roi_max_obstacle_evidence << "\n";
+            << " max_obstacle_evidence=" << roi_max_obstacle_evidence
+            << " max_protrusion_evidence=" << roi_max_protrusion_evidence
+            << " max_overhead_evidence=" << roi_max_overhead_evidence
+            << " protrusion_publish_cells=" << roi_protrusion_publish_cells
+            << " low_clearance_bridge_cells="
+            << roi_low_clearance_bridge_cells << "\n";
 
   for (int row = 0; row < output.rows; ++row) {
     for (int col = 0; col < output.cols; ++col) {
@@ -1756,6 +1943,26 @@ void PrintRoiFrameInspection(
         continue;
       }
       const int idx = row * output.cols + col;
+      const float protrusion_evidence =
+          output.protrusion_evidence.empty() ? 0.0f
+                                             : output.protrusion_evidence[idx];
+      const float overhead_evidence =
+          output.overhead_evidence.empty() ? 0.0f : output.overhead_evidence[idx];
+      const uint8_t block_reason =
+          output.block_reason.empty() ? 0U : output.block_reason[idx];
+      const uint8_t publish_status =
+          output.obstacle_point_publish_status.empty()
+              ? 0U
+              : output.obstacle_point_publish_status[idx];
+      const bool low_clearance_bridge =
+          IsLowClearanceBridgeEligible(config, block_reason,
+                                       output.clearance[idx],
+                                       overhead_evidence);
+      const std::string publish_path = InferObstaclePointPublishPath(
+          config, output.obstacle_evidence[idx], protrusion_evidence,
+          overhead_evidence, output.clearance[idx],
+          output.support_continuity[idx], block_reason,
+          output.raw_sample_count[idx]);
       std::cout
           << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
           << " map_x=" << map_x << " map_y=" << map_y << " sample_count="
@@ -1764,10 +1971,27 @@ void PrintRoiFrameInspection(
           << roi_sample_min_z_by_cell[static_cast<size_t>(idx)]
           << " sample_max_z="
           << roi_sample_max_z_by_cell[static_cast<size_t>(idx)]
+          << " sample_base_z=["
+          << roi_sample_min_base_z_by_cell[static_cast<size_t>(idx)] << ","
+          << roi_sample_max_base_z_by_cell[static_cast<size_t>(idx)] << "]"
           << " passability=" << static_cast<int>(output.passability[idx])
           << " support_h=" << output.support_height[idx]
           << " overhead_h=" << output.overhead_height[idx]
           << " obstacle_evidence=" << output.obstacle_evidence[idx]
+          << " protrusion_evidence=" << protrusion_evidence
+          << " overhead_evidence=" << overhead_evidence
+          << " clearance=" << output.clearance[idx]
+          << " support_continuity=" << output.support_continuity[idx]
+          << " block_reason="
+          << ToBlockReasonString(
+                 static_cast<passable_area::core::BlockReason>(block_reason))
+          << " publish_status="
+          << ToObstaclePointPublishStatusString(
+                 static_cast<passable_area::core::ObstaclePointPublishStatus>(
+                     publish_status))
+          << " publish_path=" << publish_path
+          << " low_clearance_bridge_hit="
+          << static_cast<int>(low_clearance_bridge)
           << " support_anchor=" << output.support_anchor_used[idx]
           << " support_anchor_origin="
           << ToSupportAnchorOriginString(
@@ -1911,7 +2135,7 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
       continue;
     }
     PrintRoiFrameInspection(output, pose, processed_frame, start_offset_sec,
-                            args);
+                            args, config);
     ++printed_frames;
   }
   return printed_frames;

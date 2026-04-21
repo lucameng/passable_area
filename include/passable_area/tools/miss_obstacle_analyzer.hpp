@@ -53,6 +53,7 @@ struct MissObstacleRepresentativeCell {
   uint8_t block_reason = 0U;
   uint8_t obstacle_point_publish_status = 0U;
   float support_confidence = 0.0f;
+  float support_continuity = 0.0f;
   float support_anchor_used = 0.0f;
   uint8_t support_anchor_origin = 0U;
   uint8_t support_anchor_authority = 0U;

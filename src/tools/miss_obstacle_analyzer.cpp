@@ -305,6 +305,7 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
               ? 0U
               : output.obstacle_point_publish_status[idx];
       cell.support_confidence = output.support_confidence[idx];
+      cell.support_continuity = output.support_continuity[idx];
       cell.support_anchor_used = output.support_anchor_used[idx];
       cell.support_anchor_origin = output.support_anchor_origin.empty()
                                        ? 0U

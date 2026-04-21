@@ -1582,3 +1582,369 @@ V2 不会回到旧 anchor tree，但会保留“历史 support 跟踪”这个�
 - Phase 3b 只补齐低净空到外部 obstacle point 的桥，不切换 `TraversabilitySolver` 主判定权。
 - 当前 `obstacle_point_publish_status` 仍主要由 reasoner 按 evidence 预判，尚未根据实际 sample 是否通过高度门控回写为 `GatedByHeight` / `BlockedButNoSamples`。
 - Phase 4 仍需要跑冻结 false obstacle bags、miss obstacle Setup A/B 和 timing benchmark，再决定是否让 solver 消费 reasoner 输出。
+
+## 19. Phase 4 验收状态（2026-04-21）
+本次已按 `docs/implementation_plan.md` 的 Phase 4 跑冻结 false obstacle bags、冻结 miss obstacle ROI 和 timing benchmark，并把结果固化为当前交接基线。
+
+已完成：
+
+- 新增可复现的 miss-obstacle 验收参数文件：
+  - `config/passable_area_map_height_max_0p5.yaml`
+  - 用途是替代历史 `/tmp/passable_area_map_height_max_0p5.yaml`，避免继续依赖带退休参数的临时文件。
+- false obstacle 验收使用：
+  - `config/offline_benchmark_bags.yaml` 中全部冻结 bags，排除 `rosbag2_mtbf_x30_upstair_passage`
+  - detection box：`x[0.0, 1.4] y[-0.25, 0.25]`
+- miss obstacle 验收使用：
+  - Setup A：`rosbag2_open_up_down_stairs`
+  - Setup B：`rosbag2_open_stair_and_slope`
+  - 参数文件：`config/passable_area_map_height_max_0p5.yaml`
+- timing 使用：
+  - `offline_replay --benchmark-timing`
+  - `build/passable_area/passable_area_benchmark`
+
+false obstacle 结果摘要：
+
+- 7 个冻结 false bags 在检测框内 `suspicious_frames = 0`：
+  - `rosbag2_mtbf_down_up_slope`：`0 / 219`
+  - `rosbag2_mtbf_long_corridor`：`0 / 138`
+  - `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+  - `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+  - `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+  - `rosbag2_mtbf_long_passage`：`0 / 146`
+  - `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+- 2 个冻结 false bags 出现明显 false obstacle 回潮，且根因集中为 `ClearanceDriven`：
+  - `rosbag2_b1_upstairs`：`104 / 156`，`suspicious_ratio = 0.667`，`longest_consecutive_run = 47`
+  - `rosbag2_open_short_upstairs`：`39 / 120`，`suspicious_ratio = 0.325`，`longest_consecutive_run = 31`
+- 两个异常 bag 的 top hotspots 都呈现相同模式：
+  - `clearance below threshold`
+  - `obstacle_evidence` 已高
+  - `support_continuity` 正常
+  - `source_overhead_height` 明显存在
+  - 当前更像 Phase 3b low-clearance bridge 把原本仅内部阻挡的低净空路径显式投射到了 `/terrain_obstacle_points`
+
+miss obstacle 结果摘要：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`missed_frames = 4 / 4`
+  - `right_board`：`missed_frames = 4 / 4`
+  - root cause 全部为 `EvidenceTooLow`
+  - 共同模式：
+    - ROI 内样本充足
+    - `obstacle_suspicious_cells` / `obstacle_candidate_cells` 已存在
+    - `max_obstacle_evidence` 仅约 `0.08 ~ 0.32`
+    - 没有任何 frame 达到 `obstacle_points_min_evidence = 0.4`
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`missed_frames = 2 / 3`
+    - root cause：`EvidenceTooLow`
+    - `max_obstacle_evidence` 仅约 `0.09 ~ 0.13`
+  - `right_side_board`：`missed_frames = 2 / 3`
+    - 1 帧为 `EvidenceTooLow`，`max_obstacle_evidence = 0.32`
+    - 1 帧为 `NoObstacleSourceSamplesInRoi`
+      - analyzer 已能给出：`strong_evidence_cells = 1` 但 `strong_evidence_cells_with_samples = 0`
+      - 说明该帧不是“完全没有障碍证据”，而是强 evidence cell 没有对应当前 ROI 样本通过 obstacle point 发布链
+
+timing 结果摘要：
+
+- `offline_replay --benchmark-timing`
+  - `rosbag2_mtbf_long_corridor`：`avg = 10.896 ms`，`max = 18.069 ms`，`p95 = 14.036 ms`
+  - `rosbag2_open_short_upstairs`：`avg = 9.223 ms`，`max = 13.979 ms`，`p95 = 12.850 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 8.285 ms`，`max = 14.386 ms`，`p95 = 10.843 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 7.428 ms`，`max = 10.650 ms`，`p95 = 8.736 ms`
+  - `rosbag2_b1_upstairs`：`avg = 7.121 ms`，`max = 10.690 ms`，`p95 = 9.846 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 15.60 ms`，`p95 = 17.39 ms`，`p99 = 17.45 ms`
+  - `160k points`：`avg = 30.65 ms`，`p95 = 34.28 ms`，`p99 = 34.70 ms`
+
+结论：
+
+- **当前不满足 Phase 4 验收标准，不能切换 solver 主判定权。**
+- 主要阻塞项有 3 个：
+  - 冻结 false obstacle bags 中已有 2 个 bag 出现明显 `ClearanceDriven` 回潮，说明 low-clearance -> obstacle_points bridge 仍需要额外约束。
+  - 冻结 miss obstacle Setup A/B 没有达到“ROI 内 obstacle_points > 0 的帧占比明显改善”这一目标；Setup A 仍是 `4 / 4` 全 miss。
+  - 仓库文档此前没有正式 timing baseline，且 `offline_replay --benchmark-timing` 当前只输出 `p95`、不输出 `p99`；因此 Phase 4 里的 `p99 <= baseline * 150%` 还没有形成完整可对照账本。
+
+下一步建议：
+
+- 不要切 `TraversabilitySolver` 去直接消费 `block_reason`。
+- 先针对 `rosbag2_b1_upstairs` 和 `rosbag2_open_short_upstairs` 分析 low-clearance false obstacle：
+  - 重点看是不是需要在 low-clearance bridge 上增加更严格的 publish gate，而不是继续扩大 reasoner 主判定面。
+- 先针对 Setup A/B 的 `EvidenceTooLow` 和 `NoObstacleSourceSamplesInRoi` 收敛问题：
+  - 前者更像地图证据累计不足
+  - 后者更像 source sample / publish gate 与强 evidence cell 没对齐
+- 当前 analyzer 输出已经足够定位这两类失败模式，因此本轮没有继续加新的 debug contract；下一轮优先修行为，再按需要补更细粒度诊断。
+
+## 20. Phase 4 修复尝试（2026-04-21）
+本轮按 `docs/phase_4_fix_plan.md` 继续做了根因复盘和代码修复，重点处理 Phase 4 中最突出的两类问题：楼梯 bag 的 `ClearanceDriven` false obstacle 回潮，以及 Setup A/B side board 的 `EvidenceTooLow`。
+
+根因复盘：
+
+- false obstacle 部分，离线逐帧检查后确认：此前把根因单纯归到 Phase 3b 的 reasoner bridge 上并不完整。`rosbag2_b1_upstairs` / `rosbag2_open_short_upstairs` 中的热点 cell 不只是被 bridge 放行，`obstacle_evidence` 本身也已经被 overhead path 顶高，导致 legacy obstacle-point publish 路径同样会出点。
+- bag 事实里更稳定的 false pattern 是：
+  - `block_reason = LowClearance`
+  - `support_continuity` 很高
+  - `clearance` 落在典型台阶高差量级
+  - 当前 cell `raw_sample_count` 很低（2~5 个）
+  - `obstacle_local_triggered / obstacle_upper_patch_confirmed` 有时甚至已经回落，但历史 overhead/obstacle evidence 还在
+- miss obstacle 部分，`inspect-roi` 结果否定了“候选经常没有生成”这个假设。Setup A/B side board 的主要问题不是 split gap 不稳定，而是 **pure protrusion cell 的 obstacle evidence 累积速度偏慢**：
+  - ROI 内样本数充足，`obstacle_candidate_cell` 稳定存在
+  - 但 pure protrusion cell 在 3~4 帧窗口内仍爬不过 `obstacle_points_min_evidence = 0.4`
+
+本轮代码修复：
+
+- `src/core/processor.cpp`
+  - 在 obstacle point publish gate 里增加了针对 `LowClearance` 的额外抑制：
+    - 只在 **low-clearance + sparse step-like projection** 模式下阻断 publish；
+    - 条件目前收敛为：`block_reason == LowClearance`、当前 `raw_sample_count <= 5`、`support_continuity >= 0.8`、且 `overhead_height - support_height` 落在台阶步高量级。
+  - 该抑制同时作用于 legacy `obstacle_evidence` 路径和 low-clearance bridge 路径，避免“bridge 被关掉但 legacy 兼容路径仍出点”的假修复。
+- `src/core/polar_frontend.cpp`
+  - 对 **纯 protrusion（无 overhead 共存）** 的 candidate，把 `gain_scale` 提升到 `3.0f`；
+  - overhead 共存的 cell 仍保持 `1.0f`，避免把楼梯/低净空混合场景继续往 false obstacle 方向推。
+- `test/core/test_processor.cpp`
+  - 同步更新 pure protrusion candidate 的 gain-scale 断言。
+  - 保留现有 low-ceiling obstacle-point 行为测试；本轮未把 stair suppression 固化成新的 synthetic 单测，因为合成 case 还原不出 bag 中的累积形态，容易给出误导性失败。
+
+回归验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 90 tests, 0 errors, 0 failures, 0 skipped`。
+
+修复后的关键离线结果：
+
+- false obstacle
+  - `rosbag2_open_short_upstairs`：`39 / 120 -> 0 / 120`
+  - `rosbag2_b1_upstairs`：`104 / 156 -> 3 / 156`
+    - 剩余 3 帧仍是 `ClearanceDriven`
+    - 当前 residual frame 的共同特征是 `raw_sample_count = 5`，且 `obstacle_local_triggered / obstacle_upper_patch_confirmed` 已回落，只剩历史证据拖尾
+- miss obstacle
+  - Setup A `open_up_down_stairs`
+    - `left_board`: `4 / 4 -> 1 / 4`
+    - `right_board`: `4 / 4 -> 2 / 4`
+      - root cause 从纯 `EvidenceTooLow` 收敛为 `EvidenceTooLow + NoObstacleSourceSamplesInRoi`
+  - Setup B `open_stair_and_slope`
+    - `left_side_board`: `2 / 3 -> 2 / 3`
+      - 其中最接近发布阈值的 frame 已到 `max_obstacle_evidence = 0.396551`
+    - `right_side_board`: `1 / 3 -> 0 / 3`
+
+当前结论：
+
+- **仍然不能切 solver 主判定权。**
+- 但 Phase 4 的阻塞面已经明显缩小：
+  - false obstacle 从“两个 upstairs bag 大面积回潮”收敛为“只剩 `rosbag2_b1_upstairs` 的 3 帧 residual”
+  - miss obstacle 从“Setup A/B 四个 ROI 普遍 `EvidenceTooLow`”收敛为“Setup A 左 1 帧、右 2 帧、Setup B 左 2 帧”
+- 现阶段更像进入了最后一轮收边：
+  - false 侧要继续处理 `raw_sample_count = 5` 的 low-clearance 历史拖尾
+  - miss 侧要继续处理 pure protrusion evidence 的最后几帧，以及 `NoObstacleSourceSamplesInRoi`
+
+## 21. Patch 4 评审替代方案验证（2026-04-21 14:24 +0800）
+按 `docs/phase_4_fix_plan_2.md`，本轮把上一版 bag-tuned patch 全部替换成评审要求的原则性方案，并重新完成 build / test / frozen bag 验证。
+
+本轮实际替换项：
+
+- 删除 `IsSparseStepLikeLowClearanceProjection()`，不再使用那组 step-like suppress 魔法数字。
+- `HasLowClearanceObstaclePointBridge()` 改成只看：
+  - `block_reason == LowClearance`
+  - `protrusion_evidence <= 0.05`
+  - `overhead_evidence >= obstacle_points_min_evidence`
+- `DropoutAwareMapUpdater` 在 `support_reobserved && Observed` 的衰减分支里，对已建立的 protrusion evidence 使用 `obstacle_evidence_decay * 0.4`，替代原先的 `3.0x gain` patch。
+- `PolarFrontend` 的 pure protrusion gain 恢复到 Phase 2 值：`overhead_triggered ? 1.0f : 1.5f`。
+- obstacle point publish 合同同步收口为：
+  - protrusion path 看 `protrusion_evidence`
+  - low-clearance path 只看 reasoner bridge
+  - 不再让 `/terrain_obstacle_points` 直接消费 `obstacle_evidence = max(protrusion_evidence, overhead_evidence)` 这个兼容别名
+
+回归结果：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 91 tests, 0 errors, 0 failures, 0 skipped`。
+
+冻结验收结果：
+
+- false obstacle
+  - `rosbag2_b1_upstairs`: `104 / 156`
+  - `rosbag2_open_short_upstairs`: `39 / 120`
+- miss obstacle
+  - Setup A `open_up_down_stairs`
+    - `left_board`: `3 / 4 miss`
+    - `right_board`: `4 / 4 miss`
+  - Setup B `open_stair_and_slope`
+    - `left_side_board`: `2 / 3 miss`
+    - `right_side_board`: `1 / 3 miss`
+
+和上一轮 bag-tuned patch 对比，这组评审替代方案在 frozen bags 上**没有达到“不劣于 patch 结果”**，其中 false obstacle 甚至直接回到 Phase 4 原始回潮水平。
+
+新的关键根因结论：
+
+- `protrusion_evidence` 共存门控没有命中 upstairs false bags 的主失败模式。
+- 从 frozen false bag 结果看，这些 hotspot cell 主要是 **pure low-clearance / overhead-only** 发布，不是 review 假设里的“同时带有非平凡 protrusion evidence 的 mixed cell”：
+  - `block_reason` 仍然稳定是 `LowClearance`
+  - `ClearanceDriven` 仍然占绝对多数
+  - 改成只让 protrusion path 看 `protrusion_evidence` 后，false 结果没有任何改善，说明当前 false publish 主体仍是 low-clearance bridge 自身，而不是 protrusion/legacy 混发
+- 衰减侧保护已建立 protrusion evidence 没有带来 frozen miss ROI 的可见改善；Setup A/B 依旧主要卡在 `EvidenceTooLow`，说明当前 ROI 的主瓶颈仍是 candidate 证据累积不足，而不是已建立 evidence 在 observed-ground 帧被过快清掉。
+
+当前结论：
+
+- **按 `phase_4_fix_plan_2.md` 的替代方案，验证不通过。**
+- 这不是实现偏差，而是 frozen bag 结果直接否定了该假设对应的根因判断。
+- 因此当前仍然不能切 solver 主判定权，也不能把这一组替代方案当成 Phase 4 修复闭环。
+
+下一步建议：
+
+- 先补 analyzer / inspect 输出，显式把 false hotspot 的 `protrusion_evidence`、`overhead_evidence`、bridge 命中状态、publish path 来源打印出来，避免继续基于误判根因做 patch。
+- false 侧应重新针对 **pure low-clearance staircase projection** 建模，而不是继续假设它是 protrusion-overhead coexist 问题。
+- miss 侧应重新回到 ROI 内 candidate 累积过程本身，确认是单帧 evidence 太低、frame window 太短，还是 publishable source sample 没落在 strong-evidence cell 上。
+
+## 22. Phase 4 fix plan 3 推进状态（2026-04-21 15:25 +0800）
+本轮严格按 `docs/phase_4_fix_plan_3.md` 先补 diagnostics，再改行为，并重新跑 build / test / frozen 验收。仍未切换 `TraversabilitySolver` 主判定权。
+
+已完成的 diagnostics：
+
+- `false_obstacle_analyzer` hotspot 增加 source cell 的 `protrusion_evidence`、`overhead_evidence`、`clearance`、`support_continuity`、`block_reason`、`obstacle_point_publish_status`、low-clearance bridge 命中状态和推断 `source_publish_path`。
+- `offline_replay --analyze-false-obstacles` 现在打印 center/source protrusion/overhead evidence、bridge hit、publish path，并在 summary 中列出 protrusion / overhead driven root cause。
+- `offline_replay --analyze-missed-obstacles` 的 cell 输出补充 protrusion / overhead evidence、`block_reason` 和 `obstacle_point_publish_status`。
+- `--inspect-roi` 补充 ROI 内 max protrusion / overhead evidence、protrusion publish cells、low-clearance bridge cells，以及每个 cell 的 publish path / bridge hit。
+
+本轮行为改动：
+
+- low-clearance bridge 从“只看 low-clearance + overhead evidence”收紧为：
+  - `block_reason == LowClearance`
+  - `clearance > max_step_up`
+  - `overhead_evidence >= obstacle_points_min_evidence`
+- obstacle point protrusion path 不再消费兼容别名 `obstacle_evidence = max(...)`，只看 `protrusion_evidence`。
+- 连续支撑上的纯 `LowClearance` 投影默认不通过普通 protrusion 阈值发布；但 `protrusion_evidence >= 2 * obstacle_points_min_evidence` 的强 protrusion 仍允许发布，避免把真实侧板强证据一并关掉。
+- obstacle point 样本高度门控新增基于现有几何阈值的下界：`point_in_base.z >= -max_step_down`，用于过滤明显低于机器人下行台阶范围的地形落差点。
+- pure protrusion gain 保持 Phase 2 基线 `overhead_triggered ? 1.0f : 1.5f`，并对“无 overhead、单 tall band、样本数足够且高于 `max_step_up`”的 wall-like protrusion 再乘 `1.5`。
+- 回退无效的 protrusion gentle decay，`DropoutAwareMapUpdater` 恢复 Phase 2 的 observed clear decay 行为。
+
+自动化验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 92 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags（检测框 `x[0.0, 1.4] y[-0.25, 0.25]`，排除 x30 bag）：
+
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+
+miss obstacle frozen ROIs：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`2 / 4 miss`
+    - 剩余 root cause：`EvidenceTooLow`
+  - `right_board`：`4 / 4 miss`
+    - root cause：`EvidenceTooLow`
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`3 / 3 miss`
+    - root cause：`EvidenceTooLow` 2 帧，`UnknownOrMixed` 1 帧
+  - `right_side_board`：`3 / 3 miss`
+    - root cause：`NoObstacleSourceSamplesInRoi` 1 帧，`UnknownOrMixed` 2 帧
+
+timing：
+
+- `offline_replay --benchmark-timing`
+  - `rosbag2_open_short_upstairs`：`avg = 9.991 ms`，`max = 15.898 ms`，`p95 = 15.235 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 9.119 ms`，`max = 17.674 ms`，`p95 = 12.338 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 9.644 ms`，`max = 12.625 ms`，`p95 = 11.917 ms`
+  - `rosbag2_b1_upstairs`：`avg = 9.199 ms`，`max = 20.900 ms`，`p95 = 12.812 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 14.60 ms`，`p95 = 15.65 ms`，`p99 = 16.66 ms`
+  - `160k points`：`avg = 27.20 ms`，`p95 = 33.28 ms`，`p99 = 33.35 ms`
+
+当前结论：
+
+- false obstacle frozen bags 已归零。
+- miss obstacle frozen ROIs 未通过，且 Setup B 在当前更严格 publish gate 下退化为全 miss；剩余问题集中在 `EvidenceTooLow`、强 evidence cell 与当前 ROI source sample 对齐不足，以及低净空混合格子的 publish gate。
+- timing 未显示明显异常，但 Phase 4 的功能验收仍未完成。
+- **仍然不能切换 solver 主判定权，不能进入 Phase 5。**
+
+建议下一步：
+
+- 保留本轮 diagnostics，它已经能区分 `protrusion_evidence`、`overhead_evidence`、bridge hit 和实际 publish path。
+- false 侧当前可作为临时通过结果，但后续任何 miss 修复都必须重新跑完整 false frozen bags，避免强 protrusion 例外扩大 false 回潮。
+- miss 侧下一轮应聚焦 source sample 对齐和低净空混合格子的发布资格，而不是继续调整 low-clearance bridge 或切 solver。
+
+## 23. Phase 4 fix plan 4 推进状态（2026-04-21 16:55 +0800）
+
+本轮按 `docs/phase_4_fix_plan_4.md` 继续调查 false 侧 protrusion publish false 和 miss 侧 ROI source sample 对齐问题。仍未切换 `TraversabilitySolver` 主判定权，仍未进入 Phase 5。
+
+本轮关键结论：
+
+- `rosbag2_mtbf_upslope_and_downstair` 之前剩余的 1 帧 false 是 `LowClearance` cell 通过 protrusion publish path 被放出，不是 low-clearance bridge 直接命中。
+- 直接把 pure protrusion gain 从 `1.5` 提到 `1.6` 会让 `rosbag2_mtbf_upslope_and_downstair` 回潮到 `5 / 154`，`rosbag2_mtbf_short_downstair_1` 回潮到 `1 / 88`，因此已放弃该全局增益方案。
+- Setup B right 的最后 1 帧 miss 不是无候选，而是当前 ROI source cell 有 11~12 个真实样本，`protrusion_evidence ~= 0.375`，距离 `obstacle_points_min_evidence = 0.4` 只差一个很小的 evidence quantum。
+- A/B 剩余 miss 不全是同一问题：Setup A left 的最高 evidence 约 `0.32`，Setup A right 仍有 strong evidence cell 与当前 ROI source samples 不重合，Setup B left 有稀疏 source samples 和 low-clearance height gate 两类问题。
+
+本轮行为改动：
+
+- `PolarFrontend` 的 protrusion candidate evidence 改为按 `height_above_support / max_step_up` 归一化并 clamp 到 `[0, 1]`，保留 pure protrusion gain `1.5`，移除此前 wall-like 单 tall band 的额外 `1.5x` boost。
+- `/terrain_obstacle_points` protrusion publish path 对 `block_reason == LowClearance` 做直接抑制；`LowClearance` 只能通过 `clearance > max_step_up && overhead_evidence >= obstacle_points_min_evidence` 的 low-clearance bridge 发布。
+- obstacle point 下界门控从 `base_link.z >= -max_step_down` 调整为最终发布坐标下的 `base_gravity.z >= -max_step_down + obstacle_points_min_height`，并保留 `base_link.z <= obstacle_points_max_height_in_base_link` ceiling。
+- 新增 `DenseProtrusionSource` 近阈值发布资格：非 `LowClearance`、已有 frontend obstacle candidate、`protrusion_evidence >= obstacle_points_min_evidence - obstacle_evidence_gain * 0.1`，且 `raw_sample_count >= min_points_per_sector - 1`。该路径用于修复 dense side-board source cell 的单帧证据对齐问题，避免把 2~8 点的稀疏下楼梯投影放出。
+- analyzer / replay diagnostics 同步：
+  - miss representative cell 输出 `support_continuity`
+  - ROI inspect 输出 `sample_base_z`
+  - publish path 增加 `DenseProtrusionSource`
+
+自动化验证：
+
+- `colcon build --packages-select passable_area --symlink-install` 通过。
+- `colcon test --packages-select passable_area --event-handlers console_direct+` 通过。
+- `colcon test-result --verbose`：`Summary: 95 tests, 0 errors, 0 failures, 0 skipped`。
+
+false obstacle frozen bags（检测框 `x[0.0, 1.4] y[-0.25, 0.25]`，排除 x30 bag）：
+
+- `rosbag2_b1_upstairs`：`0 / 156`
+- `rosbag2_open_short_upstairs`：`0 / 120`
+- `rosbag2_mtbf_down_up_slope`：`0 / 219`
+- `rosbag2_mtbf_long_corridor`：`0 / 138`
+- `rosbag2_mtbf_upstair_and_downslope`：`0 / 129`
+- `rosbag2_mtbf_upstair_and_downslope_2`：`0 / 115`
+- `rosbag2_mtbf_upslope_and_downstair`：`0 / 154`
+- `rosbag2_mtbf_long_passage`：`0 / 146`
+- `rosbag2_mtbf_short_downstair_1`：`0 / 88`
+
+miss obstacle frozen ROIs：
+
+- Setup A `rosbag2_open_up_down_stairs`
+  - `left_board`：`1 / 4 miss`
+    - root cause：`EvidenceTooLow`
+  - `right_board`：`2 / 4 miss`
+    - root cause：`EvidenceTooLow` 1 帧，`NoObstacleSourceSamplesInRoi` 1 帧
+- Setup B `rosbag2_open_stair_and_slope`
+  - `left_side_board`：`2 / 3 miss`
+    - root cause：`EvidenceTooLow` 2 帧
+  - `right_side_board`：`0 / 3 miss`
+
+timing：
+
+- `offline_replay --benchmark-timing`
+  - `rosbag2_open_short_upstairs`：`avg = 6.755 ms`，`max = 10.245 ms`，`p95 = 9.689 ms`
+  - `rosbag2_open_up_down_stairs`：`avg = 7.505 ms`，`max = 11.256 ms`，`p95 = 10.031 ms`
+  - `rosbag2_open_stair_and_slope`：`avg = 6.780 ms`，`max = 9.468 ms`，`p95 = 7.845 ms`
+  - `rosbag2_b1_upstairs`：`avg = 6.492 ms`，`max = 9.833 ms`，`p95 = 8.926 ms`
+- `build/passable_area/passable_area_benchmark`
+  - `80k points`：`avg = 12.59 ms`，`p95 = 12.87 ms`，`p99 = 13.21 ms`
+  - `160k points`：`avg = 24.32 ms`，`p95 = 27.45 ms`，`p99 = 28.13 ms`
+
+当前结论：
+
+- false obstacle frozen bags 仍全 0。
+- Setup B right 已恢复到 `0 / 3 miss`，不再劣于 v1 patch 期望。
+- Setup A left/right 和 Setup B left 仍未通过，Phase 4 功能验收尚未完成。
+- timing 未显示异常。
+- **仍然不能切换 solver 主判定权，不能进入 Phase 5。**
+
+建议下一步：
+
+- Setup A left 不应再用全局 protrusion gain 解决；当前最高 evidence 只有约 `0.32`，需要重新判断 ROI 窗口首帧是否应接受更低 evidence、是否应引入更明确的 side-board source aggregation，或是否验收标准需要按帧窗口边界区分。
+- Setup A right 的 `NoObstacleSourceSamplesInRoi` 需要继续看 strong-evidence cell 和 ROI source sample 的空间错位，避免把无当前 source sample 的历史强证据直接当成外部障碍。
+- Setup B left 的两个剩余帧分别是稀疏 2~3 点 source 和 low-clearance height-gated source，不应套用本轮 dense source gate。
