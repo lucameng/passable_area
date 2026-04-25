@@ -76,12 +76,14 @@ TEST(ObstacleReasonerTest, LowClearanceGatedByStepRangeHeight) {
             static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByHeight));
 }
 
-TEST(ObstacleReasonerTest, ProtrusionBlocksWhenEvidenceAndContinuityAgree) {
+TEST(ObstacleReasonerTest, ProtrusionBlocksWhenEvidenceHighAndTallProtrusion) {
+  auto config = MakeConfig();
   auto layers = MakeLayers();
   layers.protrusion_evidence[1] = 0.7f;
-  layers.support_continuity[1] = 0.1f;
+  layers.support_height[1] = 0.0f;
+  layers.protrusion_height[1] = config.geometry.max_step_up + 0.1f;
 
-  const auto output = ObstacleReasoner(MakeConfig()).evaluate(layers);
+  const auto output = ObstacleReasoner(config).evaluate(layers);
 
   EXPECT_EQ(output.block_reason[1],
             static_cast<uint8_t>(BlockReason::kProtrusion));
@@ -109,7 +111,8 @@ TEST(ObstacleReasonerTest, EvidenceBelowPublishThresholdIsReportedAsGated) {
   config.obstacle_points_min_evidence = 0.8f;
   auto layers = MakeLayers();
   layers.protrusion_evidence[0] = 0.5f;
-  layers.support_continuity[0] = 0.1f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up + 0.1f;
 
   const auto output = ObstacleReasoner(config).evaluate(layers);
 

@@ -30,9 +30,6 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
     const float clearance = cell < layers.clearance.size()
                                 ? layers.clearance[cell]
                                 : std::numeric_limits<float>::quiet_NaN();
-    const float continuity = cell < layers.support_continuity.size()
-                                 ? layers.support_continuity[cell]
-                                 : 0.0f;
     const float slope = cell < layers.slope.size() ? layers.slope[cell] : 0.0f;
     const float step_up =
         cell < layers.step_up.size() ? layers.step_up[cell] : 0.0f;
@@ -57,7 +54,7 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
         std::isfinite(protrusion_height) && std::isfinite(support_height) &&
         (protrusion_height - support_height) > config_.geometry.max_step_up;
     const bool protrusion_blocking =
-        protrusion_evidence > 0.4f && (continuity < 0.3f || tall_protrusion);
+        protrusion_evidence > 0.4f && tall_protrusion;
     const bool geometry_failure =
         slope > config_.geometry.max_support_slope_deg ||
         step_up > config_.geometry.max_step_up ||
