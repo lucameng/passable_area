@@ -192,13 +192,6 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     const HeightBand &support_band = bands[support_band_index];
     const float support_z = support_band.bottom;
 
-    const float vertical_span = stats.max_z - stats.min_z;
-    const bool dropout = sector_state == ObservabilityState::kMissingByDropout;
-    if (!dropout) {
-      output.support_candidates.push_back(
-          SupportCandidate{cell, support_z, std::clamp(coverage, 0.0f, 1.0f)});
-    }
-
     const bool has_upper_band = support_band_index + 1U < bands.size();
     const HeightBand &protrusion_band =
         has_upper_band ? bands.back() : support_band;
@@ -216,6 +209,16 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     const bool protrusion_triggered =
         height_above_support > suspicious_vertical_span;
     const bool overhead_triggered = overhead_band != nullptr;
+    const bool dropout = sector_state == ObservabilityState::kMissingByDropout;
+
+    if (!dropout) {
+      const int obstacle_sample_count =
+          std::max(0, stats.count - support_band.count);
+      output.support_candidates.push_back(
+          SupportCandidate{cell, support_z, std::clamp(coverage, 0.0f, 1.0f),
+                           protrusion_triggered || overhead_triggered,
+                           support_band.count, obstacle_sample_count});
+    }
 
     if (protrusion_triggered || overhead_triggered) {
       output.obstacle_suspicious[static_cast<size_t>(cell)] = 1U;
@@ -232,10 +235,9 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
     }
     if (overhead_triggered) {
       const float clearance_gap = overhead_band->bottom - support_z;
-      output.overhead_candidates.push_back(
-          OverheadCandidate{cell, overhead_band->bottom,
-                            ComputeOverheadEvidence(config_, clearance_gap),
-                            1.0f});
+      output.overhead_candidates.push_back(OverheadCandidate{
+          cell, overhead_band->bottom,
+          ComputeOverheadEvidence(config_, clearance_gap), 1.0f});
     }
   }
 

@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
+#include <initializer_list>
 #include <limits>
+#include <utility>
 
 namespace {
 
@@ -183,6 +185,20 @@ FrameInput MakeSingleCellColumnFrame(int upper_sample_count, int stamp = 1,
   return input;
 }
 
+FrameInput MakeSingleCellZCountsFrame(
+    std::initializer_list<std::pair<float, int>> z_counts, int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (const auto &[z, count] : z_counts) {
+    for (int i = 0; i < count; ++i) {
+      input.input_cloud_in_base.push_back({0.25f, 0.25f, z});
+    }
+  }
+  return input;
+}
+
 FrameInput MakeWallWithBaseNoiseFrame(int stamp = 1) {
   FrameInput input;
   input.stamp = stamp;
@@ -328,10 +344,9 @@ int CountRearObstaclePoints(const passable_area::core::FrameOutput &output) {
 }
 
 bool IsPublishedObstaclePointStatus(uint8_t status) {
-  switch (static_cast<passable_area::core::ObstaclePointPublishStatus>(
-      status)) {
-  case passable_area::core::ObstaclePointPublishStatus::
-      kPublishedByProtrusion:
+  switch (
+      static_cast<passable_area::core::ObstaclePointPublishStatus>(status)) {
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByProtrusion:
   case passable_area::core::ObstaclePointPublishStatus::
       kPublishedByDenseProtrusion:
   case passable_area::core::ObstaclePointPublishStatus::
@@ -758,8 +773,7 @@ TEST(ProcessorTest, RearDropoutBridgeReprojectsAfterYawRotation) {
           return source_point.point.x < 0.0f &&
                  std::abs(bridged_point.point.x - source_point.point.x) <
                      1e-4f &&
-                 std::abs(bridged_point.point.y - source_point.point.y) <
-                     1e-4f;
+                 std::abs(bridged_point.point.y - source_point.point.y) < 1e-4f;
         });
     EXPECT_FALSE(still_at_old_base_gravity_xy);
   }
@@ -788,11 +802,12 @@ TEST(ProcessorTest,
   for (const auto &point : dropout_output.obstacle_points) {
     ASSERT_GE(point.source_cell, 0);
     ASSERT_LT(point.source_cell, dropout_output.rows * dropout_output.cols);
-    ASSERT_TRUE(std::isfinite(dropout_output.support_height[point.source_cell]));
+    ASSERT_TRUE(
+        std::isfinite(dropout_output.support_height[point.source_cell]));
     EXPECT_GT(point.point.z, dropout_output.support_height[point.source_cell] +
-                               config.geometry.max_step_up);
+                                 config.geometry.max_step_up);
     EXPECT_GE(point.point.z, dropout_output.support_height[point.source_cell] +
-                               config.obstacle_points_min_height);
+                                 config.obstacle_points_min_height);
   }
 }
 
@@ -1064,6 +1079,8 @@ TEST(
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().z, 0.45f);
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().evidence, 1.0f);
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().gain_scale, 1.5f);
+  ASSERT_EQ(output.support_candidates.size(), 1U);
+  EXPECT_TRUE(output.support_candidates.front().obstacle_overlap);
   EXPECT_EQ(output.obstacle_suspicious[static_cast<size_t>(cell)], 1U);
   EXPECT_EQ(output.obstacle_candidate_cell[static_cast<size_t>(cell)], 1U);
 }
@@ -1135,6 +1152,9 @@ TEST(ProcessorTest, PolarFrontendDoesNotCreateProtrusionForSmallLayeredStep) {
   EXPECT_TRUE(output.protrusion_candidates.empty());
   ASSERT_EQ(output.support_candidates.size(), 1U);
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, 0.0f);
+  EXPECT_TRUE(output.support_candidates.front().obstacle_overlap);
+  EXPECT_EQ(output.support_candidates.front().support_sample_count, 1);
+  EXPECT_EQ(output.support_candidates.front().obstacle_sample_count, 1);
 }
 
 TEST(ProcessorTest, PolarFrontendFiltersSparseLowerLeakFromSupportBand) {
@@ -1157,6 +1177,7 @@ TEST(ProcessorTest, PolarFrontendFiltersSparseLowerLeakFromSupportBand) {
 
   ASSERT_EQ(output.support_candidates.size(), 1U);
   EXPECT_FLOAT_EQ(output.support_candidates.front().z, 0.0f);
+  EXPECT_TRUE(output.support_candidates.front().obstacle_overlap);
   ASSERT_EQ(output.protrusion_candidates.size(), 1U);
   EXPECT_FLOAT_EQ(output.protrusion_candidates.front().z, 0.35f);
 }
@@ -1324,6 +1345,176 @@ TEST(ProcessorTest,
       updater.update(frontend_output, observability, base_pose, map);
 
   ASSERT_FALSE(dirty.empty());
+  EXPECT_EQ(map.layers().support_state[3],
+            static_cast<uint8_t>(SupportState::kObserved));
+}
+
+TEST(ProcessorTest,
+     ObstacleOverlappedSupportDoesNotRaiseTrustedReachableSupport) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  map.layers().support_height[3] = 0.0f;
+  map.layers().support_confidence[3] = 1.0f;
+  map.layers().support_state[3] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+
+  FrontendOutput frontend_output;
+  frontend_output.support_candidates.push_back(
+      SupportCandidate{3, 0.06f, 1.0f, true});
+  frontend_output.protrusion_candidates.push_back(
+      ProtrusionCandidate{3, 0.37f, 1.0f, 1.5f});
+
+  const auto dirty =
+      updater.update(frontend_output, observability, base_pose, map);
+
+  ASSERT_FALSE(dirty.empty());
+  EXPECT_FLOAT_EQ(map.layers().support_height[3], 0.0f);
+  EXPECT_GE(map.layers().support_confidence[3],
+            config.observability.min_support_confidence);
+  EXPECT_GT(map.layers().protrusion_evidence[3], 0.0f);
+}
+
+TEST(ProcessorTest, RejectedObstacleOverlapRefreshesRetainedTrustedSupport) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+  config.persistence.support_confidence_decay = 0.4f;
+  config.persistence.support_persistence_frames = 2;
+
+  LocalTerrainMap map(config);
+  map.layers().support_height[3] = 0.0f;
+  map.layers().support_confidence[3] = 0.3f;
+  map.layers().support_state[3] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+
+  FrontendOutput frontend_output;
+  frontend_output.support_candidates.push_back(
+      SupportCandidate{3, 0.06f, 1.0f, true});
+  frontend_output.protrusion_candidates.push_back(
+      ProtrusionCandidate{3, 0.37f, 1.0f, 1.5f});
+
+  for (int i = 0; i < 8; ++i) {
+    updater.update(frontend_output, observability, base_pose, map);
+  }
+
+  EXPECT_FLOAT_EQ(map.layers().support_height[3], 0.0f);
+  EXPECT_GE(map.layers().support_confidence[3],
+            config.observability.min_support_confidence);
+  EXPECT_EQ(map.layers().support_state[3],
+            static_cast<uint8_t>(SupportState::kPersistent));
+  EXPECT_EQ(map.layers().last_reliable_age[3], 0U);
+  EXPECT_GT(map.layers().protrusion_evidence[3], 0.0f);
+}
+
+TEST(ProcessorTest, NonOverlappedSupportCanRaiseReachableSupport) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  map.layers().support_height[3] = 0.0f;
+  map.layers().support_confidence[3] = 1.0f;
+  map.layers().support_state[3] =
+      static_cast<uint8_t>(SupportState::kPersistent);
+
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+
+  FrontendOutput frontend_output;
+  frontend_output.support_candidates.push_back(
+      SupportCandidate{3, 0.08f, 1.0f, false});
+
+  updater.update(frontend_output, observability, base_pose, map);
+
+  EXPECT_FLOAT_EQ(map.layers().support_height[3], 0.08f);
+  EXPECT_EQ(map.layers().support_state[3],
+            static_cast<uint8_t>(SupportState::kObserved));
+}
+
+TEST(ProcessorTest,
+     ObstacleOverlappedSupportCanInitializeWhenNoTrustedSupportExists) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  map.layers().support_height[3] = 0.0f;
+  map.layers().support_confidence[3] =
+      config.observability.min_support_confidence * 0.5f;
+
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+
+  FrontendOutput frontend_output;
+  frontend_output.support_candidates.push_back(
+      SupportCandidate{3, 0.06f, 1.0f, true});
+
+  updater.update(frontend_output, observability, base_pose, map);
+
+  EXPECT_FLOAT_EQ(map.layers().support_height[3], 0.06f);
+  EXPECT_GE(map.layers().support_confidence[3],
+            config.observability.min_support_confidence);
+}
+
+TEST(ProcessorTest,
+     ObstacleOverlappedSupportCanInitializeWhenSupportIsUnknown) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  map.layers().support_height[3] = std::numeric_limits<float>::quiet_NaN();
+  map.layers().support_confidence[3] = 0.0f;
+
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+
+  FrontendOutput frontend_output;
+  frontend_output.support_candidates.push_back(
+      SupportCandidate{3, 0.06f, 1.0f, true});
+
+  updater.update(frontend_output, observability, base_pose, map);
+
+  EXPECT_FLOAT_EQ(map.layers().support_height[3], 0.06f);
   EXPECT_EQ(map.layers().support_state[3],
             static_cast<uint8_t>(SupportState::kObserved));
 }
@@ -1524,9 +1715,9 @@ TEST(ProcessorTest, ObstaclePointPublishStatusMatchesActualNativePoints) {
               static_cast<int8_t>(PassabilityState::kImpassable));
     ASSERT_TRUE(std::isfinite(output.support_height[point.source_cell]));
     EXPECT_GT(point.point.z, output.support_height[point.source_cell] +
-                               config.geometry.max_step_up);
+                                 config.geometry.max_step_up);
     EXPECT_GE(point.point.z, output.support_height[point.source_cell] +
-                               config.obstacle_points_min_height);
+                                 config.obstacle_points_min_height);
   }
 
   for (int cell = 0; cell < output.rows * output.cols; ++cell) {
@@ -1543,8 +1734,7 @@ TEST(ProcessorTest, ObstaclePointPublishStatusMatchesActualNativePoints) {
   }
 }
 
-TEST(ProcessorTest,
-     DenseCurrentFrameProtrusionSourcePublishesObstaclePoints) {
+TEST(ProcessorTest, DenseCurrentFrameProtrusionSourcePublishesObstaclePoints) {
   auto config = MakeConfig();
   config.map.length = 2.0f;
   config.map.width = 2.0f;
@@ -1621,7 +1811,8 @@ TEST(ProcessorTest, DenseNearThresholdStepRangeDoesNotPublishObstaclePoints) {
   EXPECT_TRUE(output.obstacle_points.empty());
 }
 
-TEST(ProcessorTest, StepUpBoundaryWithHighEvidenceDoesNotPublishObstaclePoints) {
+TEST(ProcessorTest,
+     StepUpBoundaryWithHighEvidenceDoesNotPublishObstaclePoints) {
   auto config = MakeConfig();
   config.map.length = 2.0f;
   config.map.width = 2.0f;
@@ -1651,6 +1842,129 @@ TEST(ProcessorTest, StepUpBoundaryWithHighEvidenceDoesNotPublishObstaclePoints) 
       output.obstacle_point_publish_status[cell],
       static_cast<uint8_t>(
           passable_area::core::ObstaclePointPublishStatus::kGatedByHeight));
+  EXPECT_TRUE(output.obstacle_points.empty());
+}
+
+TEST(ProcessorTest,
+     ObstacleOverlappedSupportDoesNotHideTallCurrentObstaclePoint) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.geometry.max_step_up = 0.32f;
+  config.geometry.min_clearance = 0.5f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 4;
+  config.obstacle_points_min_evidence = 0.4f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(
+      processor.update(MakeSingleCellZCountsFrame({{0.0f, 6}}, 1)).valid);
+  const auto output = processor.update(
+      MakeSingleCellZCountsFrame({{0.06f, 3}, {0.37f, 4}}, 100000001));
+  ASSERT_TRUE(output.valid);
+
+  const int cell = CellIndex(output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  EXPECT_NEAR(output.support_height[cell], 0.0f, 1e-5f);
+  EXPECT_TRUE(IsPublishedObstaclePointStatus(
+      output.obstacle_point_publish_status[cell]));
+  EXPECT_TRUE(HasObstaclePointNearZ(output, 0.37f));
+}
+
+TEST(ProcessorTest,
+     PersistentObstacleOverlapDoesNotDecaySupportAndHideObstacle) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.geometry.max_step_up = 0.32f;
+  config.geometry.min_clearance = 0.5f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 4;
+  config.persistence.support_confidence_decay = 0.4f;
+  config.persistence.support_persistence_frames = 2;
+  config.obstacle_points_min_evidence = 0.4f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(
+      processor.update(MakeSingleCellZCountsFrame({{0.0f, 6}}, 1)).valid);
+  passable_area::core::FrameOutput output;
+  for (int i = 0; i < 8; ++i) {
+    output = processor.update(MakeSingleCellZCountsFrame(
+        {{0.06f, 3}, {0.37f, 4}}, 100000001 + i * 100000000));
+    ASSERT_TRUE(output.valid);
+  }
+
+  const int cell = CellIndex(output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  EXPECT_NEAR(output.support_height[cell], 0.0f, 1e-5f);
+  EXPECT_GE(output.support_confidence[cell],
+            config.observability.min_support_confidence);
+  EXPECT_TRUE(IsPublishedObstaclePointStatus(
+      output.obstacle_point_publish_status[cell]));
+  EXPECT_TRUE(HasObstaclePointNearZ(output, 0.37f));
+}
+
+TEST(ProcessorTest,
+     ObstacleOverlappedSupportCanInitializeWithoutPublishingStepRangePoint) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.geometry.max_step_up = 0.32f;
+  config.geometry.min_clearance = 0.5f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 4;
+  config.obstacle_points_min_evidence = 0.4f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  const auto output =
+      processor.update(MakeSingleCellZCountsFrame({{0.06f, 3}, {0.37f, 4}}));
+  ASSERT_TRUE(output.valid);
+
+  const int cell = CellIndex(output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  EXPECT_NEAR(output.support_height[cell], 0.06f, 1e-5f);
+  EXPECT_FALSE(IsPublishedObstaclePointStatus(
+      output.obstacle_point_publish_status[cell]));
+  EXPECT_TRUE(output.obstacle_points.empty());
+}
+
+TEST(ProcessorTest, NonOverlappedSmallStepRaisesCurrentSupportWithoutPublish) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.geometry.max_step_up = 0.32f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 4;
+  config.obstacle_points_min_evidence = 0.4f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(
+      processor.update(MakeSingleCellZCountsFrame({{0.0f, 6}}, 1)).valid);
+  const auto output =
+      processor.update(MakeSingleCellZCountsFrame({{0.08f, 6}}, 100000001));
+  ASSERT_TRUE(output.valid);
+
+  const int cell = CellIndex(output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  EXPECT_NEAR(output.support_height[cell], 0.08f, 1e-5f);
+  EXPECT_FALSE(IsPublishedObstaclePointStatus(
+      output.obstacle_point_publish_status[cell]));
   EXPECT_TRUE(output.obstacle_points.empty());
 }
 

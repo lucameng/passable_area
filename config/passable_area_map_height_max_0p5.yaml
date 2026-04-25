@@ -7,7 +7,7 @@ passable_area:
     map_height_max: 0.5
 
     max_support_slope: 28.0
-    max_step_up: 0.22
+    max_step_up: 0.32
     max_step_down: 0.38
     max_support_roughness: 0.08
     min_clearance: 0.5

@@ -58,22 +58,45 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
 
   for (const auto &candidate : frontend_output.support_candidates) {
     const auto sector = sector_state_for_cell(candidate.cell);
-    layers.support_height[candidate.cell] = candidate.z;
-    layers.support_confidence[candidate.cell] = std::clamp(
-        layers.support_confidence[candidate.cell] +
-            config_.persistence.support_confidence_gain * candidate.confidence,
-        0.0f, 1.0f);
     layers.coverage_confidence[candidate.cell] = std::max(
         layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
-    layers.support_state[candidate.cell] =
-        static_cast<uint8_t>(SupportState::kObserved);
-    layers.last_observed_age[candidate.cell] = 0;
-    if (sector.state == ObservabilityState::kObserved) {
-      layers.last_reliable_age[candidate.cell] = 0;
-    }
     layers.last_sector_state[candidate.cell] =
         static_cast<uint8_t>(sector.state);
-    touched_support[candidate.cell] = 1U;
+
+    const bool current_support_trusted =
+        std::isfinite(layers.support_height[candidate.cell]) &&
+        layers.support_confidence[candidate.cell] >=
+            config_.observability.min_support_confidence;
+    const bool support_band_independently_observed =
+        candidate.support_sample_count >=
+            config_.observability.min_points_per_sector &&
+        candidate.support_sample_count > candidate.obstacle_sample_count;
+    const bool obstacle_overlap_lifts_support =
+        candidate.obstacle_overlap && current_support_trusted &&
+        candidate.z > layers.support_height[candidate.cell] &&
+        !support_band_independently_observed;
+    if (obstacle_overlap_lifts_support) {
+      layers.support_state[candidate.cell] =
+          static_cast<uint8_t>(SupportState::kPersistent);
+      if (sector.state == ObservabilityState::kObserved) {
+        layers.last_reliable_age[candidate.cell] = 0;
+      }
+      touched_support[candidate.cell] = 1U;
+    } else {
+      layers.support_height[candidate.cell] = candidate.z;
+      layers.support_confidence[candidate.cell] =
+          std::clamp(layers.support_confidence[candidate.cell] +
+                         config_.persistence.support_confidence_gain *
+                             candidate.confidence,
+                     0.0f, 1.0f);
+      layers.support_state[candidate.cell] =
+          static_cast<uint8_t>(SupportState::kObserved);
+      layers.last_observed_age[candidate.cell] = 0;
+      if (sector.state == ObservabilityState::kObserved) {
+        layers.last_reliable_age[candidate.cell] = 0;
+      }
+      touched_support[candidate.cell] = 1U;
+    }
     dirty_set.insert(candidate.cell);
   }
 

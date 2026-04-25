@@ -12,6 +12,9 @@ struct SupportCandidate {
   int cell = -1;
   float z = 0.0f;
   float confidence = 0.0f;
+  bool obstacle_overlap = false;
+  int support_sample_count = 0;
+  int obstacle_sample_count = 0;
 };
 
 struct ProtrusionCandidate {

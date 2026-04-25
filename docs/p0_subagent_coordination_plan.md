@@ -128,6 +128,51 @@
 | Agent D | Verified | `test/core/test_processor.cpp`, `docs/p0_subagent_coordination_plan.md` | Reviewed A/B/C P0 coverage and added focused non-bag tests for cross-output publication consistency, `height == max_step_up` high-evidence no-publish behavior, and rear bridge yaw reprojection. Main integration passed `colcon build`, full `colcon test`, and `colcon test-result --verbose` with `105 tests, 0 errors, 0 failures, 0 skipped`; obstacle benchmark stayed at suspicious frames `0` for all six frozen bags; miss benchmark met baseline: Setup A left `1/4`, Setup A right `2/4`, Setup B left `2/3`, Setup B right `0/3`. | None. | P0 complete; keep P1/P2 out of this round. |
 | Agent E | Verified | `include/passable_area/core/mapping/dropout_aware_map_updater.hpp`, `include/passable_area/core/obstacle_reasoner.hpp`, `src/core/mapping/dropout_aware_map_updater.cpp`, `src/core/obstacle_reasoner.cpp`, `src/core/processor.cpp`, `src/tools/false_obstacle_analyzer.cpp`, `test/core/test_obstacle_reasoner.cpp`, `test/core/test_processor.cpp`, `tools/offline_replay.cpp`, `config/passable_area_map_height_max_0p5.yaml`, `docs/p0_subagent_coordination_plan.md` | Fixed review residuals on top of A/B/C/D: rear bridge now rechecks current-cell finite support and current support-relative height before publishing cached map points; native and bridge obstacle sample publication require `height > max_step_up`; dense publication is explicit Reasoner contract using current-frame obstacle candidate, dense raw source, current protrusion evidence gain, and current obstacle-candidate height rather than the old hidden `0.1f` tolerance; removed the unsafe `DropoutAwareMapUpdater::update(..., map)` overload so callers must pass `base_pose_in_map`; false/offline analyzers derive publish path from `obstacle_point_publish_status`; the miss acceptance preset uses `max_step_up: 0.22` so the `height > max_step_up` P0 contract and ROI baseline are mutually consistent without changing the main false-obstacle benchmark preset. Added tests for raised-current-support bridge rejection, legal bridge publication, bridge step-range rejection, dense current-frame contract, dense no-candidate rejection, sparse dense rejection, `block_reason == kNone` non-publication, current candidate height with NaN persisted protrusion height, and explicit identity-pose updater calls. Validation: `colcon build --packages-select passable_area --symlink-install` passed; full `colcon test --packages-select passable_area --event-handlers console_direct+` passed; `colcon test-result --verbose` reported `112 tests, 0 errors, 0 failures, 0 skipped`; obstacle benchmark stayed at suspicious frames `0` for all six frozen bags; miss benchmark met or exceeded baseline: Setup A left `0/4`, Setup A right `1/4`, Setup B left `2/3`, Setup B right `0/3`. | None. | P0 ready for final review and commit. |
 
+### Post-commit blocking regression note
+
+`7664b9c8cd2692d29893048c297437e4c3b563a5` (`fix: close P0 obstacle publication contract gaps`) is **not a clean P0 acceptance commit**. The reported miss benchmark improvement was polluted by changing `config/passable_area_map_height_max_0p5.yaml` from `max_step_up: 0.32` to `max_step_up: 0.22` while the main runtime preset `config/passable_area.yaml` remained `0.32`. Because P0 also tightened obstacle point publication to `sample.z > support_ref + max_step_up`, this config change redefined the physical robot capability used by miss acceptance.
+
+After restoring `config/passable_area_map_height_max_0p5.yaml` to `max_step_up: 0.32` and rerunning `config/acceptance_rois.yaml`, the true post-P0 result is:
+
+| Setup | ROI | Result with `max_step_up: 0.32` | P0 baseline | Status |
+| --- | --- | --- | --- | --- |
+| Setup A `open_up_down_stairs` | `left_board` | `1 / 4 miss` | `1 / 4 miss` | No regression |
+| Setup A `open_up_down_stairs` | `right_board` | `3 / 4 miss` | `2 / 4 miss` | **Blocking regression** |
+| Setup B `open_stair_and_slope` | `left_side_board` | `2 / 3 miss` | `2 / 3 miss` | No regression |
+| Setup B `open_stair_and_slope` | `right_side_board` | `0 / 3 miss` | `0 / 3 miss` | No regression |
+
+Required repair: remove the acceptance-preset physical-parameter change from the P0 fix path and repair the Setup A `right_board` regression using a best-practice algorithmic fix. Do not use fallback/patch-specific handling, do not change tests to fit the implementation, and do not redefine the robot physical capability unless the main runtime config, docs, and baselines are intentionally revalidated as a separate calibration change.
+
+### Post-commit regression repair progress
+
+Repair status: **Verified**.
+
+Changed files:
+
+- `include/passable_area/core/candidate_types.hpp`
+- `src/core/polar_frontend.cpp`
+- `src/core/mapping/dropout_aware_map_updater.cpp`
+- `test/core/test_processor.cpp`
+- `config/passable_area_map_height_max_0p5.yaml` remains restored at `max_step_up: 0.32`
+- `docs/p0_subagent_coordination_plan.md`
+
+Root cause: Setup A `right_board` regressed because same-frame support updates could let the lower band of an obstacle/protrusion structure lift the cell's reachable support. In the extra missed frame, the current source cell still had protrusion evidence and current obstacle samples, but the lifted support made the current obstacle candidate appear to be within `max_step_up: 0.32`; Reasoner therefore selected no publishable block reason. The issue was support/protrusion provenance contamination in the frontend-to-map update path, not the physical `max_step_up` value.
+
+Fix: `PolarFrontend` now attaches explicit `SupportCandidate::obstacle_overlap` provenance plus support-band and obstacle-band sample counts when the same cell also triggers protrusion or overhead formation. `DropoutAwareMapUpdater` consumes that provenance and refuses to let an obstacle-overlapped support candidate raise an already trusted reachable support surface unless the support band is independently observed with stronger sample support than the upper/obstacle band. Rejected overlap is modeled as "existing trusted support retained": the support height is not raised, but the retained support is marked touched and its reliable age is refreshed in observed sectors so a long-lived static obstacle cannot decay the support to `None` and later reinitialize itself as ground. It still allows non-overlapped support to move naturally and allows overlapped support to initialize cells that do not yet have trusted support. Reasoner consumes the normal `layers.support_height` only; no publication-only support reference is injected into classification, and Processor's native point gate remains tied to the same current reachable support layer. Rear bridge publication continues to recheck current support-relative height and is not allowed to bypass this contract.
+
+Why this is not a fallback or patch-specific fix: the rule is dataflow-local and tied to explicit observation provenance plus existing support confidence. It has no bag, ROI, frame, coordinate-range, or filename condition, adds no parameter, does not lower `max_step_up`, and does not restore the old global floor clamp. It also preserves legitimate terrain changes: a non-overlapped small step can raise reachable support, while an obstacle-overlapped band cannot retroactively hide the obstacle by redefining support in the same cell.
+
+Validation:
+
+- Added core tests for support provenance, trusted-support non-raise behavior, retained-support refresh under repeated rejected overlap, allowed non-overlapped support raise, untrusted/unknown initialization, current obstacle publication when support pollution is suppressed, persistent static-overlap publication, no publication when no trusted support exists, and legal small-step support rise.
+- `colcon build --packages-select passable_area --symlink-install`: pass.
+- `ROS_LOG_DIR=/tmp colcon test --packages-select passable_area --event-handlers console_direct+`: pass.
+- `colcon test-result --verbose`: `121 tests, 0 errors, 0 failures, 0 skipped`.
+- Miss benchmark with `config/passable_area_map_height_max_0p5.yaml` at `max_step_up: 0.32`: Setup A `left_board` `1/4 miss`, Setup A `right_board` `2/4 miss`, Setup B `left_side_board` `2/3 miss`, Setup B `right_side_board` `0/3 miss`.
+- False-obstacle frozen bags with `config/passable_area.yaml`: `rosbag2_mtbf_down_up_slope`, `rosbag2_mtbf_upstair_and_downslope`, `rosbag2_mtbf_upstair_and_downslope_2`, `rosbag2_mtbf_short_upstair_1`, `rosbag2_mtbf_long_corridor`, and `rosbag2_mtbf_long_passage` all stayed at `suspicious_frames: 0`.
+
+Remaining blockers: None.
+
 状态枚举：
 
 - `Not started`
