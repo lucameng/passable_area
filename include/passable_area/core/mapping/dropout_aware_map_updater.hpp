@@ -16,6 +16,7 @@ public:
 
   std::vector<int> update(const FrontendOutput &frontend_output,
                           const FrameObservability &observability,
+                          const Pose3D &base_pose_in_map,
                           LocalTerrainMap &map) const;
 
 private:

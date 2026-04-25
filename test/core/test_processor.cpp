@@ -168,7 +168,8 @@ FrameInput MakeObstacleColumnFrame(int stamp = 1) {
   return input;
 }
 
-FrameInput MakeSingleCellColumnFrame(int upper_sample_count, int stamp = 1) {
+FrameInput MakeSingleCellColumnFrame(int upper_sample_count, int stamp = 1,
+                                     float upper_height = 0.45f) {
   FrameInput input;
   input.stamp = stamp;
   input.base_pose_in_map.position = Eigen::Vector3f::Zero();
@@ -177,7 +178,7 @@ FrameInput MakeSingleCellColumnFrame(int upper_sample_count, int stamp = 1) {
     input.input_cloud_in_base.push_back({0.25f, 0.25f, 0.0f});
   }
   for (int i = 0; i < upper_sample_count; ++i) {
-    input.input_cloud_in_base.push_back({0.25f, 0.25f, 0.45f});
+    input.input_cloud_in_base.push_back({0.25f, 0.25f, upper_height});
   }
   return input;
 }
@@ -293,6 +294,24 @@ FrameInput MakeRearObstacleCellFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeTranslatedFrontRaisedColumnFrame(float base_x, float support_z,
+                                                float obstacle_z,
+                                                int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f(base_x, 0.0f, 0.0f);
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (float x = 0.0f; x <= 1.2f; x += 0.05f) {
+    for (float y = -1.0f; y <= 1.0f; y += 0.05f) {
+      input.input_cloud_in_base.push_back({x, y, support_z});
+    }
+  }
+  input.input_cloud_in_base.push_back({0.0f, 0.8f, obstacle_z});
+  input.input_cloud_in_base.push_back({0.02f, 0.8f, obstacle_z});
+  input.input_cloud_in_base.push_back({0.0f, 0.82f, obstacle_z});
+  return input;
+}
+
 int CellIndex(const passable_area::core::FrameOutput &output, float x,
               float y) {
   const int col =
@@ -306,6 +325,34 @@ int CountRearObstaclePoints(const passable_area::core::FrameOutput &output) {
   return static_cast<int>(std::count_if(
       output.obstacle_points.begin(), output.obstacle_points.end(),
       [](const auto &point) { return point.point.x < 0.0f; }));
+}
+
+bool IsPublishedObstaclePointStatus(uint8_t status) {
+  switch (static_cast<passable_area::core::ObstaclePointPublishStatus>(
+      status)) {
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByProtrusion:
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByDenseProtrusion:
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByGeometryFailure:
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
+    return true;
+  case passable_area::core::ObstaclePointPublishStatus::kNotApplicable:
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByHeight:
+  case passable_area::core::ObstaclePointPublishStatus::kBlockedButNoSamples:
+    return false;
+  }
+  return false;
+}
+
+bool HasObstaclePointNearZ(const passable_area::core::FrameOutput &output,
+                           float z, float tolerance = 1e-4f) {
+  return std::any_of(output.obstacle_points.begin(),
+                     output.obstacle_points.end(), [&](const auto &point) {
+                       return std::abs(point.point.z - z) <= tolerance;
+                     });
 }
 
 passable_area::core::Config MakeConfig() {
@@ -595,6 +642,7 @@ TEST(ProcessorTest, RearDropoutIsFlaggedAndSupportPersists) {
 
 TEST(ProcessorTest, RearDropoutBridgesPreviousRearObstaclePointsForOneFrame) {
   auto config = MakeConfig();
+  config.map.resolution = 0.3f;
   config.obstacle_points_min_evidence = 0.2f;
   config.obstacle_points_min_height = 0.1f;
   config.obstacle_points_max_height_in_base_link = 1.0f;
@@ -610,8 +658,209 @@ TEST(ProcessorTest, RearDropoutBridgesPreviousRearObstaclePointsForOneFrame) {
   const auto dropout_output = processor.update(MakeFrontOnlyFrame(300000001));
   ASSERT_TRUE(dropout_output.valid);
   EXPECT_TRUE(dropout_output.observability.rear_dropout);
-  EXPECT_EQ(CountRearObstaclePoints(dropout_output),
+  EXPECT_GT(CountRearObstaclePoints(dropout_output), 0);
+  EXPECT_LE(CountRearObstaclePoints(dropout_output),
             CountRearObstaclePoints(source_output));
+}
+
+TEST(ProcessorTest, RearDropoutBridgeReprojectsAfterTranslation) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_GT(CountRearObstaclePoints(source_output), 0);
+
+  auto dropout_frame = MakeFrontOnlyFrame(300000001);
+  dropout_frame.base_pose_in_map.position.x() = 0.1f;
+  const auto dropout_output = processor.update(dropout_frame);
+  ASSERT_TRUE(dropout_output.valid);
+  ASSERT_TRUE(dropout_output.observability.rear_dropout);
+  ASSERT_GT(CountRearObstaclePoints(dropout_output), 0);
+  ASSERT_LE(CountRearObstaclePoints(dropout_output),
+            CountRearObstaclePoints(source_output));
+  for (const auto &bridged_point : dropout_output.obstacle_points) {
+    if (bridged_point.point.x >= 0.0f) {
+      continue;
+    }
+    const bool matches_reprojected_source = std::any_of(
+        source_output.obstacle_points.begin(),
+        source_output.obstacle_points.end(), [&](const auto &source_point) {
+          return source_point.point.x < 0.0f &&
+                 std::abs((bridged_point.point.x + 0.1f) -
+                          source_point.point.x) < 1e-4f;
+        });
+    EXPECT_TRUE(matches_reprojected_source);
+    const bool still_at_old_base_gravity_x = std::any_of(
+        source_output.obstacle_points.begin(),
+        source_output.obstacle_points.end(), [&](const auto &source_point) {
+          return source_point.point.x < 0.0f &&
+                 std::abs(bridged_point.point.x - source_point.point.x) < 1e-4f;
+        });
+    EXPECT_FALSE(still_at_old_base_gravity_x);
+  }
+}
+
+TEST(ProcessorTest, RearDropoutBridgeReprojectsAfterYawRotation) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_GT(CountRearObstaclePoints(source_output), 0);
+
+  constexpr float kYaw = 0.2f;
+  auto dropout_frame = MakeFrontOnlyFrame(300000001);
+  dropout_frame.base_pose_in_map.orientation =
+      Eigen::AngleAxisf(kYaw, Eigen::Vector3f::UnitZ());
+  const auto dropout_output = processor.update(dropout_frame);
+  ASSERT_TRUE(dropout_output.valid);
+  ASSERT_TRUE(dropout_output.observability.rear_dropout);
+  ASSERT_GT(CountRearObstaclePoints(dropout_output), 0);
+  ASSERT_LE(CountRearObstaclePoints(dropout_output),
+            CountRearObstaclePoints(source_output));
+
+  const float cos_yaw = std::cos(kYaw);
+  const float sin_yaw = std::sin(kYaw);
+  for (const auto &bridged_point : dropout_output.obstacle_points) {
+    if (bridged_point.point.x >= 0.0f) {
+      continue;
+    }
+    const bool matches_reprojected_source = std::any_of(
+        source_output.obstacle_points.begin(),
+        source_output.obstacle_points.end(), [&](const auto &source_point) {
+          if (source_point.point.x >= 0.0f) {
+            return false;
+          }
+          const float expected_x =
+              cos_yaw * source_point.point.x + sin_yaw * source_point.point.y;
+          const float expected_y =
+              -sin_yaw * source_point.point.x + cos_yaw * source_point.point.y;
+          return std::abs(bridged_point.point.x - expected_x) < 1e-4f &&
+                 std::abs(bridged_point.point.y - expected_y) < 1e-4f;
+        });
+    EXPECT_TRUE(matches_reprojected_source);
+    const bool still_at_old_base_gravity_xy = std::any_of(
+        source_output.obstacle_points.begin(),
+        source_output.obstacle_points.end(), [&](const auto &source_point) {
+          return source_point.point.x < 0.0f &&
+                 std::abs(bridged_point.point.x - source_point.point.x) <
+                     1e-4f &&
+                 std::abs(bridged_point.point.y - source_point.point.y) <
+                     1e-4f;
+        });
+    EXPECT_FALSE(still_at_old_base_gravity_xy);
+  }
+}
+
+TEST(ProcessorTest,
+     RearDropoutBridgeDropsCachedPointBelowCurrentSupportRelativeGate) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_TRUE(HasObstaclePointNearZ(source_output, 0.45f));
+
+  const auto dropout_output = processor.update(
+      MakeTranslatedFrontRaisedColumnFrame(-0.8f, 0.4f, 0.8f, 300000001));
+  ASSERT_TRUE(dropout_output.valid);
+  ASSERT_TRUE(dropout_output.observability.rear_dropout);
+  EXPECT_FALSE(HasObstaclePointNearZ(dropout_output, 0.45f));
+  for (const auto &point : dropout_output.obstacle_points) {
+    ASSERT_GE(point.source_cell, 0);
+    ASSERT_LT(point.source_cell, dropout_output.rows * dropout_output.cols);
+    ASSERT_TRUE(std::isfinite(dropout_output.support_height[point.source_cell]));
+    EXPECT_GT(point.point.z, dropout_output.support_height[point.source_cell] +
+                               config.geometry.max_step_up);
+    EXPECT_GE(point.point.z, dropout_output.support_height[point.source_cell] +
+                               config.obstacle_points_min_height);
+  }
+}
+
+TEST(ProcessorTest,
+     RearDropoutBridgePublishesCachedPointAboveCurrentSupportRelativeGate) {
+  auto config = MakeConfig();
+  config.map.resolution = 0.3f;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_TRUE(HasObstaclePointNearZ(source_output, 0.45f));
+
+  const auto dropout_output = processor.update(
+      MakeTranslatedFrontRaisedColumnFrame(-0.8f, 0.2f, 0.8f, 300000001));
+  ASSERT_TRUE(dropout_output.valid);
+  ASSERT_TRUE(dropout_output.observability.rear_dropout);
+  EXPECT_TRUE(HasObstaclePointNearZ(dropout_output, 0.45f));
+}
+
+TEST(ProcessorTest, RearDropoutBridgeDoesNotPublishStepRangeCachedPoint) {
+  auto config = MakeConfig();
+  config.map.resolution = 0.3f;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_TRUE(HasObstaclePointNearZ(source_output, 0.45f));
+
+  const auto dropout_output = processor.update(
+      MakeTranslatedFrontRaisedColumnFrame(-0.8f, 0.25f, 0.8f, 300000001));
+  ASSERT_TRUE(dropout_output.valid);
+  ASSERT_TRUE(dropout_output.observability.rear_dropout);
+  EXPECT_FALSE(HasObstaclePointNearZ(dropout_output, 0.45f));
+}
+
+TEST(ProcessorTest, RearDropoutBridgeDropsAfterLargeMotion) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeRearObstacleCellFrame(100000001)).valid);
+  const auto source_output =
+      processor.update(MakeRearObstacleCellFrame(200000001));
+  ASSERT_TRUE(source_output.valid);
+  ASSERT_GT(CountRearObstaclePoints(source_output), 0);
+
+  auto dropout_frame = MakeFrontOnlyFrame(300000001);
+  dropout_frame.base_pose_in_map.position.x() = 1.0f;
+  const auto dropout_output = processor.update(dropout_frame);
+  ASSERT_TRUE(dropout_output.valid);
+  ASSERT_TRUE(dropout_output.observability.rear_dropout);
+  EXPECT_EQ(CountRearObstaclePoints(dropout_output), 0);
 }
 
 TEST(ProcessorTest, RearDropoutBridgeExpiresAfterOneFrame) {
@@ -631,7 +880,8 @@ TEST(ProcessorTest, RearDropoutBridgeExpiresAfterOneFrame) {
   const auto first_dropout = processor.update(MakeFrontOnlyFrame(300000001));
   ASSERT_TRUE(first_dropout.valid);
   EXPECT_TRUE(first_dropout.observability.rear_dropout);
-  EXPECT_EQ(CountRearObstaclePoints(first_dropout),
+  EXPECT_GT(CountRearObstaclePoints(first_dropout), 0);
+  EXPECT_LE(CountRearObstaclePoints(first_dropout),
             CountRearObstaclePoints(source_output));
 
   const auto second_dropout = processor.update(MakeFrontOnlyFrame(400000001));
@@ -818,8 +1068,7 @@ TEST(
   EXPECT_EQ(output.obstacle_candidate_cell[static_cast<size_t>(cell)], 1U);
 }
 
-TEST(ProcessorTest,
-     PolarFrontendKeepsSingleTallBandAtPureProtrusionGain) {
+TEST(ProcessorTest, PolarFrontendKeepsSingleTallBandAtPureProtrusionGain) {
   auto config = MakeConfig();
   PolarFrontend frontend(config);
   LocalTerrainMap map(config);
@@ -1068,11 +1317,48 @@ TEST(ProcessorTest,
 
   FrontendOutput frontend_output;
   frontend_output.support_candidates.push_back(SupportCandidate{3, 0.0f, 1.0f});
-  const auto dirty = updater.update(frontend_output, observability, map);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const auto dirty =
+      updater.update(frontend_output, observability, base_pose, map);
 
   ASSERT_FALSE(dirty.empty());
   EXPECT_EQ(map.layers().support_state[3],
             static_cast<uint8_t>(SupportState::kObserved));
+}
+
+TEST(ProcessorTest, DropoutMapUpdaterAppliesBaseYawToSectorStates) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  DropoutAwareMapUpdater updater(config);
+
+  FrameObservability observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  observability.sectors[2].state = ObservabilityState::kMissingByDropout;
+  observability.sectors[2].coverage_confidence = 0.0f;
+
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation =
+      Eigen::AngleAxisf(static_cast<float>(M_PI_2), Eigen::Vector3f::UnitZ());
+
+  FrontendOutput frontend_output;
+  updater.update(frontend_output, observability, base_pose, map);
+
+  int robot_front_in_map_cell = -1;
+  int map_x_cell = -1;
+  ASSERT_TRUE(map.mapToIndex(0.0f, 1.0f, robot_front_in_map_cell));
+  ASSERT_TRUE(map.mapToIndex(1.0f, 0.0f, map_x_cell));
+
+  EXPECT_FLOAT_EQ(map.layers().coverage_confidence[robot_front_in_map_cell],
+                  0.0f);
+  EXPECT_NEAR(map.layers().coverage_confidence[map_x_cell], 0.85f, 1e-5f);
 }
 
 TEST(ProcessorTest, ProtrusionCandidateGainScaleBoostsEvidenceAccumulation) {
@@ -1094,7 +1380,11 @@ TEST(ProcessorTest, ProtrusionCandidateGainScaleBoostsEvidenceAccumulation) {
   FrontendOutput frontend_output;
   frontend_output.protrusion_candidates.push_back(
       ProtrusionCandidate{3, 0.5f, 0.9f, 1.8f});
-  const auto dirty = updater.update(frontend_output, observability, map);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const auto dirty =
+      updater.update(frontend_output, observability, base_pose, map);
 
   ASSERT_FALSE(dirty.empty());
   EXPECT_NEAR(map.layers().protrusion_evidence[3],
@@ -1124,7 +1414,11 @@ TEST(ProcessorTest, OverheadCandidateMaintainsIndependentEvidenceChain) {
   frontend_output.support_candidates.push_back(SupportCandidate{3, 0.0f, 1.0f});
   frontend_output.overhead_candidates.push_back(
       OverheadCandidate{3, 0.25f, 0.7f, 1.4f});
-  const auto dirty = updater.update(frontend_output, observability, map);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const auto dirty =
+      updater.update(frontend_output, observability, base_pose, map);
 
   ASSERT_FALSE(dirty.empty());
   EXPECT_FLOAT_EQ(map.layers().protrusion_evidence[3], 0.0f);
@@ -1184,18 +1478,73 @@ TEST(ProcessorTest, ObstaclePointsPublishUpperBandSamplesFromObstacleCells) {
   const auto output = processor.update(MakeObstacleColumnFrame(300000001));
   ASSERT_TRUE(output.valid);
 
-  ASSERT_EQ(output.obstacle_points.size(), 4U);
+  ASSERT_EQ(output.obstacle_points.size(), 2U);
   float min_z = std::numeric_limits<float>::infinity();
   float max_z = -std::numeric_limits<float>::infinity();
   for (const auto &point : output.obstacle_points) {
     min_z = std::min(min_z, point.point.z);
     max_z = std::max(max_z, point.point.z);
   }
-  EXPECT_NEAR(min_z, 0.12f, 1e-5f);
+  EXPECT_NEAR(min_z, 0.30f, 1e-5f);
   EXPECT_NEAR(max_z, 0.30f, 1e-5f);
 }
 
-TEST(ProcessorTest, DenseNearThresholdProtrusionSourcePublishesObstaclePoints) {
+TEST(ProcessorTest, ObstaclePointPublishStatusMatchesActualNativePoints) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(1)).valid);
+  ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(100000001)).valid);
+  ASSERT_TRUE(processor.update(MakeObstacleColumnFrame(200000001)).valid);
+  const auto output = processor.update(MakeObstacleColumnFrame(300000001));
+  ASSERT_TRUE(output.valid);
+  ASSERT_FALSE(output.obstacle_points.empty());
+
+  std::vector<uint8_t> cells_with_native_obstacle_points(
+      static_cast<size_t>(output.rows * output.cols), 0U);
+  for (const auto &point : output.obstacle_points) {
+    ASSERT_GE(point.source_cell, 0);
+    ASSERT_LT(point.source_cell, output.rows * output.cols);
+    cells_with_native_obstacle_points[static_cast<size_t>(point.source_cell)] =
+        1U;
+    EXPECT_NE(output.block_reason[point.source_cell],
+              static_cast<uint8_t>(BlockReason::kNone));
+    EXPECT_TRUE(IsPublishedObstaclePointStatus(
+        output.obstacle_point_publish_status[point.source_cell]));
+    EXPECT_EQ(output.passability[point.source_cell],
+              static_cast<int8_t>(PassabilityState::kImpassable));
+    ASSERT_TRUE(std::isfinite(output.support_height[point.source_cell]));
+    EXPECT_GT(point.point.z, output.support_height[point.source_cell] +
+                               config.geometry.max_step_up);
+    EXPECT_GE(point.point.z, output.support_height[point.source_cell] +
+                               config.obstacle_points_min_height);
+  }
+
+  for (int cell = 0; cell < output.rows * output.cols; ++cell) {
+    if (IsPublishedObstaclePointStatus(
+            output.obstacle_point_publish_status[cell])) {
+      EXPECT_NE(output.block_reason[cell],
+                static_cast<uint8_t>(BlockReason::kNone));
+      EXPECT_NE(cells_with_native_obstacle_points[static_cast<size_t>(cell)],
+                0U);
+    } else {
+      EXPECT_EQ(cells_with_native_obstacle_points[static_cast<size_t>(cell)],
+                0U);
+    }
+  }
+}
+
+TEST(ProcessorTest,
+     DenseCurrentFrameProtrusionSourcePublishesObstaclePoints) {
   auto config = MakeConfig();
   config.map.length = 2.0f;
   config.map.width = 2.0f;
@@ -1211,10 +1560,10 @@ TEST(ProcessorTest, DenseNearThresholdProtrusionSourcePublishesObstaclePoints) {
   const auto output = processor.update(MakeSingleCellColumnFrame(8));
   ASSERT_TRUE(output.valid);
 
-  const int col =
-      static_cast<int>(std::floor((0.25f - output.origin.x()) / output.resolution));
-  const int row =
-      static_cast<int>(std::floor((0.25f - output.origin.y()) / output.resolution));
+  const int col = static_cast<int>(
+      std::floor((0.25f - output.origin.x()) / output.resolution));
+  const int row = static_cast<int>(
+      std::floor((0.25f - output.origin.y()) / output.resolution));
   ASSERT_GE(row, 0);
   ASSERT_LT(row, output.rows);
   ASSERT_GE(col, 0);
@@ -1224,7 +1573,85 @@ TEST(ProcessorTest, DenseNearThresholdProtrusionSourcePublishesObstaclePoints) {
             config.obstacle_points_min_evidence);
   ASSERT_GE(output.raw_sample_count[cell],
             config.observability.min_points_per_sector - 1);
+  EXPECT_EQ(output.block_reason[cell],
+            static_cast<uint8_t>(BlockReason::kProtrusion));
+  EXPECT_EQ(
+      output.obstacle_point_publish_status[cell],
+      static_cast<uint8_t>(passable_area::core::ObstaclePointPublishStatus::
+                               kPublishedByDenseProtrusion));
   ASSERT_FALSE(output.obstacle_points.empty());
+}
+
+TEST(ProcessorTest, DenseNearThresholdStepRangeDoesNotPublishObstaclePoints) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 12;
+  config.obstacle_points_min_evidence = 0.4f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  const auto output = processor.update(
+      MakeSingleCellColumnFrame(8, 1, config.geometry.max_step_up));
+  ASSERT_TRUE(output.valid);
+
+  const int col = static_cast<int>(
+      std::floor((0.25f - output.origin.x()) / output.resolution));
+  const int row = static_cast<int>(
+      std::floor((0.25f - output.origin.y()) / output.resolution));
+  ASSERT_GE(row, 0);
+  ASSERT_LT(row, output.rows);
+  ASSERT_GE(col, 0);
+  ASSERT_LT(col, output.cols);
+  const int cell = row * output.cols + col;
+  ASSERT_LT(output.protrusion_evidence[cell],
+            config.obstacle_points_min_evidence);
+  ASSERT_GE(output.raw_sample_count[cell],
+            config.observability.min_points_per_sector - 1);
+  EXPECT_EQ(output.block_reason[cell],
+            static_cast<uint8_t>(BlockReason::kLowClearance));
+  EXPECT_EQ(
+      output.obstacle_point_publish_status[cell],
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePointPublishStatus::kGatedByHeight));
+  EXPECT_TRUE(output.obstacle_points.empty());
+}
+
+TEST(ProcessorTest, StepUpBoundaryWithHighEvidenceDoesNotPublishObstaclePoints) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.preprocess.enable_downsample = false;
+  config.observability.sector_count = 8;
+  config.observability.min_points_per_sector = 1;
+  config.obstacle_points_min_evidence = 0.2f;
+  config.obstacle_points_min_height = 0.1f;
+  config.obstacle_points_max_height_in_base_link = 1.0f;
+  Processor processor(config);
+
+  passable_area::core::FrameOutput output;
+  for (int i = 0; i < 4; ++i) {
+    output = processor.update(MakeSingleCellColumnFrame(
+        12, 100000000 * i + 1, config.geometry.max_step_up));
+    ASSERT_TRUE(output.valid);
+  }
+
+  const int cell = CellIndex(output, 0.25f, 0.25f);
+  ASSERT_GE(cell, 0);
+  ASSERT_GE(output.protrusion_evidence[cell],
+            config.obstacle_points_min_evidence);
+  EXPECT_FALSE(IsPublishedObstaclePointStatus(
+      output.obstacle_point_publish_status[cell]));
+  EXPECT_EQ(
+      output.obstacle_point_publish_status[cell],
+      static_cast<uint8_t>(
+          passable_area::core::ObstaclePointPublishStatus::kGatedByHeight));
+  EXPECT_TRUE(output.obstacle_points.empty());
 }
 
 TEST(ProcessorTest, SparseNearThresholdProtrusionSourceDoesNotPublish) {
@@ -1243,10 +1670,10 @@ TEST(ProcessorTest, SparseNearThresholdProtrusionSourceDoesNotPublish) {
   const auto output = processor.update(MakeSingleCellColumnFrame(5));
   ASSERT_TRUE(output.valid);
 
-  const int col =
-      static_cast<int>(std::floor((0.25f - output.origin.x()) / output.resolution));
-  const int row =
-      static_cast<int>(std::floor((0.25f - output.origin.y()) / output.resolution));
+  const int col = static_cast<int>(
+      std::floor((0.25f - output.origin.x()) / output.resolution));
+  const int row = static_cast<int>(
+      std::floor((0.25f - output.origin.y()) / output.resolution));
   ASSERT_GE(row, 0);
   ASSERT_LT(row, output.rows);
   ASSERT_GE(col, 0);
@@ -1360,7 +1787,8 @@ TEST(ProcessorTest, LowClearanceBridgeSuppressesStepRangeProjection) {
       // Bridge should NOT mark this cell as published-by-overhead.
       EXPECT_NE(
           output.obstacle_point_publish_status[cell],
-          static_cast<uint8_t>(passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead));
+          static_cast<uint8_t>(passable_area::core::ObstaclePointPublishStatus::
+                                   kPublishedByOverhead));
     }
   }
   ASSERT_TRUE(found_step_range_low_clearance_cell);
@@ -1412,30 +1840,30 @@ TEST(ProcessorTest, ObstaclePointsKeepSamplesAtOrBelowBaseLinkHeightCeiling) {
   config.observability.min_points_per_sector = 1;
   config.obstacle_points_min_evidence = 0.2f;
   config.obstacle_points_min_height = 0.1f;
-  config.obstacle_points_max_height_in_base_link = 0.2f;
+  config.obstacle_points_max_height_in_base_link = 0.30f;
   Processor processor(config);
 
   const Eigen::Quaternionf pitched_orientation(Eigen::AngleAxisf(
       -static_cast<float>(M_PI) / 6.0f, Eigen::Vector3f::UnitY()));
   ASSERT_TRUE(processor
                   .update(MakePitchedObstacleStackFrame(pitched_orientation,
-                                                        0.18f, 0.35f, 1))
+                                                        0.29f, 0.35f, 1))
                   .valid);
   ASSERT_TRUE(processor
                   .update(MakePitchedObstacleStackFrame(
-                      pitched_orientation, 0.18f, 0.35f, 100000001))
+                      pitched_orientation, 0.29f, 0.35f, 100000001))
                   .valid);
   ASSERT_TRUE(processor
                   .update(MakePitchedObstacleStackFrame(
-                      pitched_orientation, 0.18f, 0.35f, 200000001))
+                      pitched_orientation, 0.29f, 0.35f, 200000001))
                   .valid);
   const auto output = processor.update(MakePitchedObstacleStackFrame(
-      pitched_orientation, 0.18f, 0.35f, 300000001));
+      pitched_orientation, 0.29f, 0.35f, 300000001));
   ASSERT_TRUE(output.valid);
 
   ASSERT_FALSE(output.obstacle_points.empty());
   for (const auto &point : output.obstacle_points) {
-    EXPECT_GT(point.point.z, 0.2f);
+    EXPECT_GT(point.point.z, config.geometry.max_step_up);
   }
 }
 
@@ -1450,14 +1878,14 @@ TEST(ProcessorTest,
   config.observability.min_points_per_sector = 1;
   config.obstacle_points_min_evidence = 0.2f;
   config.obstacle_points_min_height = 0.1f;
-  config.obstacle_points_max_height_in_base_link = 0.2f;
+  config.obstacle_points_max_height_in_base_link = 0.30f;
   Processor processor(config);
   FramePreprocessor preprocessor(config);
 
   const Eigen::Quaternionf pitched_orientation(Eigen::AngleAxisf(
       -static_cast<float>(M_PI) / 6.0f, Eigen::Vector3f::UnitY()));
   const FrameInput input =
-      MakePitchedObstacleStackFrame(pitched_orientation, 0.18f, 0.35f, 1);
+      MakePitchedObstacleStackFrame(pitched_orientation, 0.29f, 0.35f, 1);
   ProcessedFrame preprocessed;
   ASSERT_TRUE(preprocessor.process(input, preprocessed));
 
@@ -1465,7 +1893,7 @@ TEST(ProcessorTest,
   for (const auto &sample : preprocessed.map_samples) {
     if (std::abs(sample.point_in_base.x - 0.55f) < 1e-5f &&
         std::abs(sample.point_in_base.y - 0.25f) < 1e-5f &&
-        std::abs(sample.point_in_base.z - 0.18f) < 1e-5f) {
+        std::abs(sample.point_in_base.z - 0.29f) < 1e-5f) {
       found_publishable_source_sample = true;
       EXPECT_LE(sample.point_in_base.z,
                 config.obstacle_points_max_height_in_base_link);
@@ -1476,14 +1904,14 @@ TEST(ProcessorTest,
   ASSERT_TRUE(processor.update(input).valid);
   ASSERT_TRUE(processor
                   .update(MakePitchedObstacleStackFrame(
-                      pitched_orientation, 0.18f, 0.35f, 100000001))
+                      pitched_orientation, 0.29f, 0.35f, 100000001))
                   .valid);
   ASSERT_TRUE(processor
                   .update(MakePitchedObstacleStackFrame(
-                      pitched_orientation, 0.18f, 0.35f, 200000001))
+                      pitched_orientation, 0.29f, 0.35f, 200000001))
                   .valid);
   const auto output = processor.update(MakePitchedObstacleStackFrame(
-      pitched_orientation, 0.18f, 0.35f, 300000001));
+      pitched_orientation, 0.29f, 0.35f, 300000001));
   ASSERT_TRUE(output.valid);
   ASSERT_FALSE(output.obstacle_points.empty());
 

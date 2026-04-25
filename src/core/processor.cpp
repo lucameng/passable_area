@@ -9,6 +9,10 @@
 namespace passable_area::core {
 namespace {
 
+constexpr float kRearBridgeMaxTranslationCells = 3.0f;
+constexpr float kRearBridgeMaxYawChangeRad = 0.78539816339f;
+constexpr float kPi = 3.14159265359f;
+
 Point3f TransformMapPointToBaseGravity(const Point3f &point_in_map,
                                        const Pose3D &base_pose_in_map) {
   const float yaw = YawFromQuaternion(base_pose_in_map.orientation);
@@ -20,6 +24,15 @@ Point3f TransformMapPointToBaseGravity(const Point3f &point_in_map,
                  point_in_map.z - base_pose_in_map.position.z()};
 }
 
+Point3f TransformMapPointToBaseLink(const Point3f &point_in_map,
+                                    const Pose3D &base_pose_in_map) {
+  const Eigen::Vector3f point(point_in_map.x, point_in_map.y, point_in_map.z);
+  const Eigen::Vector3f point_in_base =
+      base_pose_in_map.orientation.normalized().inverse() *
+      (point - base_pose_in_map.position);
+  return Point3f{point_in_base.x(), point_in_base.y(), point_in_base.z()};
+}
+
 bool IsNear(float lhs, float rhs, float tolerance) {
   return std::isfinite(lhs) && std::isfinite(rhs) &&
          std::abs(lhs - rhs) <= tolerance;
@@ -27,6 +40,43 @@ bool IsNear(float lhs, float rhs, float tolerance) {
 
 bool IsRearPointInBaseGravity(const CellDebugPoint &point) {
   return point.point.x < 0.0f;
+}
+
+float NormalizeAngle(float angle) {
+  while (angle > kPi) {
+    angle -= 2.0f * kPi;
+  }
+  while (angle < -kPi) {
+    angle += 2.0f * kPi;
+  }
+  return angle;
+}
+
+bool IsRearBridgeCacheFresh(Timestamp cached_stamp, Timestamp current_stamp,
+                            float frame_period_sec) {
+  if (cached_stamp <= 0 || current_stamp <= cached_stamp) {
+    return false;
+  }
+  const double age_sec =
+      static_cast<double>(current_stamp - cached_stamp) * 1e-9;
+  const double max_age_sec =
+      std::max(0.2, static_cast<double>(frame_period_sec) * 2.0);
+  return age_sec <= max_age_sec;
+}
+
+bool IsRearBridgeMotionValid(const Pose3D &cached_pose,
+                             const Pose3D &current_pose, float map_resolution) {
+  const Eigen::Vector2f delta =
+      (current_pose.position - cached_pose.position).head<2>();
+  const float max_translation =
+      std::max(map_resolution, map_resolution * kRearBridgeMaxTranslationCells);
+  if (delta.norm() > max_translation) {
+    return false;
+  }
+  const float yaw_delta =
+      NormalizeAngle(YawFromQuaternion(current_pose.orientation) -
+                     YawFromQuaternion(cached_pose.orientation));
+  return std::abs(yaw_delta) <= kRearBridgeMaxYawChangeRad;
 }
 
 bool PassesObstaclePointPublishHeightGates(
@@ -37,67 +87,58 @@ bool PassesObstaclePointPublishHeightGates(
   return std::isfinite(support_ref) &&
          sample.point_in_map.z >=
              support_ref + config.obstacle_points_min_height &&
+         sample.point_in_map.z > support_ref + config.geometry.max_step_up &&
          sample.point_in_base.z <=
              config.obstacle_points_max_height_in_base_link;
 }
 
-bool HasLowClearanceObstaclePointBridge(const TerrainLayers &layers,
-                                        const FrameOutput &output, int cell,
-                                        const Config &config) {
-  const auto index = static_cast<size_t>(cell);
-  if (index >= output.block_reason.size() ||
-      index >= layers.overhead_evidence.size()) {
-    return false;
-  }
-  if (output.block_reason[index] !=
-      static_cast<uint8_t>(BlockReason::kLowClearance)) {
-    return false;
-  }
-  const float clearance = index < layers.clearance.size()
-                              ? layers.clearance[index]
-                              : std::numeric_limits<float>::quiet_NaN();
-  if (!std::isfinite(clearance) || clearance <= config.geometry.max_step_up) {
-    return false;
-  }
-  return layers.overhead_evidence[index] >= config.obstacle_points_min_evidence;
+bool PassesCurrentBaseLinkHeightCeiling(
+    const passable_area::core::Point3f &point_in_base,
+    const passable_area::core::Config &config) {
+  return point_in_base.z <= config.obstacle_points_max_height_in_base_link;
 }
 
-bool HasDenseNearThresholdProtrusionSource(const TerrainLayers &layers,
-                                           const FrameOutput &output, int cell,
-                                           const Config &config) {
-  const auto index = static_cast<size_t>(cell);
-  if (index >= layers.protrusion_evidence.size() ||
-      index >= output.raw_sample_count.size() ||
-      index >= output.obstacle_candidate_cell.size()) {
-    return false;
-  }
-  if (output.obstacle_candidate_cell[index] == 0U) {
-    return false;
-  }
-  const float near_threshold =
-      std::max(0.0f, config.obstacle_points_min_evidence -
-                         config.persistence.obstacle_evidence_gain * 0.1f);
-  const int dense_source_count =
-      std::max(1, config.observability.min_points_per_sector - 1);
-  return layers.protrusion_evidence[index] >= near_threshold &&
-         output.raw_sample_count[index] >= dense_source_count;
+bool PassesCurrentSupportRelativeHeightGate(
+    const passable_area::core::Point3f &point_in_map,
+    float support_ref, const passable_area::core::Config &config) {
+  return std::isfinite(support_ref) &&
+         point_in_map.z >= support_ref + config.obstacle_points_min_height &&
+         point_in_map.z > support_ref + config.geometry.max_step_up;
 }
 
-bool HasObstaclePointPublishEvidence(const TerrainLayers &layers,
-                                     const FrameOutput &output, int cell,
-                                     const Config &config) {
+bool IsObstaclePointPublishStatusPublished(uint8_t status) {
+  switch (static_cast<ObstaclePointPublishStatus>(status)) {
+  case ObstaclePointPublishStatus::kPublishedByProtrusion:
+  case ObstaclePointPublishStatus::kPublishedByDenseProtrusion:
+  case ObstaclePointPublishStatus::kPublishedByGeometryFailure:
+  case ObstaclePointPublishStatus::kPublishedByOverhead:
+    return true;
+  case ObstaclePointPublishStatus::kNotApplicable:
+  case ObstaclePointPublishStatus::kGatedByEvidence:
+  case ObstaclePointPublishStatus::kGatedByHeight:
+  case ObstaclePointPublishStatus::kBlockedButNoSamples:
+    return false;
+  }
+  return false;
+}
+
+bool HasObstaclePointPublishDecision(const FrameOutput &output, int cell) {
   const auto index = static_cast<size_t>(cell);
-  const bool is_low_clearance =
-      index < output.block_reason.size() &&
-      output.block_reason[index] ==
-          static_cast<uint8_t>(BlockReason::kLowClearance);
-  const bool protrusion_publish =
-      !is_low_clearance && index < layers.protrusion_evidence.size() &&
-      (layers.protrusion_evidence[index] >=
-           config.obstacle_points_min_evidence ||
-       HasDenseNearThresholdProtrusionSource(layers, output, cell, config));
-  return protrusion_publish ||
-         HasLowClearanceObstaclePointBridge(layers, output, cell, config);
+  return index < output.obstacle_point_publish_status.size() &&
+         IsObstaclePointPublishStatusPublished(
+             output.obstacle_point_publish_status[index]);
+}
+
+bool HasObstaclePointPublishDecision(const std::vector<uint8_t> &statuses,
+                                     int cell) {
+  const auto index = static_cast<size_t>(cell);
+  return index < statuses.size() &&
+         IsObstaclePointPublishStatusPublished(statuses[index]);
+}
+
+bool IsGeometryFailurePublishStatus(uint8_t status) {
+  return static_cast<ObstaclePointPublishStatus>(status) ==
+         ObstaclePointPublishStatus::kPublishedByGeometryFailure;
 }
 
 MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
@@ -131,10 +172,45 @@ FrameOutput Processor::update(const FrameInput &input) {
       observability_estimator_.estimate(preprocessed);
   const FrontendOutput frontend_output =
       frontend_.run(preprocessed, observability, MakeMapGeometry(map_));
-  const std::vector<int> dirty_cells =
-      map_updater_.update(frontend_output, observability, map_);
+  const std::vector<int> dirty_cells = map_updater_.update(
+      frontend_output, observability, preprocessed.base_pose_in_map, map_);
   feature_updater_.update(dirty_cells, map_);
-  const auto reasoner_output = obstacle_reasoner_.evaluate(map_.layers());
+  std::vector<float> current_protrusion_evidence_gain(map_.size(), 0.0f);
+  std::vector<float> current_obstacle_candidate_height(
+      map_.size(), std::numeric_limits<float>::quiet_NaN());
+  for (size_t cell = 0; cell < frontend_output.obstacle_candidate_cell.size() &&
+                        cell < current_obstacle_candidate_height.size() &&
+                        cell < frontend_output.raw_sample_max_z.size();
+       ++cell) {
+    if (frontend_output.obstacle_candidate_cell[cell] == 0U ||
+        !std::isfinite(frontend_output.raw_sample_max_z[cell])) {
+      continue;
+    }
+    current_obstacle_candidate_height[cell] =
+        frontend_output.raw_sample_max_z[cell];
+  }
+  for (const auto &candidate : frontend_output.protrusion_candidates) {
+    if (candidate.cell < 0 || candidate.cell >= map_.size()) {
+      continue;
+    }
+    const auto cell = static_cast<size_t>(candidate.cell);
+    current_protrusion_evidence_gain[cell] =
+        std::max(current_protrusion_evidence_gain[cell],
+                 config_.persistence.obstacle_evidence_gain *
+                     std::max(1.0f, candidate.gain_scale) *
+                     candidate.evidence);
+    current_obstacle_candidate_height[cell] =
+        std::isfinite(current_obstacle_candidate_height[cell])
+            ? std::max(current_obstacle_candidate_height[cell], candidate.z)
+            : candidate.z;
+  }
+  const ObstaclePublicationContext publication_context{
+      &frontend_output.raw_sample_count,
+      &frontend_output.obstacle_candidate_cell,
+      &current_protrusion_evidence_gain,
+      &current_obstacle_candidate_height};
+  const auto reasoner_output =
+      obstacle_reasoner_.evaluate(map_.layers(), publication_context);
   traversability_solver_.update(map_, reasoner_output);
   return buildOutput(preprocessed, observability, frontend_output,
                      reasoner_output);
@@ -178,6 +254,8 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.overhead_stage = reasoner_output.overhead_stage;
   output.obstacle_point_publish_status =
       reasoner_output.obstacle_point_publish_status;
+  const std::vector<uint8_t> reasoner_publish_status =
+      output.obstacle_point_publish_status;
   output.raw_sample_min_z = frontend_output.raw_sample_min_z;
   output.raw_sample_max_z = frontend_output.raw_sample_max_z;
   output.raw_sample_count = frontend_output.raw_sample_count;
@@ -194,18 +272,20 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.support_points.reserve(frame.map_samples.size() / 4);
   output.obstacle_points.reserve(frame.map_samples.size() / 8);
   output.unknown_points.reserve(map_.size() / 4);
-  std::vector<CellDebugPoint> native_rear_obstacle_points;
+  std::vector<CachedRearObstaclePoint> native_rear_obstacle_points;
   const float support_tolerance =
       std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
   std::unordered_map<int, float> fallback_support_ref_by_cell;
   fallback_support_ref_by_cell.reserve(frame.map_samples.size() / 8U + 1U);
+  std::vector<uint8_t> publish_decision_sample_seen(map_.size(), 0U);
+  std::vector<uint8_t> native_obstacle_point_published(map_.size(), 0U);
 
   for (const auto &sample : frame.map_samples) {
     int cell = -1;
     if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
       continue;
     }
-    if (!HasObstaclePointPublishEvidence(layers, output, cell, config_) ||
+    if (!HasObstaclePointPublishDecision(output, cell) ||
         std::isfinite(layers.support_height[cell])) {
       continue;
     }
@@ -243,28 +323,78 @@ Processor::buildOutput(const ProcessedFrame &frame,
                         ? it->second
                         : std::numeric_limits<float>::infinity();
     }
-    if (HasObstaclePointPublishEvidence(layers, output, cell, config_) &&
+    if (!HasObstaclePointPublishDecision(output, cell)) {
+      continue;
+    }
+    publish_decision_sample_seen[static_cast<size_t>(cell)] = 1U;
+    const uint8_t publish_status =
+        output.obstacle_point_publish_status[static_cast<size_t>(cell)];
+    const bool geometry_sample_height_ok =
+        !IsGeometryFailurePublishStatus(publish_status) ||
+        point_in_base_gravity.z >= config_.obstacle_points_min_height;
+    if (geometry_sample_height_ok &&
         PassesObstaclePointPublishHeightGates(sample, point_in_base_gravity,
                                               support_ref, config_)) {
       const auto point = MakeCellDebugPoint(point_in_base_gravity, cell);
       output.obstacle_points.push_back(point);
+      native_obstacle_point_published[static_cast<size_t>(cell)] = 1U;
       if (IsRearPointInBaseGravity(point)) {
-        native_rear_obstacle_points.push_back(point);
+        native_rear_obstacle_points.push_back(
+            CachedRearObstaclePoint{sample.point_in_map, cell});
       }
     }
   }
 
   if (observability.rear_dropout && native_rear_obstacle_points.empty() &&
       rear_obstacle_point_cache_.valid &&
-      !rear_obstacle_point_cache_.consumed_for_bridge) {
+      !rear_obstacle_point_cache_.consumed_for_bridge &&
+      IsRearBridgeCacheFresh(rear_obstacle_point_cache_.stamp, frame.stamp,
+                             map_.framePeriodSec()) &&
+      IsRearBridgeMotionValid(rear_obstacle_point_cache_.base_pose_in_map,
+                              frame.base_pose_in_map, map_.resolution())) {
     for (const auto &cached_point : rear_obstacle_point_cache_.points) {
-      if (cached_point.source_cell < 0 ||
-          cached_point.source_cell >= map_.size()) {
+      int current_cell = -1;
+      if (!map_.mapToIndex(cached_point.point_in_map.x,
+                           cached_point.point_in_map.y, current_cell) ||
+          !HasObstaclePointPublishDecision(reasoner_publish_status,
+                                           current_cell)) {
         continue;
       }
-      output.obstacle_points.push_back(cached_point);
+      const Point3f point_in_base_gravity = TransformMapPointToBaseGravity(
+          cached_point.point_in_map, frame.base_pose_in_map);
+      const Point3f point_in_base = TransformMapPointToBaseLink(
+          cached_point.point_in_map, frame.base_pose_in_map);
+      const float support_ref = layers.support_height[current_cell];
+      const uint8_t publish_status =
+          reasoner_publish_status[static_cast<size_t>(current_cell)];
+      const bool geometry_sample_height_ok =
+          !IsGeometryFailurePublishStatus(publish_status) ||
+          point_in_base_gravity.z >= config_.obstacle_points_min_height;
+      if (!geometry_sample_height_ok ||
+          !PassesCurrentSupportRelativeHeightGate(
+              cached_point.point_in_map, support_ref, config_) ||
+          !PassesCurrentBaseLinkHeightCeiling(point_in_base, config_)) {
+        continue;
+      }
+      output.obstacle_points.push_back(
+          MakeCellDebugPoint(point_in_base_gravity, current_cell));
+      native_obstacle_point_published[static_cast<size_t>(current_cell)] = 1U;
+      output.obstacle_point_publish_status[static_cast<size_t>(current_cell)] =
+          publish_status;
     }
     rear_obstacle_point_cache_.consumed_for_bridge = true;
+  }
+
+  for (int cell = 0; cell < map_.size(); ++cell) {
+    if (!HasObstaclePointPublishDecision(reasoner_publish_status, cell) ||
+        native_obstacle_point_published[static_cast<size_t>(cell)] != 0U) {
+      continue;
+    }
+    output.obstacle_point_publish_status[static_cast<size_t>(cell)] =
+        static_cast<uint8_t>(
+            publish_decision_sample_seen[static_cast<size_t>(cell)] != 0U
+                ? ObstaclePointPublishStatus::kGatedByHeight
+                : ObstaclePointPublishStatus::kBlockedButNoSamples);
   }
 
   for (int cell = 0; cell < map_.size(); ++cell) {
@@ -285,6 +415,7 @@ Processor::buildOutput(const ProcessedFrame &frame,
     rear_obstacle_point_cache_.valid = !native_rear_obstacle_points.empty();
     rear_obstacle_point_cache_.consumed_for_bridge = false;
     rear_obstacle_point_cache_.stamp = frame.stamp;
+    rear_obstacle_point_cache_.base_pose_in_map = frame.base_pose_in_map;
     rear_obstacle_point_cache_.points = std::move(native_rear_obstacle_points);
   }
 

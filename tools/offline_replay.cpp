@@ -63,40 +63,27 @@ bool IsLowClearanceBridgeEligible(const passable_area::core::Config &config,
          overhead_evidence >= config.obstacle_points_min_evidence;
 }
 
-bool IsDenseNearThresholdProtrusionSource(
-    const passable_area::core::Config &config, float protrusion_evidence,
-    uint16_t raw_sample_count) {
-  const float near_threshold =
-      std::max(0.0f, config.obstacle_points_min_evidence -
-                         config.persistence.obstacle_evidence_gain * 0.1f);
-  const int dense_source_count =
-      std::max(1, config.observability.min_points_per_sector - 1);
-  return protrusion_evidence >= near_threshold &&
-         raw_sample_count >= dense_source_count;
-}
-
-std::string InferObstaclePointPublishPath(
-    const passable_area::core::Config &config, float obstacle_evidence,
-    float protrusion_evidence, float overhead_evidence, float clearance,
-    float support_continuity, uint8_t block_reason, uint16_t raw_sample_count) {
-  const bool is_low_clearance =
-      block_reason ==
-      static_cast<uint8_t>(passable_area::core::BlockReason::kLowClearance);
-  if (!is_low_clearance &&
-      protrusion_evidence >= config.obstacle_points_min_evidence) {
+std::string PublishPathFromStatus(
+    passable_area::core::ObstaclePointPublishStatus publish_status) {
+  switch (publish_status) {
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByProtrusion:
     return "ProtrusionEvidence";
-  }
-  if (!is_low_clearance &&
-      IsDenseNearThresholdProtrusionSource(config, protrusion_evidence,
-                                           raw_sample_count)) {
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByDenseProtrusion:
     return "DenseProtrusionSource";
-  }
-  if (IsLowClearanceBridgeEligible(config, block_reason, clearance,
-                                   overhead_evidence)) {
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByGeometryFailure:
+    return "GeometryFailure";
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
     return "LowClearanceBridge";
-  }
-  if (obstacle_evidence >= config.obstacle_points_min_evidence) {
-    return "LegacyObstacleEvidenceOnly";
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
+    return "GatedByEvidence";
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByHeight:
+    return "GatedByHeight";
+  case passable_area::core::ObstaclePointPublishStatus::kBlockedButNoSamples:
+    return "BlockedButNoSamples";
+  case passable_area::core::ObstaclePointPublishStatus::kNotApplicable:
+    return "None";
   }
   return "None";
 }
@@ -825,6 +812,12 @@ const char *ToObstaclePointPublishStatusString(
     return "NotApplicable";
   case passable_area::core::ObstaclePointPublishStatus::kPublishedByProtrusion:
     return "PublishedByProtrusion";
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByDenseProtrusion:
+    return "PublishedByDenseProtrusion";
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByGeometryFailure:
+    return "PublishedByGeometryFailure";
   case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
     return "PublishedByOverhead";
   case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
@@ -1786,11 +1779,9 @@ void PrintRoiFrameInspection(
           IsLowClearanceBridgeEligible(config, block_reason,
                                        output.clearance[idx],
                                        overhead_evidence);
-      const std::string publish_path = InferObstaclePointPublishPath(
-          config, output.obstacle_evidence[idx], protrusion_evidence,
-          overhead_evidence, output.clearance[idx],
-          output.support_continuity[idx], block_reason,
-          output.raw_sample_count[idx]);
+      const std::string publish_path = PublishPathFromStatus(
+          static_cast<passable_area::core::ObstaclePointPublishStatus>(
+              publish_status));
       std::cout
           << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
           << " map_x=" << map_x << " map_y=" << map_y << " sample_count="

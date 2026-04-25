@@ -22,11 +22,17 @@ public:
   const Config &config() const { return config_; }
 
 private:
+  struct CachedRearObstaclePoint {
+    Point3f point_in_map;
+    int source_cell = -1;
+  };
+
   struct RearObstaclePointCache {
     bool valid = false;
     bool consumed_for_bridge = false;
     Timestamp stamp = 0;
-    std::vector<CellDebugPoint> points;
+    Pose3D base_pose_in_map;
+    std::vector<CachedRearObstaclePoint> points;
   };
 
   FrameOutput buildOutput(const ProcessedFrame &frame,

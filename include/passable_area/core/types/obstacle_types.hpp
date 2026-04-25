@@ -22,6 +22,8 @@ enum class ObstacleEvidenceStage : uint8_t {
 enum class ObstaclePointPublishStatus : uint8_t {
   kNotApplicable = 0,
   kPublishedByProtrusion,
+  kPublishedByDenseProtrusion,
+  kPublishedByGeometryFailure,
   kPublishedByOverhead,
   kGatedByEvidence,
   kGatedByHeight,

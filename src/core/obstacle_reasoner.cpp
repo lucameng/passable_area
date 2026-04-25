@@ -5,9 +5,36 @@
 #include <limits>
 
 namespace passable_area::core {
+bool ObstacleReasoner::hasDenseCurrentFrameProtrusionSource(
+    float protrusion_evidence, size_t cell,
+    const ObstaclePublicationContext &publication_context) const {
+  if (publication_context.obstacle_candidate_cell == nullptr ||
+      cell >= publication_context.obstacle_candidate_cell->size() ||
+      (*publication_context.obstacle_candidate_cell)[cell] == 0U) {
+    return false;
+  }
+  if (publication_context.raw_sample_count == nullptr ||
+      cell >= publication_context.raw_sample_count->size()) {
+    return false;
+  }
+  const int dense_source_count =
+      std::max(1, config_.observability.min_points_per_sector - 1);
+  if ((*publication_context.raw_sample_count)[cell] < dense_source_count) {
+    return false;
+  }
+  if (publication_context.current_protrusion_evidence_gain == nullptr ||
+      cell >= publication_context.current_protrusion_evidence_gain->size()) {
+    return false;
+  }
+  const float current_frame_gain =
+      (*publication_context.current_protrusion_evidence_gain)[cell];
+  return current_frame_gain > 0.0f && protrusion_evidence >= current_frame_gain;
+}
 
 ObstacleReasonerOutput
-ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
+ObstacleReasoner::evaluate(
+    const TerrainLayers &layers,
+    const ObstaclePublicationContext &publication_context) const {
   const size_t cell_count = layers.support_height.size();
   ObstacleReasonerOutput output;
   output.block_reason.assign(cell_count,
@@ -40,6 +67,9 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
 
     const bool protrusion_evidence_high =
         protrusion_evidence >= config_.obstacle_points_min_evidence;
+    const bool dense_protrusion_source =
+        hasDenseCurrentFrameProtrusionSource(protrusion_evidence, cell,
+                                             publication_context);
     const bool overhead_evidence_high =
         overhead_evidence >= config_.obstacle_points_min_evidence;
     const bool low_clearance =
@@ -50,16 +80,33 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
     const float support_height = cell < layers.support_height.size()
                                     ? layers.support_height[cell]
                                     : 0.0f;
+    const float current_obstacle_candidate_height =
+        publication_context.current_obstacle_candidate_height != nullptr &&
+                cell <
+                    publication_context.current_obstacle_candidate_height->size()
+            ? (*publication_context.current_obstacle_candidate_height)[cell]
+            : std::numeric_limits<float>::quiet_NaN();
+    float publish_height_ref = protrusion_height;
+    if (std::isfinite(current_obstacle_candidate_height)) {
+      publish_height_ref = std::isfinite(publish_height_ref)
+                               ? std::max(publish_height_ref,
+                                          current_obstacle_candidate_height)
+                               : current_obstacle_candidate_height;
+    }
     const bool tall_protrusion =
-        std::isfinite(protrusion_height) && std::isfinite(support_height) &&
-        (protrusion_height - support_height) > config_.geometry.max_step_up;
+        std::isfinite(publish_height_ref) && std::isfinite(support_height) &&
+        (publish_height_ref - support_height) > config_.geometry.max_step_up;
     const bool protrusion_blocking =
-        protrusion_evidence > 0.4f && tall_protrusion;
+        (protrusion_evidence_high || dense_protrusion_source) &&
+        tall_protrusion;
     const bool geometry_failure =
         slope > config_.geometry.max_support_slope_deg ||
         step_up > config_.geometry.max_step_up ||
         step_down > config_.geometry.max_step_down ||
         roughness > config_.geometry.max_support_roughness;
+    const bool geometry_publishable_protrusion =
+        geometry_failure && tall_protrusion &&
+        (protrusion_evidence_high || dense_protrusion_source);
 
     if (protrusion_evidence > 0.0f) {
       output.protrusion_stage[cell] = static_cast<uint8_t>(
@@ -77,6 +124,8 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
       reason = BlockReason::kMixed;
     } else if (low_clearance) {
       reason = BlockReason::kLowClearance;
+    } else if (geometry_publishable_protrusion && !protrusion_evidence_high) {
+      reason = BlockReason::kGeometryFailure;
     } else if (protrusion_blocking) {
       reason = BlockReason::kProtrusion;
     } else if (geometry_failure) {
@@ -87,9 +136,14 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
     ObstaclePointPublishStatus publish_status =
         ObstaclePointPublishStatus::kNotApplicable;
     if (reason == BlockReason::kProtrusion || reason == BlockReason::kMixed) {
-      publish_status = protrusion_evidence_high
-                           ? ObstaclePointPublishStatus::kPublishedByProtrusion
-                           : ObstaclePointPublishStatus::kGatedByEvidence;
+      if (protrusion_evidence_high) {
+        publish_status = ObstaclePointPublishStatus::kPublishedByProtrusion;
+      } else if (dense_protrusion_source) {
+        publish_status =
+            ObstaclePointPublishStatus::kPublishedByDenseProtrusion;
+      } else {
+        publish_status = ObstaclePointPublishStatus::kGatedByEvidence;
+      }
     } else if (reason == BlockReason::kLowClearance) {
       if (clearance > config_.geometry.max_step_up) {
         publish_status = overhead_evidence_high
@@ -98,6 +152,10 @@ ObstacleReasoner::evaluate(const TerrainLayers &layers) const {
       } else {
         publish_status = ObstaclePointPublishStatus::kGatedByHeight;
       }
+    } else if (reason == BlockReason::kGeometryFailure &&
+               geometry_publishable_protrusion) {
+      publish_status =
+          ObstaclePointPublishStatus::kPublishedByGeometryFailure;
     }
     output.obstacle_point_publish_status[cell] =
         static_cast<uint8_t>(publish_status);

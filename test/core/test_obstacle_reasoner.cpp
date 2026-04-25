@@ -9,6 +9,7 @@ namespace {
 using passable_area::core::BlockReason;
 using passable_area::core::Config;
 using passable_area::core::ObstacleEvidenceStage;
+using passable_area::core::ObstaclePublicationContext;
 using passable_area::core::ObstaclePointPublishStatus;
 using passable_area::core::ObstacleReasoner;
 using passable_area::core::SupportState;
@@ -106,7 +107,34 @@ TEST(ObstacleReasonerTest, GeometryFailureDoesNotClaimObstaclePointPublish) {
             static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
 }
 
-TEST(ObstacleReasonerTest, EvidenceBelowPublishThresholdIsReportedAsGated) {
+TEST(ObstacleReasonerTest,
+     GeometryFailureWithTallNearThresholdCandidateCanPublish) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.4f;
+  config.persistence.obstacle_evidence_gain = 0.25f;
+  auto layers = MakeLayers();
+  layers.slope[0] = config.geometry.max_support_slope_deg + 1.0f;
+  layers.protrusion_evidence[0] = 0.38f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up + 0.1f;
+  std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
+  std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
+  std::vector<float> current_protrusion_evidence_gain = {0.38f, 0.0f, 0.0f};
+  const ObstaclePublicationContext context{
+      &raw_sample_count, &obstacle_candidate_cell,
+      &current_protrusion_evidence_gain};
+
+  const auto output = ObstacleReasoner(config).evaluate(layers, context);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kGeometryFailure));
+  EXPECT_EQ(
+      output.obstacle_point_publish_status[0],
+      static_cast<uint8_t>(
+          ObstaclePointPublishStatus::kPublishedByGeometryFailure));
+}
+
+TEST(ObstacleReasonerTest, ProtrusionBlockingThresholdFollowsPublishEvidence) {
   auto config = MakeConfig();
   config.obstacle_points_min_evidence = 0.8f;
   auto layers = MakeLayers();
@@ -117,9 +145,150 @@ TEST(ObstacleReasonerTest, EvidenceBelowPublishThresholdIsReportedAsGated) {
   const auto output = ObstacleReasoner(config).evaluate(layers);
 
   EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.protrusion_stage[0],
+            static_cast<uint8_t>(ObstacleEvidenceStage::kEvidenceLow));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
+TEST(ObstacleReasonerTest,
+     CurrentFrameCandidateHeightCanSatisfyTallPublicationContract) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.4f;
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[0] = 0.7f;
+  layers.support_height[0] = 1.5f;
+  layers.protrusion_height[0] = std::numeric_limits<float>::quiet_NaN();
+  std::vector<uint16_t> raw_sample_count = {6U, 0U, 0U};
+  std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
+  std::vector<float> current_protrusion_evidence_gain = {0.25f, 0.0f, 0.0f};
+  std::vector<float> current_obstacle_candidate_height = {
+      1.8f, std::numeric_limits<float>::quiet_NaN(),
+      std::numeric_limits<float>::quiet_NaN()};
+  const ObstaclePublicationContext context{
+      &raw_sample_count, &obstacle_candidate_cell,
+      &current_protrusion_evidence_gain, &current_obstacle_candidate_height};
+
+  const auto output = ObstacleReasoner(config).evaluate(layers, context);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kProtrusion));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(
+                ObstaclePointPublishStatus::kPublishedByProtrusion));
+}
+
+TEST(ObstacleReasonerTest,
+     DenseCurrentFrameSourceIsExplicitPublicationDecision) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.4f;
+  config.persistence.obstacle_evidence_gain = 0.25f;
+  config.observability.min_points_per_sector = 12;
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[0] = 0.38f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up + 0.1f;
+  std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
+  std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
+  std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
+  const ObstaclePublicationContext context{
+      &raw_sample_count, &obstacle_candidate_cell,
+      &current_protrusion_evidence_gain};
+
+  const auto output = ObstacleReasoner(config).evaluate(layers, context);
+
+  EXPECT_EQ(output.block_reason[0],
             static_cast<uint8_t>(BlockReason::kProtrusion));
   EXPECT_EQ(output.protrusion_stage[0],
             static_cast<uint8_t>(ObstacleEvidenceStage::kBlocking));
+  EXPECT_EQ(
+      output.obstacle_point_publish_status[0],
+      static_cast<uint8_t>(
+          ObstaclePointPublishStatus::kPublishedByDenseProtrusion));
+}
+
+TEST(ObstacleReasonerTest, DenseNearThresholdStepHeightDoesNotBlock) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.4f;
+  config.persistence.obstacle_evidence_gain = 0.25f;
+  config.observability.min_points_per_sector = 12;
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[0] = 0.38f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up;
+  std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
+  std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
+  std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
+  const ObstaclePublicationContext context{
+      &raw_sample_count, &obstacle_candidate_cell,
+      &current_protrusion_evidence_gain};
+
+  const auto output = ObstacleReasoner(config).evaluate(layers, context);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
-            static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByEvidence));
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
+TEST(ObstacleReasonerTest, DenseRawSamplesWithoutCurrentCandidateDoNotPublish) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.4f;
+  config.observability.min_points_per_sector = 12;
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[0] = 0.38f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up + 0.1f;
+  std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
+  std::vector<uint8_t> obstacle_candidate_cell = {0U, 0U, 0U};
+  std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
+  const ObstaclePublicationContext context{
+      &raw_sample_count, &obstacle_candidate_cell,
+      &current_protrusion_evidence_gain};
+
+  const auto output = ObstacleReasoner(config).evaluate(layers, context);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
+TEST(ObstacleReasonerTest, SparseCurrentFrameCandidateDoesNotDensePublish) {
+  auto config = MakeConfig();
+  config.obstacle_points_min_evidence = 0.4f;
+  config.observability.min_points_per_sector = 12;
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[0] = 0.38f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up + 0.1f;
+  std::vector<uint16_t> raw_sample_count = {10U, 0U, 0U};
+  std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
+  std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
+  const ObstaclePublicationContext context{
+      &raw_sample_count, &obstacle_candidate_cell,
+      &current_protrusion_evidence_gain};
+
+  const auto output = ObstacleReasoner(config).evaluate(layers, context);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
+TEST(ObstacleReasonerTest, BlockReasonNoneNeverHasPublishedStatus) {
+  auto config = MakeConfig();
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[0] = config.obstacle_points_min_evidence + 0.1f;
+  layers.support_height[0] = 0.0f;
+  layers.protrusion_height[0] = config.geometry.max_step_up;
+
+  const auto output = ObstacleReasoner(config).evaluate(layers);
+
+  ASSERT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
 }

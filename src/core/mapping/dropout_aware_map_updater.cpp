@@ -1,4 +1,5 @@
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
+#include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,11 +17,16 @@ void ClearObstacleLayer(TerrainLayers &layers, int cell) {
   layers.overhead_evidence[cell] = 0.0f;
 }
 
+float NormalizeAngle(float angle) {
+  return std::atan2(std::sin(angle), std::cos(angle));
+}
+
 } // namespace
 
 std::vector<int>
 DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
                                const FrameObservability &observability,
+                               const Pose3D &base_pose_in_map,
                                LocalTerrainMap &map) const {
   map.ageCells();
   auto &layers = map.layers();
@@ -31,11 +37,17 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
   std::vector<uint8_t> touched_support(map.size(), 0);
   std::vector<uint8_t> touched_obstacle(map.size(), 0);
 
+  const float base_yaw = YawFromQuaternion(base_pose_in_map.orientation);
   const auto sector_state_for_cell = [&](int cell) {
+    if (observability.sectors.empty()) {
+      return SectorObservability{};
+    }
     const auto cell_center = map.indexToMap(cell);
-    const float angle = std::atan2(cell_center.y() - map.center().y(),
-                                   cell_center.x() - map.center().x());
-    const float normalized = angle + static_cast<float>(M_PI);
+    const float map_angle =
+        std::atan2(cell_center.y() - base_pose_in_map.position.y(),
+                   cell_center.x() - base_pose_in_map.position.x());
+    const float base_angle = NormalizeAngle(map_angle - base_yaw);
+    const float normalized = base_angle + static_cast<float>(M_PI);
     const int sector = std::clamp(
         static_cast<int>(std::floor(
             normalized / (2.0f * static_cast<float>(M_PI) /

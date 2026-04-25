@@ -106,42 +106,28 @@ bool IsLowClearanceBridgeEligible(
          overhead_evidence >= config.obstacle_points_min_evidence;
 }
 
-bool IsDenseNearThresholdProtrusionSource(
-    const passable_area::core::Config &config, float protrusion_evidence,
-    uint16_t raw_sample_count) {
-  const float near_threshold =
-      std::max(0.0f, config.obstacle_points_min_evidence -
-                         config.persistence.obstacle_evidence_gain * 0.1f);
-  const int dense_source_count =
-      std::max(1, config.observability.min_points_per_sector - 1);
-  return protrusion_evidence >= near_threshold &&
-         raw_sample_count >= dense_source_count;
-}
-
-std::string InferPublishPath(const passable_area::core::Config &config,
-                             float obstacle_evidence,
-                             float protrusion_evidence, float overhead_evidence,
-                             float clearance, float support_continuity,
-                             uint8_t block_reason,
-                             uint16_t raw_sample_count) {
-  const bool is_low_clearance =
-      block_reason ==
-      static_cast<uint8_t>(passable_area::core::BlockReason::kLowClearance);
-  if (!is_low_clearance &&
-      protrusion_evidence >= config.obstacle_points_min_evidence) {
+std::string PublishPathFromStatus(uint8_t publish_status) {
+  switch (static_cast<passable_area::core::ObstaclePointPublishStatus>(
+      publish_status)) {
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByProtrusion:
     return "ProtrusionEvidence";
-  }
-  if (!is_low_clearance &&
-      IsDenseNearThresholdProtrusionSource(config, protrusion_evidence,
-                                           raw_sample_count)) {
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByDenseProtrusion:
     return "DenseProtrusionSource";
-  }
-  if (IsLowClearanceBridgeEligible(config, block_reason, clearance,
-                                   overhead_evidence)) {
+  case passable_area::core::ObstaclePointPublishStatus::
+      kPublishedByGeometryFailure:
+    return "GeometryFailure";
+  case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
     return "LowClearanceBridge";
-  }
-  if (obstacle_evidence >= config.obstacle_points_min_evidence) {
-    return "LegacyObstacleEvidenceOnly";
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
+    return "GatedByEvidence";
+  case passable_area::core::ObstaclePointPublishStatus::kGatedByHeight:
+    return "GatedByHeight";
+  case passable_area::core::ObstaclePointPublishStatus::kBlockedButNoSamples:
+    return "BlockedButNoSamples";
+  case passable_area::core::ObstaclePointPublishStatus::kNotApplicable:
+    return "None";
   }
   return "None";
 }
@@ -341,22 +327,12 @@ FalseObstacleAnalyzer::lookupLocalContext(
           output.obstacle_point_publish_status[static_cast<size_t>(
               source_cell)];
     }
-    uint16_t source_raw_sample_count = 0U;
-    if (output.raw_sample_count.size() > static_cast<size_t>(source_cell)) {
-      source_raw_sample_count =
-          output.raw_sample_count[static_cast<size_t>(source_cell)];
-    }
     context.source_low_clearance_bridge_eligible =
         IsLowClearanceBridgeEligible(config_, context.source_block_reason,
                                      context.source_clearance,
                                      context.source_overhead_evidence);
-    context.source_publish_path =
-        InferPublishPath(config_, context.source_obstacle_evidence,
-                         context.source_protrusion_evidence,
-                         context.source_overhead_evidence,
-                         context.source_clearance,
-                         context.source_support_continuity,
-                         context.source_block_reason, source_raw_sample_count);
+    context.source_publish_path = PublishPathFromStatus(
+        context.source_obstacle_point_publish_status);
   }
 
   const auto point_in_map =
