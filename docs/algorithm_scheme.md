@@ -192,6 +192,11 @@ TF：
 - `1` = 保留编码空位，当前实现不再产生
 - `2` = `MissingByDropout`
 
+说明：
+
+- ROS 消息里的 `rear_dropout` 为历史兼容字段，仅表示后向 dropout。
+- 前向/后向及其它方向的 dropout 统一通过 `sector_states == MissingByDropout` 表达。
+
 ### 5.6 输入假设
 
 当前实现默认依赖以下前提：
@@ -351,6 +356,7 @@ TF：
 关键字段：
 
 - `frame_partial`
+- `front_dropout`
 - `rear_dropout`
 - `base_point_count`
 - `map_point_count`
@@ -486,7 +492,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 - 只使用 `cloud_in_base`
 - 按 360 度扇区统计点数
 - 输出每个扇区的覆盖置信度和观测状态
-- 输出 `frame_partial` 和 `rear_dropout`
+- 输出 `frame_partial`、内部 `front_dropout` 和兼容字段 `rear_dropout`
 
 当前状态分类：
 
@@ -495,8 +501,9 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 实现特点：
 
-- 点数为 0 或覆盖不足的扇区会设置 `frame_partial`，但扇区状态仍并入 `Observed`
-- 如果后方整体点明显比前方少，且后向连续空扇区超过阈值，就升级成 `MissingByDropout`
+- 点数为 0 或覆盖不足的扇区会设置 `frame_partial`，但扇区状态默认仍并入 `Observed`
+- 如果前方或后方整体点数相对另一半视野明显不足，且对应半区连续空扇区超过阈值，就把该空洞升级成 `MissingByDropout`
+- `rear_dropout` 只保留后向布尔兼容语义；前向 dropout 由内部 `front_dropout` 和 `sector_states` 表达
 
 这一步的结果直接影响后续地图层的衰减和负更新强度。
 

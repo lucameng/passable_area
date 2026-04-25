@@ -41,6 +41,7 @@ struct SectorObservability {
 
 struct FrameObservability {
   bool frame_partial = false;
+  bool front_dropout = false;
   bool rear_dropout = false;
   uint32_t base_point_count = 0;
   uint32_t map_point_count = 0;

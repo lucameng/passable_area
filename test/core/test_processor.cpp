@@ -99,6 +99,19 @@ FrameInput MakeFrontOnlyFrame(int stamp = 1) {
   return input;
 }
 
+FrameInput MakeRearOnlyFrame(int stamp = 1) {
+  FrameInput input;
+  input.stamp = stamp;
+  input.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  input.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  for (float x = -1.2f; x <= -0.1f; x += 0.1f) {
+    for (float y = -1.0f; y <= 1.0f; y += 0.1f) {
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
+    }
+  }
+  return input;
+}
+
 FrameInput MakeRearGapFrame(int stamp = 1) {
   auto input = MakeFlatFrame(stamp);
   input.input_cloud_in_base.erase(
@@ -109,6 +122,23 @@ FrameInput MakeRearGapFrame(int stamp = 1) {
                      }),
       input.input_cloud_in_base.end());
   for (float x = 0.2f; x <= 1.2f; x += 0.05f) {
+    for (float y = -1.0f; y <= 1.0f; y += 0.05f) {
+      input.input_cloud_in_base.push_back({x, y, 0.0f});
+    }
+  }
+  return input;
+}
+
+FrameInput MakeFrontGapFrame(int stamp = 1) {
+  auto input = MakeFlatFrame(stamp);
+  input.input_cloud_in_base.erase(
+      std::remove_if(input.input_cloud_in_base.begin(),
+                     input.input_cloud_in_base.end(),
+                     [](const auto &point) {
+                       return point.x > 0.1f && std::abs(point.y) < 1.0f;
+                     }),
+      input.input_cloud_in_base.end());
+  for (float x = -1.2f; x <= -0.2f; x += 0.05f) {
     for (float y = -1.0f; y <= 1.0f; y += 0.05f) {
       input.input_cloud_in_base.push_back({x, y, 0.0f});
     }
@@ -638,6 +668,7 @@ TEST(ProcessorTest, RearDropoutIsFlaggedAndSupportPersists) {
   ASSERT_TRUE(processor.update(MakeFlatFrame(1)).valid);
   const auto output = processor.update(MakeFrontOnlyFrame(100000001));
   ASSERT_TRUE(output.valid);
+  EXPECT_FALSE(output.observability.front_dropout);
   EXPECT_TRUE(output.observability.rear_dropout);
 
   float max_rear_support_conf = 0.0f;
@@ -653,6 +684,29 @@ TEST(ProcessorTest, RearDropoutIsFlaggedAndSupportPersists) {
     }
   }
   EXPECT_GE(max_rear_support_conf, 0.05f);
+}
+
+TEST(ProcessorTest, FrontDropoutIsFlaggedAndSupportPersists) {
+  Processor processor(MakeConfig());
+  ASSERT_TRUE(processor.update(MakeFlatFrame(1)).valid);
+  const auto output = processor.update(MakeRearOnlyFrame(100000001));
+  ASSERT_TRUE(output.valid);
+  EXPECT_TRUE(output.observability.front_dropout);
+  EXPECT_FALSE(output.observability.rear_dropout);
+
+  float max_front_support_conf = 0.0f;
+  for (int row = 0; row < output.rows; ++row) {
+    for (int col = 0; col < output.cols; ++col) {
+      const int idx = row * output.cols + col;
+      const float x = output.origin.x() +
+                      (static_cast<float>(col) + 0.5f) * output.resolution;
+      if (x > 0.4f) {
+        max_front_support_conf =
+            std::max(max_front_support_conf, output.support_confidence[idx]);
+      }
+    }
+  }
+  EXPECT_GE(max_front_support_conf, 0.05f);
 }
 
 TEST(ProcessorTest, RearDropoutBridgesPreviousRearObstaclePointsForOneFrame) {
@@ -909,6 +963,7 @@ TEST(ProcessorTest, RearGapTriggersMissingByDropoutSectors) {
   Processor processor(MakeConfig());
   const auto output = processor.update(MakeRearGapFrame());
   ASSERT_TRUE(output.valid);
+  EXPECT_FALSE(output.observability.front_dropout);
   EXPECT_TRUE(output.observability.rear_dropout);
 
   int missing_count = 0;
@@ -918,6 +973,37 @@ TEST(ProcessorTest, RearGapTriggersMissingByDropoutSectors) {
     }
   }
   EXPECT_GT(missing_count, 0);
+}
+
+TEST(ProcessorTest, FrontGapTriggersMissingByDropoutSectors) {
+  Processor processor(MakeConfig());
+  const auto output = processor.update(MakeFrontGapFrame());
+  ASSERT_TRUE(output.valid);
+  EXPECT_TRUE(output.observability.front_dropout);
+  EXPECT_FALSE(output.observability.rear_dropout);
+
+  int front_missing_count = 0;
+  int rear_missing_count = 0;
+  const float angle_per_sector =
+      2.0f * static_cast<float>(M_PI) /
+      static_cast<float>(output.observability.sectors.size());
+  for (size_t sector = 0; sector < output.observability.sectors.size();
+       ++sector) {
+    if (output.observability.sectors[sector].state !=
+        ObservabilityState::kMissingByDropout) {
+      continue;
+    }
+    const float angle =
+        -static_cast<float>(M_PI) +
+        (static_cast<float>(sector) + 0.5f) * angle_per_sector;
+    if (std::abs(angle) <= static_cast<float>(M_PI_2)) {
+      ++front_missing_count;
+    } else {
+      ++rear_missing_count;
+    }
+  }
+  EXPECT_GT(front_missing_count, 0);
+  EXPECT_EQ(rear_missing_count, 0);
 }
 
 TEST(ProcessorTest, RearSupportPointsAreAllowedWhenRearCoverageIsNormal) {
@@ -946,6 +1032,7 @@ TEST(ProcessorTest, NoBlindSectorStatesAreProduced) {
 
   const auto dropout_output = processor.update(MakeFrontOnlyFrame(100000001));
   ASSERT_TRUE(dropout_output.valid);
+  EXPECT_FALSE(dropout_output.observability.front_dropout);
   EXPECT_TRUE(dropout_output.observability.rear_dropout);
   for (const auto &sector : dropout_output.observability.sectors) {
     EXPECT_TRUE(sector.state == ObservabilityState::kObserved ||
@@ -971,6 +1058,7 @@ TEST(ProcessorTest, SparseCoverageCreatesUnknownButNotDropout) {
   Processor processor(config);
   const auto output = processor.update(MakeSparseFrame());
   ASSERT_TRUE(output.valid);
+  EXPECT_FALSE(output.observability.front_dropout);
   EXPECT_FALSE(output.observability.rear_dropout);
   EXPECT_TRUE(output.observability.frame_partial);
 
