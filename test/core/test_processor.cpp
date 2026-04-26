@@ -3,6 +3,7 @@
 #include "passable_area/core/mapping/local_terrain_map.hpp"
 #include "passable_area/core/polar_frontend.hpp"
 #include "passable_area/core/processor.hpp"
+#include "passable_area/core/terrain_feature_updater.hpp"
 #include "passable_area/core/traversability_solver.hpp"
 #include "passable_area/core/types/obstacle_types.hpp"
 
@@ -34,6 +35,7 @@ using passable_area::core::Processor;
 using passable_area::core::ProtrusionCandidate;
 using passable_area::core::SupportCandidate;
 using passable_area::core::SupportState;
+using passable_area::core::TerrainFeatureUpdater;
 using passable_area::core::TraversabilitySolver;
 
 FrameInput MakeFlatFrame(int stamp = 1) {
@@ -1405,6 +1407,31 @@ TEST(ProcessorTest, LocalTerrainMapInitializesReservedObstacleV2Layers) {
     EXPECT_FLOAT_EQ(map.layers().overhead_evidence[static_cast<size_t>(cell)],
                     0.0f);
   }
+}
+
+TEST(ProcessorTest, TerrainFeatureUpdaterUsesActualDiagonalDistanceForSlope) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+
+  LocalTerrainMap map(config);
+  auto &layers = map.layers();
+  const int center = 1 * map.cols() + 1;
+  const int diagonal = 2 * map.cols() + 2;
+  layers.support_height[center] = 0.0f;
+  layers.support_height[diagonal] = 0.20f;
+  layers.support_confidence[center] = 1.0f;
+
+  TerrainFeatureUpdater updater(config);
+  updater.update({center}, map);
+
+  const float expected_slope =
+      std::atan(0.20f / std::sqrt(2.0f)) * 180.0f /
+      static_cast<float>(M_PI);
+  EXPECT_NEAR(layers.slope[center], expected_slope, 1e-4f);
+  EXPECT_NEAR(layers.step_up[center], 0.20f, 1e-5f);
+  EXPECT_NEAR(layers.roughness[center], 0.20f, 1e-5f);
 }
 
 TEST(ProcessorTest,

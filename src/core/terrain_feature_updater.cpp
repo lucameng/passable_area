@@ -41,6 +41,7 @@ void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells,
 
     float max_up = 0.0f;
     float max_down = 0.0f;
+    float max_up_grade = 0.0f;
     float rough = 0.0f;
     int valid_neighbors = 0;
     const int row = cell / map.cols();
@@ -63,6 +64,14 @@ void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells,
         const float dz = nh - h;
         max_up = std::max(max_up, dz);
         max_down = std::max(max_down, -dz);
+        if (dz > 0.0f) {
+          const float neighbor_distance =
+              map.resolution() * std::hypot(static_cast<float>(dr),
+                                             static_cast<float>(dc));
+          max_up_grade =
+              std::max(max_up_grade,
+                       dz / std::max(neighbor_distance, 1e-3f));
+        }
         rough += dz * dz;
         ++valid_neighbors;
       }
@@ -73,7 +82,7 @@ void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells,
         valid_neighbors > 0
             ? std::sqrt(rough / static_cast<float>(valid_neighbors))
             : 0.0f;
-    layers.slope[cell] = std::atan(max_up / std::max(map.resolution(), 1e-3f)) *
+    layers.slope[cell] = std::atan(max_up_grade) *
                          180.0f / static_cast<float>(M_PI);
     layers.clearance[cell] = std::isfinite(layers.overhead_height[cell])
                                  ? layers.overhead_height[cell] - h
