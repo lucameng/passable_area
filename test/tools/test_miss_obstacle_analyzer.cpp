@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <limits>
 
 namespace {
@@ -168,6 +169,52 @@ TEST(MissObstacleAnalyzerTest,
   EXPECT_NEAR(
       analysis->representative_cells.front().max_sample_z_minus_support_ref,
       0.10f, 1e-5f);
+}
+
+TEST(MissObstacleAnalyzerTest,
+     OutputHeightGateRequiresStepRangeAboveFiniteSupport) {
+  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
+  auto output = MakeOutput();
+  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.20f}});
+  const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_candidate_cell[cell] = 1U;
+  output.block_reason[cell] = 1U;
+  output.obstacle_evidence[cell] = 0.6f;
+  output.support_height[cell] = 0.0f;
+
+  const auto analysis = analyzer.analyzeFrame(output, frame);
+  ASSERT_TRUE(analysis.has_value());
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kOutputHeightGateNotMet);
+  ASSERT_FALSE(analysis->representative_cells.empty());
+  EXPECT_NEAR(
+      analysis->representative_cells.front().max_sample_z_minus_support_ref,
+      0.20f, 1e-5f);
+}
+
+TEST(MissObstacleAnalyzerTest,
+     OutputHeightGateDoesNotUseSampleMinAsSupportFallback) {
+  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
+  auto output = MakeOutput();
+  const auto frame = MakeProcessedFrame({Point3f{0.0f, 0.0f, 0.05f},
+                                         Point3f{0.0f, 0.0f, 0.45f}});
+  const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_candidate_cell[cell] = 1U;
+  output.block_reason[cell] = 1U;
+  output.obstacle_evidence[cell] = 0.6f;
+  output.support_height[cell] = std::numeric_limits<float>::quiet_NaN();
+
+  const auto analysis = analyzer.analyzeFrame(output, frame);
+  ASSERT_TRUE(analysis.has_value());
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kOutputHeightGateNotMet);
+  ASSERT_FALSE(analysis->representative_cells.empty());
+  EXPECT_TRUE(
+      std::isnan(analysis->representative_cells.front().support_ref));
+  EXPECT_TRUE(std::isnan(
+      analysis->representative_cells.front().max_sample_z_minus_support_ref));
 }
 
 TEST(MissObstacleAnalyzerTest,

@@ -806,7 +806,7 @@ obstacle 更新：
 其中障碍调试点还会额外经过 evidence / reasoner / 高度门控：
 
 - `protrusion_evidence` 必须足够高，或 reasoner 给出低净空相关阻挡且 `overhead_evidence` 达到发布阈值
-- 点相对支撑参考的高度要够高
+- 点相对当前地图中可信 `support_height` 的高度要够高；没有有限 `support_height` 的 cell 不会用当前帧最低样本临时生成发布支撑参考
 - 点在 `base_link` 下的 z 又不能太高
 
 这使得障碍调试点更偏向“与机器人近地通行有关的障碍样本”。

@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <unordered_map>
 
 namespace passable_area::core {
 namespace {
@@ -275,26 +274,8 @@ Processor::buildOutput(const ProcessedFrame &frame,
   std::vector<CachedRearObstaclePoint> native_rear_obstacle_points;
   const float support_tolerance =
       std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
-  std::unordered_map<int, float> fallback_support_ref_by_cell;
-  fallback_support_ref_by_cell.reserve(frame.map_samples.size() / 8U + 1U);
   std::vector<uint8_t> publish_decision_sample_seen(map_.size(), 0U);
   std::vector<uint8_t> native_obstacle_point_published(map_.size(), 0U);
-
-  for (const auto &sample : frame.map_samples) {
-    int cell = -1;
-    if (!map_.mapToIndex(sample.point_in_map.x, sample.point_in_map.y, cell)) {
-      continue;
-    }
-    if (!HasObstaclePointPublishDecision(output, cell) ||
-        std::isfinite(layers.support_height[cell])) {
-      continue;
-    }
-    auto [it, inserted] =
-        fallback_support_ref_by_cell.emplace(cell, sample.point_in_map.z);
-    if (!inserted) {
-      it->second = std::min(it->second, sample.point_in_map.z);
-    }
-  }
 
   for (const auto &sample : frame.map_samples) {
     const Point3f point_in_base_gravity = TransformMapPointToBaseGravity(
@@ -316,13 +297,6 @@ Processor::buildOutput(const ProcessedFrame &frame,
           MakeCellDebugPoint(point_in_base_gravity, cell));
     }
 
-    float support_ref = layers.support_height[cell];
-    if (!std::isfinite(support_ref)) {
-      const auto it = fallback_support_ref_by_cell.find(cell);
-      support_ref = it != fallback_support_ref_by_cell.end()
-                        ? it->second
-                        : std::numeric_limits<float>::infinity();
-    }
     if (!HasObstaclePointPublishDecision(output, cell)) {
       continue;
     }
@@ -334,7 +308,8 @@ Processor::buildOutput(const ProcessedFrame &frame,
         point_in_base_gravity.z >= config_.obstacle_points_min_height;
     if (geometry_sample_height_ok &&
         PassesObstaclePointPublishHeightGates(sample, point_in_base_gravity,
-                                              support_ref, config_)) {
+                                              layers.support_height[cell],
+                                              config_)) {
       const auto point = MakeCellDebugPoint(point_in_base_gravity, cell);
       output.obstacle_points.push_back(point);
       native_obstacle_point_published[static_cast<size_t>(cell)] = 1U;

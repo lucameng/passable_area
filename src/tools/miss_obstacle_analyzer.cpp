@@ -33,6 +33,7 @@ bool PassesObstaclePointPublishHeightGates(
   return std::isfinite(support_ref) &&
          sample_stats.max_z >=
              support_ref + config.obstacle_points_min_height &&
+         sample_stats.max_z > support_ref + config.geometry.max_step_up &&
          sample_stats.min_base_link_z <=
              config.obstacle_points_max_height_in_base_link;
 }
@@ -196,10 +197,6 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       }
 
       float support_ref = output.support_height[idx];
-      if (!std::isfinite(support_ref) && has_samples &&
-          sample_stats.sample_count > 0) {
-        support_ref = sample_stats.min_z;
-      }
 
       if (output.obstacle_evidence[idx] >=
           config_.obstacle_points_min_evidence) {
