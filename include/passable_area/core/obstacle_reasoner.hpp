@@ -36,6 +36,8 @@ private:
   bool hasDenseCurrentFrameProtrusionSource(
       float protrusion_evidence, size_t cell,
       const ObstaclePublicationContext &publication_context) const;
+  bool hasActiveOverheadState(float overhead_confidence,
+                              float overhead_evidence) const;
 
   Config config_;
 };

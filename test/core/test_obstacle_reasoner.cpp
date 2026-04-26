@@ -77,6 +77,59 @@ TEST(ObstacleReasonerTest, LowClearanceGatedByStepRangeHeight) {
             static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByHeight));
 }
 
+TEST(ObstacleReasonerTest, LowClearanceGeometryWithoutOverheadStateDoesNotBlock) {
+  auto layers = MakeLayers();
+  layers.clearance[0] = 0.3f;
+  layers.overhead_confidence[0] = 0.0f;
+  layers.overhead_evidence[0] = 0.0f;
+
+  const auto output = ObstacleReasoner(MakeConfig()).evaluate(layers);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.overhead_stage[0],
+            static_cast<uint8_t>(ObstacleEvidenceStage::kEvidenceLow));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
+TEST(ObstacleReasonerTest,
+     LowClearanceActiveStateCanBlockBelowPublishEvidence) {
+  auto layers = MakeLayers();
+  layers.clearance[0] = 0.3f;
+  layers.overhead_confidence[0] = 0.3f;
+  layers.overhead_evidence[0] = 0.1f;
+
+  const auto output = ObstacleReasoner(MakeConfig()).evaluate(layers);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kLowClearance));
+  EXPECT_EQ(output.overhead_stage[0],
+            static_cast<uint8_t>(ObstacleEvidenceStage::kBlocking));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByEvidence));
+}
+
+TEST(ObstacleReasonerTest,
+     LowClearanceDecayedBelowActiveStateThresholdDoesNotBlock) {
+  auto config = MakeConfig();
+  auto layers = MakeLayers();
+  layers.clearance[0] = 0.3f;
+  layers.overhead_confidence[0] =
+      config.persistence.obstacle_height_clear_threshold * 0.5f;
+  layers.overhead_evidence[0] =
+      config.persistence.obstacle_height_clear_threshold * 0.5f;
+
+  const auto output = ObstacleReasoner(config).evaluate(layers);
+
+  EXPECT_EQ(output.block_reason[0],
+            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.overhead_stage[0],
+            static_cast<uint8_t>(ObstacleEvidenceStage::kEvidenceLow));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
 TEST(ObstacleReasonerTest, ProtrusionBlocksWhenEvidenceHighAndTallProtrusion) {
   auto config = MakeConfig();
   auto layers = MakeLayers();

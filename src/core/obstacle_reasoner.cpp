@@ -31,6 +31,13 @@ bool ObstacleReasoner::hasDenseCurrentFrameProtrusionSource(
   return current_frame_gain > 0.0f && protrusion_evidence >= current_frame_gain;
 }
 
+bool ObstacleReasoner::hasActiveOverheadState(float overhead_confidence,
+                                              float overhead_evidence) const {
+  const float state_signal = std::max(overhead_confidence, overhead_evidence);
+  return state_signal > 0.0f &&
+         state_signal >= config_.persistence.obstacle_height_clear_threshold;
+}
+
 ObstacleReasonerOutput
 ObstacleReasoner::evaluate(
     const TerrainLayers &layers,
@@ -54,6 +61,9 @@ ObstacleReasoner::evaluate(
     const float overhead_evidence = cell < layers.overhead_evidence.size()
                                         ? layers.overhead_evidence[cell]
                                         : 0.0f;
+    const float overhead_confidence = cell < layers.overhead_confidence.size()
+                                          ? layers.overhead_confidence[cell]
+                                          : 0.0f;
     const float clearance = cell < layers.clearance.size()
                                 ? layers.clearance[cell]
                                 : std::numeric_limits<float>::quiet_NaN();
@@ -72,8 +82,12 @@ ObstacleReasoner::evaluate(
                                              publication_context);
     const bool overhead_evidence_high =
         overhead_evidence >= config_.obstacle_points_min_evidence;
-    const bool low_clearance =
+    const bool low_clearance_geometry =
         std::isfinite(clearance) && clearance < config_.geometry.min_clearance;
+    const bool overhead_state_active =
+        hasActiveOverheadState(overhead_confidence, overhead_evidence);
+    const bool low_clearance =
+        low_clearance_geometry && overhead_state_active;
     const float protrusion_height = cell < layers.protrusion_height.size()
                                         ? layers.protrusion_height[cell]
                                         : 0.0f;
@@ -113,7 +127,8 @@ ObstacleReasoner::evaluate(
           protrusion_blocking ? ObstacleEvidenceStage::kBlocking
                               : ObstacleEvidenceStage::kEvidenceLow);
     }
-    if (overhead_evidence > 0.0f || low_clearance) {
+    if (overhead_evidence > 0.0f || overhead_confidence > 0.0f ||
+        low_clearance_geometry) {
       output.overhead_stage[cell] = static_cast<uint8_t>(
           low_clearance ? ObstacleEvidenceStage::kBlocking
                         : ObstacleEvidenceStage::kEvidenceLow);

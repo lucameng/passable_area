@@ -782,6 +782,7 @@ obstacle 更新：
 
 - `block_reason` 是内部通行性判定和诊断信号，不是新的外部障碍真值。
 - 对下游导航仍以 `/terrain_obstacle_points` 为唯一外部障碍输出合同。
+- `LowClearance` 阻挡由几何净空不足和仍然有效的 overhead 状态共同决定；`clearance` 只表达几何高度差，`overhead_confidence` / `overhead_evidence` 决定该低净空结构是否仍有效。
 - Phase 3b 后，`LowClearance` 和包含低净空的 `Mixed` cell 在 overhead evidence 达到发布阈值时，可驱动 `/terrain_obstacle_points` 发布。
 
 ### 8.8 `Processor::buildOutput`
