@@ -1,4 +1,5 @@
 #include "passable_area/core/mapping/local_terrain_map.hpp"
+#include "passable_area/core/config_validation.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +36,7 @@ void ShiftLayer(std::vector<T> &values, int rows, int cols, int row_shift,
 } // namespace
 
 LocalTerrainMap::LocalTerrainMap(const Config &config) : config_(config) {
+  ValidateConfigOrThrow(config_);
   cols_ = std::max(1, static_cast<int>(std::round(config_.map.length /
                                                   config_.map.resolution)));
   rows_ = std::max(1, static_cast<int>(std::round(config_.map.width /

@@ -1,3 +1,4 @@
+#include "passable_area/core/config_validation.hpp"
 #include "passable_area/core/frame_preprocessor.hpp"
 #include "passable_area/core/mapping/dropout_aware_map_updater.hpp"
 #include "passable_area/core/mapping/local_terrain_map.hpp"
@@ -12,6 +13,7 @@
 #include <gtest/gtest.h>
 #include <initializer_list>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 
 namespace {
@@ -1579,6 +1581,30 @@ TEST(ProcessorTest,
             static_cast<uint8_t>(SupportState::kObserved));
 }
 
+TEST(ProcessorTest, ConfigValidationRejectsBrokenPhysicalInvariants) {
+  auto config = MakeConfig();
+  EXPECT_TRUE(passable_area::core::ValidateConfig(config).empty());
+
+  config.geometry.min_clearance = config.geometry.max_step_up;
+  EXPECT_THROW(passable_area::core::ValidateConfigOrThrow(config),
+               std::invalid_argument);
+
+  config = MakeConfig();
+  config.obstacle_points_min_height = config.geometry.max_step_down + 0.01f;
+  EXPECT_THROW(passable_area::core::ValidateConfigOrThrow(config),
+               std::invalid_argument);
+
+  config = MakeConfig();
+  config.observability.sector_count = 0;
+  EXPECT_THROW(passable_area::core::ValidateConfigOrThrow(config),
+               std::invalid_argument);
+
+  config = MakeConfig();
+  config.map.resolution = 0.0f;
+  EXPECT_THROW(passable_area::core::ValidateConfigOrThrow(config),
+               std::invalid_argument);
+}
+
 TEST(ProcessorTest,
      ObstacleOverlappedSupportDoesNotRaiseTrustedReachableSupport) {
   auto config = MakeConfig();
@@ -1813,6 +1839,39 @@ TEST(ProcessorTest, ProtrusionCandidateGainScaleBoostsEvidenceAccumulation) {
   EXPECT_NEAR(map.layers().obstacle_evidence[3],
               config.persistence.obstacle_evidence_gain * 1.8f * 0.9f, 1e-5f);
   EXPECT_FLOAT_EQ(map.layers().overhead_evidence[3], 0.0f);
+}
+
+TEST(ProcessorTest, PartialObstacleClearDecayScaleControlsObservedDecay) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+  config.persistence.obstacle_evidence_decay = 0.10f;
+  config.persistence.obstacle_clear_partial_decay_scale = 0.25f;
+
+  LocalTerrainMap map(config);
+  auto &layers = map.layers();
+  layers.support_height[3] = 0.0f;
+  layers.support_confidence[3] = 1.0f;
+  layers.support_state[3] = static_cast<uint8_t>(SupportState::kPersistent);
+  layers.protrusion_height[3] = config.geometry.max_step_up + 0.2f;
+  layers.protrusion_evidence[3] = 0.80f;
+  layers.obstacle_evidence[3] = 0.80f;
+
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+
+  FrontendOutput frontend_output;
+  updater.update(frontend_output, observability, base_pose, map);
+
+  EXPECT_NEAR(layers.protrusion_evidence[3], 0.775f, 1e-5f);
+  EXPECT_NEAR(layers.obstacle_evidence[3], layers.protrusion_evidence[3],
+              1e-5f);
 }
 
 TEST(ProcessorTest, OverheadCandidateMaintainsIndependentEvidenceChain) {

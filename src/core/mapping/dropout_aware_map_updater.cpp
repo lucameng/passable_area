@@ -9,6 +9,12 @@
 namespace passable_area::core {
 namespace {
 
+constexpr float kCoverageMemoryScale = 0.92f;
+constexpr float kCurrentCoverageBlendScale = 0.85f;
+constexpr float kObservedSupportDecayScale = 0.80f;
+constexpr float kDropoutSupportDecayScale = 0.05f;
+constexpr float kDropoutObstacleDecayScale = 0.03f;
+
 void ClearObstacleLayer(TerrainLayers &layers, int cell) {
   layers.overhead_height[cell] = std::numeric_limits<float>::quiet_NaN();
   layers.overhead_confidence[cell] = 0.0f;
@@ -145,14 +151,16 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
   for (int cell = 0; cell < map.size(); ++cell) {
     const auto sector = sector_state_for_cell(cell);
     layers.coverage_confidence[cell] =
-        std::max(layers.coverage_confidence[cell] * 0.92f,
-                 sector.coverage_confidence * 0.85f);
+        std::max(layers.coverage_confidence[cell] * kCoverageMemoryScale,
+                 sector.coverage_confidence * kCurrentCoverageBlendScale);
     if (!touched_support[cell]) {
       float support_decay = 0.0f;
       if (sector.state == ObservabilityState::kObserved) {
-        support_decay = config_.persistence.support_confidence_decay * 0.8f;
+        support_decay = config_.persistence.support_confidence_decay *
+                        kObservedSupportDecayScale;
       } else if (sector.state == ObservabilityState::kMissingByDropout) {
-        support_decay = config_.persistence.support_confidence_decay * 0.05f;
+        support_decay = config_.persistence.support_confidence_decay *
+                        kDropoutSupportDecayScale;
       }
       layers.support_confidence[cell] =
           std::max(0.0f, layers.support_confidence[cell] - support_decay);
@@ -163,9 +171,11 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
       if (support_reobserved && sector.state == ObservabilityState::kObserved) {
         obstacle_decay = config_.persistence.obstacle_clear_observed_decay;
       } else if (sector.state == ObservabilityState::kObserved) {
-        obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.4f;
+        obstacle_decay = config_.persistence.obstacle_evidence_decay *
+                         config_.persistence.obstacle_clear_partial_decay_scale;
       } else if (sector.state == ObservabilityState::kMissingByDropout) {
-        obstacle_decay = config_.persistence.obstacle_evidence_decay * 0.03f;
+        obstacle_decay = config_.persistence.obstacle_evidence_decay *
+                         kDropoutObstacleDecayScale;
       }
       if (obstacle_decay > 0.0f) {
         layers.overhead_confidence[cell] =

@@ -1,4 +1,5 @@
 #include "passable_area/core/processor.hpp"
+#include "passable_area/core/config_validation.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>
@@ -11,6 +12,7 @@ namespace {
 constexpr float kRearBridgeMaxTranslationCells = 3.0f;
 constexpr float kRearBridgeMaxYawChangeRad = 0.78539816339f;
 constexpr float kPi = 3.14159265359f;
+constexpr float kSupportDebugToleranceVoxelScale = 1.5f;
 
 Point3f TransformMapPointToBaseGravity(const Point3f &point_in_map,
                                        const Pose3D &base_pose_in_map) {
@@ -148,10 +150,12 @@ MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
 } // namespace
 
 Processor::Processor(const Config &config)
-    : config_(config), preprocessor_(config), observability_estimator_(config),
-      frontend_(config), map_(config), map_updater_(config),
-      feature_updater_(config), traversability_solver_(config),
-      obstacle_reasoner_(config) {}
+    : config_(config), preprocessor_(config_), observability_estimator_(config_),
+      frontend_(config_), map_(config_), map_updater_(config_),
+      feature_updater_(config_), traversability_solver_(config_),
+      obstacle_reasoner_(config_) {
+  ValidateConfigOrThrow(config_);
+}
 
 FrameOutput Processor::update(const FrameInput &input) {
   ProcessedFrame preprocessed;
@@ -273,7 +277,8 @@ Processor::buildOutput(const ProcessedFrame &frame,
   output.unknown_points.reserve(map_.size() / 4);
   std::vector<CachedRearObstaclePoint> native_rear_obstacle_points;
   const float support_tolerance =
-      std::max(config_.preprocess.voxel_size * 1.5f, config_.map.resolution);
+      std::max(config_.preprocess.voxel_size * kSupportDebugToleranceVoxelScale,
+               config_.map.resolution);
   std::vector<uint8_t> publish_decision_sample_seen(map_.size(), 0U);
   std::vector<uint8_t> native_obstacle_point_published(map_.size(), 0U);
 

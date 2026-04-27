@@ -59,6 +59,7 @@ include_directories(
 )
 
 set(core_sources
+  src/core/config_validation.cpp
   src/core/frame_preprocessor.cpp
   src/core/frame_observability_estimator.cpp
   src/core/polar_frontend.cpp

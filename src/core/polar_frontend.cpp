@@ -22,6 +22,14 @@ struct HeightBand {
   int count = 0;
 };
 
+constexpr float kBandBottomQuantile = 0.10f;
+constexpr float kBandTopQuantile = 0.90f;
+constexpr float kSuspiciousSpanStepFraction = 0.75f;
+constexpr float kPureProtrusionEvidenceGain = 1.5f;
+constexpr int kSparseLowerLeakMaxSamples = 1;
+constexpr int kDominantSupportBandMinSamples = 3;
+constexpr float kMinPositiveSpan = 1e-3f;
+
 float NormalizeAngle(float angle) {
   return std::atan2(std::sin(angle), std::cos(angle));
 }
@@ -68,8 +76,8 @@ std::vector<HeightBand> SplitHeightBands(std::vector<float> values,
   int begin = 0;
   const auto flush = [&](int end) {
     HeightBand band;
-    band.bottom = Quantile(values, begin, end, 0.10f);
-    band.top = Quantile(values, begin, end, 0.90f);
+    band.bottom = Quantile(values, begin, end, kBandBottomQuantile);
+    band.top = Quantile(values, begin, end, kBandTopQuantile);
     band.count = end - begin;
     bands.push_back(band);
   };
@@ -149,8 +157,10 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
   output.protrusion_candidates.reserve(static_cast<size_t>(active_cell_count));
   output.overhead_candidates.reserve(static_cast<size_t>(active_cell_count));
 
-  const float suspicious_vertical_span = config_.geometry.max_step_up * 0.75f;
-  const float split_gap = std::max(config_.geometry.profile_split_gap, 1e-3f);
+  const float suspicious_vertical_span =
+      config_.geometry.max_step_up * kSuspiciousSpanStepFraction;
+  const float split_gap =
+      std::max(config_.geometry.profile_split_gap, kMinPositiveSpan);
   const float yaw = YawFromQuaternion(frame.base_pose_in_map.orientation);
   const size_t sector_count =
       std::max<size_t>(observability.sectors.size(), static_cast<size_t>(1));
@@ -186,7 +196,8 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       continue;
     }
     size_t support_band_index = 0U;
-    if (bands.size() > 1U && bands[0].count == 1 && bands[1].count >= 3) {
+    if (bands.size() > 1U && bands[0].count <= kSparseLowerLeakMaxSamples &&
+        bands[1].count >= kDominantSupportBandMinSamples) {
       support_band_index = 1U;
     }
     const HeightBand &support_band = bands[support_band_index];
@@ -225,9 +236,10 @@ FrontendOutput PolarFrontend::run(const ProcessedFrame &frame,
       output.obstacle_candidate_cell[static_cast<size_t>(cell)] = 1U;
     }
     if (protrusion_triggered) {
-      const float protrusion_gain_scale = overhead_triggered ? 1.0f : 1.5f;
+      const float protrusion_gain_scale =
+          overhead_triggered ? 1.0f : kPureProtrusionEvidenceGain;
       const float step_reference =
-          std::max(config_.geometry.max_step_up, 1e-3f);
+          std::max(config_.geometry.max_step_up, kMinPositiveSpan);
       output.protrusion_candidates.push_back(ProtrusionCandidate{
           cell, obstacle_z,
           std::clamp(height_above_support / step_reference, 0.0f, 1.0f),

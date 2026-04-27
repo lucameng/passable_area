@@ -5,6 +5,12 @@
 #include <limits>
 
 namespace passable_area::core {
+namespace {
+
+constexpr int kDenseCurrentFrameSampleCountSlack = 1;
+
+} // namespace
+
 bool ObstacleReasoner::hasDenseCurrentFrameProtrusionSource(
     float protrusion_evidence, size_t cell,
     const ObstaclePublicationContext &publication_context) const {
@@ -18,7 +24,8 @@ bool ObstacleReasoner::hasDenseCurrentFrameProtrusionSource(
     return false;
   }
   const int dense_source_count =
-      std::max(1, config_.observability.min_points_per_sector - 1);
+      std::max(1, config_.observability.min_points_per_sector -
+                       kDenseCurrentFrameSampleCountSlack);
   if ((*publication_context.raw_sample_count)[cell] < dense_source_count) {
     return false;
   }

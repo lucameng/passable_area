@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -61,4 +62,13 @@ TEST_F(RosFixture, PrefersExplicitNewParameterLocations) {
        rclcpp::Parameter("publish_map_to_base_gravity_tf", true)});
   EXPECT_EQ(params.config.map_frame, "map_override");
   EXPECT_FALSE(params.config.debug.publish_map_to_base_gravity_tf);
+}
+
+TEST_F(RosFixture, RejectsInvalidLoadedConfig) {
+  EXPECT_THROW(
+      LoadParamsWithOverrides(
+          "test_ros_param_loader_invalid_config",
+          {rclcpp::Parameter("max_step_up", 0.35),
+           rclcpp::Parameter("min_clearance", 0.20)}),
+      std::invalid_argument);
 }

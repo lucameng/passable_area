@@ -595,6 +595,7 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
 
 - 当前 cell 的本帧 `support_band.bottom`
 - 如果最低 band 只有 1 个样本、且下一个 band 有至少 3 个样本，则把最低 band 视作 sparse lower leak，并用下一 band 作为 support
+- 这两个计数是内部 profile 解析语义，不是 YAML 参数：`1` 表示单点 lower leak，`3` 表示下一层已有最小局部支撑样本量
 
 #### 8.3.4 suspicious obstacle 只是第一步
 
@@ -628,6 +629,12 @@ relative_z = point_in_map.z - base_pose_in_map.position.z()
   - 设置 `obstacle_candidate_cell = 1`
 
 因此当前已经没有“固定 `3x3` upper-support neighborhood gate”。
+
+上述 `0.75` 和 `1.5` 现在在代码中作为命名内部语义保留：
+
+- suspicious span 是 `max_step_up` 的早期可疑比例，用于让后续 evidence/reasoner 决策接管，而不是直接发布障碍点
+- pure protrusion gain 是无 overhead 共存时的单帧 protrusion evidence 增益，仍必须通过 Reasoner 的物理高度和发布决策合同
+- 它们不是公开 YAML 参数；如果后续证据模型能消除这两个经验语义，应优先删除或推导，而不是继续扩展参数面
 
 #### 8.3.6 `effective_support_ref` 的定位
 
@@ -684,6 +691,8 @@ obstacle 更新：
   - 在 `base_link` 中不高于 `obstacle_points_max_height_in_base_link`
 
 当前实现不再按旧 explanation / 邻域否决字段清理障碍层。障碍层清理由证据衰减、support 重观测和 support 失效后的阈值判断触发。
+
+P2 参数合同收缩后，地图更新中的经验比例均为命名内部常量。`obstacle_clear_partial_decay_scale` 参与“扇区已观测、但该 cell 没有当前支撑重观测”的 obstacle evidence 衰减路径；完整地面重观测仍使用 `obstacle_clear_observed_decay`，dropout 下仍只做极弱衰减。
 
 ### 8.5 `TerrainFeatureUpdater`
 
@@ -755,6 +764,7 @@ obstacle 更新：
 - solver 也不再重复执行几何阻挡阈值判定；`GeometryFailure` 等阻挡语义由 `ObstacleReasoner` 提供，solver 只负责 `UNKNOWN / IMPASSABLE / PASSABLE` 三态整合与 cost 输出
 - 当前主链没有 BFS、可达域扩张或图搜索求解
 - 当前版本是逐 cell 判通行性，再给 passable cell 生成代价
+- `coverage_confidence < 0.15` 是命名内部 UNKNOWN 门限；passable cost 使用命名权重组合 slope / step / roughness，不作为 YAML 参数暴露
 
 ### 8.7 `ObstacleReasoner`
 
@@ -1029,7 +1039,18 @@ obstacle 更新：
 - `downsample.enable`
 - `downsample.voxel_size`
 
-### 12.8 调试参数
+### 12.8 配置不变量
+
+核心和 ROS 参数加载都会校验稳定配置不变量，典型包括：
+
+- `map_length` / `map_width` / `map_resolution` 必须为正有限值
+- `min_clearance > max_step_up`
+- `0 <= obstacle_points_min_height <= max_step_down`
+- `sector_count > 0`
+- evidence gain / decay / threshold 类参数必须落在 `[0, 1]` 的有效区间
+- `downsample.voxel_size > 0`
+
+### 12.9 调试参数
 
 来自：
 

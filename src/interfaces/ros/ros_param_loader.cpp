@@ -1,4 +1,5 @@
 #include "passable_area/interfaces/ros/ros_param_loader.hpp"
+#include "passable_area/core/config_validation.hpp"
 
 #include <optional>
 
@@ -170,6 +171,7 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "output.observability_topic", topics.observability_topic);
   topics.status_code_topic = node.declare_parameter("output.status_code_topic",
                                                     topics.status_code_topic);
+  passable_area::core::ValidateConfigOrThrow(config);
   return params;
 }
 

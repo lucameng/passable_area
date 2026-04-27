@@ -6,6 +6,13 @@
 namespace passable_area::core {
 namespace {
 
+constexpr float kUnknownCoverageThreshold = 0.15f;
+constexpr float kBasePassableCost = 10.0f;
+constexpr float kCostRange = 90.0f;
+constexpr float kSlopeCostWeight = 0.40f;
+constexpr float kStepCostWeight = 0.35f;
+constexpr float kRoughnessCostWeight = 0.25f;
+
 bool IsBlockingReason(BlockReason reason) {
   return reason == BlockReason::kProtrusion ||
          reason == BlockReason::kLowClearance ||
@@ -39,7 +46,8 @@ void TraversabilitySolver::update(
                        stale_threshold_frames;
 
     PassabilityState state = PassabilityState::kUnknown;
-    if (coverage < 0.15f || support_state == SupportState::kNone ||
+    if (coverage < kUnknownCoverageThreshold ||
+        support_state == SupportState::kNone ||
         support_confidence < config_.observability.min_support_confidence ||
         stale) {
       state = PassabilityState::kUnknown;
@@ -69,9 +77,10 @@ void TraversabilitySolver::update(
     const float rough_ratio = std::clamp(
         roughness / std::max(config_.geometry.max_support_roughness, 1e-3f),
         0.0f, 1.0f);
-    const float cost =
-        10.0f +
-        90.0f * (0.4f * slope_ratio + 0.35f * step_ratio + 0.25f * rough_ratio);
+    const float cost = kBasePassableCost +
+                       kCostRange * (kSlopeCostWeight * slope_ratio +
+                                     kStepCostWeight * step_ratio +
+                                     kRoughnessCostWeight * rough_ratio);
     layers.traversal_cost[cell] =
         static_cast<int8_t>(std::clamp(cost, 1.0f, 99.0f));
   }
