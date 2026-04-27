@@ -1,16 +1,20 @@
 # P1 Final Report
 
-## Completed Scope
+## Scope Status
 
-P1 work is complete on top of the repaired P0 baseline
-`fe6146f fix: prevent obstacle overlap from polluting support`.
+P1-A/B/C are complete on top of the repaired P0 baseline
+`fe6146f fix: prevent obstacle overlap from polluting support`. P1-D was
+reopened after strict audit feedback because `67f15ee` only closed the diagonal
+slope-distance subtask, not the full P1-4 terrain geometry item. The reopened
+P1-D follow-up has passed build, tests, P0 benchmark validation, and strict
+read-only review. P1 is complete with the residual risks listed below.
 
-Completed commits:
+Completed P1 commits before the reopened P1-D follow-up:
 
 - P1-A: `a2c9d71 fix: add symmetric dropout sector detection`
 - P1-B: `c61d5d1 fix: gate low clearance by overhead state`
 - P1-C: `1e78565 fix: require finite support for obstacle publication`
-- P1-D: `67f15ee fix: use diagonal distance for terrain slope`
+- P1-D partial: `67f15ee fix: use diagonal distance for terrain slope`
 
 ## P1-B Low-Clearance Orthogonalization
 
@@ -48,16 +52,22 @@ Validation:
 
 ## P1-D Terrain Geometry Robustness
 
-`TerrainFeatureUpdater` now computes slope using the actual planar distance to
-each neighbor. Diagonal support neighbors use `sqrt(2) * resolution` instead of
-being treated as cardinal neighbors. Step-up, step-down, roughness, clearance,
-and obstacle publication paths were not changed.
+The original P1-D commit only made slope use actual neighbor planar distance.
+The reopened follow-up extends this to the full P1-4 geometry requirement:
+
+- obstacle/protrusion-evidence neighbors no longer participate in
+  support-surface geometry, preventing wall-foot bleed into standable cells
+- slope and roughness are computed from a local support plane over the filtered
+  support-surface neighborhood
+- `step_up` / `step_down` are directional costs for entering the current cell
+  from a neighboring support cell
+- obstacle publication paths remain unchanged
 
 Validation:
 
 - `colcon build --packages-select passable_area --symlink-install`: pass
 - `colcon test --packages-select passable_area --event-handlers console_direct+`: pass
-- `colcon test-result --verbose`: `129 tests, 0 errors, 0 failures, 0 skipped`
+- `colcon test-result --verbose`: `132 tests, 0 errors, 0 failures, 0 skipped`
 - false-obstacle benchmark: all six frozen bags passed with `suspicious_frames: 0`
 - miss-obstacle acceptance: Setup A left `1/4`, Setup A right `2/4`, Setup B left `2/3`, Setup B right `0/3`
 - strict read-only review: no blocking findings
@@ -90,5 +100,3 @@ Non-blocking follow-up candidates:
   finite trusted `support_height`; P1-C locked the diagnostic analyzer and
   runtime code path, but the strict review noted this extra test would reduce
   future risk.
-- Add a mixed cardinal-plus-diagonal terrain feature test proving the maximum
-  actual grade wins when both neighbor types are present.

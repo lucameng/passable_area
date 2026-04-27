@@ -1430,8 +1430,89 @@ TEST(ProcessorTest, TerrainFeatureUpdaterUsesActualDiagonalDistanceForSlope) {
       std::atan(0.20f / std::sqrt(2.0f)) * 180.0f /
       static_cast<float>(M_PI);
   EXPECT_NEAR(layers.slope[center], expected_slope, 1e-4f);
-  EXPECT_NEAR(layers.step_up[center], 0.20f, 1e-5f);
+  EXPECT_NEAR(layers.step_up[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.step_down[center], 0.20f, 1e-5f);
   EXPECT_NEAR(layers.roughness[center], 0.20f, 1e-5f);
+}
+
+TEST(ProcessorTest, TerrainFeatureUpdaterFitsSupportPlaneForXYRamp) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+
+  LocalTerrainMap map(config);
+  auto &layers = map.layers();
+  const int center = 1 * map.cols() + 1;
+  const int east = 1 * map.cols() + 2;
+  const int north = 2 * map.cols() + 1;
+  const int northeast = 2 * map.cols() + 2;
+  layers.support_height[center] = 0.0f;
+  layers.support_height[east] = 0.10f;
+  layers.support_height[north] = 0.20f;
+  layers.support_height[northeast] = 0.30f;
+  layers.support_confidence[center] = 1.0f;
+
+  TerrainFeatureUpdater updater(config);
+  updater.update({center}, map);
+
+  const float expected_slope = std::atan(std::hypot(0.10f, 0.20f)) *
+                               180.0f / static_cast<float>(M_PI);
+  EXPECT_NEAR(layers.slope[center], expected_slope, 1e-4f);
+  EXPECT_NEAR(layers.roughness[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.step_up[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.step_down[center], 0.30f, 1e-5f);
+}
+
+TEST(ProcessorTest,
+     TerrainFeatureUpdaterExcludesObstacleNeighborsFromSupportGeometry) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+
+  LocalTerrainMap map(config);
+  auto &layers = map.layers();
+  const int center = 1 * map.cols() + 1;
+  const int west = 1 * map.cols();
+  const int north = 2 * map.cols() + 1;
+  const int east_obstacle = 1 * map.cols() + 2;
+  layers.support_height[center] = 0.0f;
+  layers.support_height[west] = 0.0f;
+  layers.support_height[north] = 0.0f;
+  layers.support_height[east_obstacle] = 0.60f;
+  layers.support_confidence[center] = 1.0f;
+  layers.protrusion_evidence[east_obstacle] = 1.0f;
+  layers.obstacle_evidence[east_obstacle] = 1.0f;
+
+  TerrainFeatureUpdater updater(config);
+  updater.update({center}, map);
+
+  EXPECT_NEAR(layers.slope[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.step_up[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.step_down[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.roughness[center], 0.0f, 1e-5f);
+}
+
+TEST(ProcessorTest, TerrainFeatureUpdaterStepUpIsDirectionalIntoCurrentCell) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+
+  LocalTerrainMap map(config);
+  auto &layers = map.layers();
+  const int center = 1 * map.cols() + 1;
+  const int west = 1 * map.cols();
+  layers.support_height[center] = 0.30f;
+  layers.support_height[west] = 0.10f;
+  layers.support_confidence[center] = 1.0f;
+
+  TerrainFeatureUpdater updater(config);
+  updater.update({center}, map);
+
+  EXPECT_NEAR(layers.step_up[center], 0.20f, 1e-5f);
+  EXPECT_NEAR(layers.step_down[center], 0.0f, 1e-5f);
 }
 
 TEST(ProcessorTest,

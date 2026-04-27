@@ -706,9 +706,10 @@ obstacle 更新：
 
 实现特点：
 
-- 使用 3x3 邻域统计
-- slope 按邻居实际平面距离计算；对角邻居使用 `sqrt(2) * resolution`
-- 不做复杂曲面拟合
+- 使用 3x3 support-surface 邻域统计
+- 带有 `protrusion_evidence` 或 `obstacle_evidence` 的邻居不参与 support-surface 几何特征，避免墙脚或实体障碍 bleed 到可站立 cell
+- slope / roughness 来自局部支撑面平面拟合；点数不足以拟合平面时，按邻居实际平面距离计算退化坡度
+- `step_up` / `step_down` 表示“从邻居进入当前 cell”的方向性跨越代价
 - 偏向实时性和稳定性
 
 ### 8.6 `TraversabilitySolver`
@@ -878,7 +879,7 @@ obstacle 更新：
   - 基于当前 `block_reason`、`passability` 或 evidence 的额外 gate 仍保留为后续可选约束，暂未启用
 - 要求相对支撑参考高度至少为 `obstacle_points_min_height`
 - 同时要求样本在 `base_link` 下 z 不高于 `obstacle_points_max_height_in_base_link`
-- 当历史 `support_height` 不可用时，用当前帧该 cell 的 fallback `min_z` 作为支撑参考
+- 当前 cell 必须有有限可信的地图 `support_height`；当前帧 `min_z` 不得作为 fallback 支撑参考授予障碍点发布资格
 - 发布在 `base_gravity`
 
 ### 10.4 `/terrain_debug/unknown_mask`
