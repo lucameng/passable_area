@@ -20,6 +20,7 @@ Completed P1 commits:
 - P1-C: `1e78565 fix: require finite support for obstacle publication`
 - P1-D partial: `67f15ee fix: use diagonal distance for terrain slope`
 - P1-D completion: `08e5410 fix: robustify support surface geometry`
+- P1-D eligibility refinement: `fb2505b fix: preserve overhead support geometry`
 
 ## P1-B Low-Clearance Orthogonalization
 
