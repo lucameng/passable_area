@@ -9,12 +9,13 @@ slope-distance subtask, not the full P1-4 terrain geometry item. The reopened
 P1-D follow-up has passed build, tests, P0 benchmark validation, and strict
 read-only review. P1 is complete with the residual risks listed below.
 
-Completed P1 commits before the reopened P1-D follow-up:
+Completed P1 commits:
 
 - P1-A: `a2c9d71 fix: add symmetric dropout sector detection`
 - P1-B: `c61d5d1 fix: gate low clearance by overhead state`
 - P1-C: `1e78565 fix: require finite support for obstacle publication`
 - P1-D partial: `67f15ee fix: use diagonal distance for terrain slope`
+- P1-D completion: `08e5410 fix: robustify support surface geometry`
 
 ## P1-B Low-Clearance Orthogonalization
 
