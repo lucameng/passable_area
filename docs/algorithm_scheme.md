@@ -707,7 +707,7 @@ obstacle 更新：
 实现特点：
 
 - 使用 3x3 support-surface 邻域统计
-- 带有 `protrusion_evidence` 或 `obstacle_evidence` 的邻居不参与 support-surface 几何特征，避免墙脚或实体障碍 bleed 到可站立 cell
+- 达到发布证据阈值的 active `protrusion_evidence` 邻居不参与 support-surface 几何特征，避免墙脚或实体障碍 bleed 到可站立 cell；`overhead_evidence` 不通过聚合的 `obstacle_evidence` 间接剔除地面支撑邻居
 - slope / roughness 来自局部支撑面平面拟合；点数不足以拟合平面时，按邻居实际平面距离计算退化坡度
 - `step_up` / `step_down` 表示“从邻居进入当前 cell”的方向性跨越代价
 - 偏向实时性和稳定性

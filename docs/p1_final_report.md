@@ -7,7 +7,11 @@ P1-A/B/C are complete on top of the repaired P0 baseline
 reopened after strict audit feedback because `67f15ee` only closed the diagonal
 slope-distance subtask, not the full P1-4 terrain geometry item. The reopened
 P1-D follow-up has passed build, tests, P0 benchmark validation, and strict
-read-only review. P1 is complete with the residual risks listed below.
+read-only review. A follow-up audit then found that the support-surface
+eligibility filter was still coupled to aggregate `obstacle_evidence`; the
+current refinement keeps overhead-only support neighbors eligible and uses only
+active protrusion evidence as support-surface contamination. The refinement has
+passed build, tests, P0 benchmark validation, and strict read-only review.
 
 Completed P1 commits:
 
@@ -56,8 +60,9 @@ Validation:
 The original P1-D commit only made slope use actual neighbor planar distance.
 The reopened follow-up extends this to the full P1-4 geometry requirement:
 
-- obstacle/protrusion-evidence neighbors no longer participate in
-  support-surface geometry, preventing wall-foot bleed into standable cells
+- active protrusion-evidence neighbors no longer participate in support-surface
+  geometry, preventing wall-foot bleed into standable cells without excluding
+  overhead-only low-clearance support neighbors
 - slope and roughness are computed from a local support plane over the filtered
   support-surface neighborhood
 - `step_up` / `step_down` are directional costs for entering the current cell
@@ -68,7 +73,7 @@ Validation:
 
 - `colcon build --packages-select passable_area --symlink-install`: pass
 - `colcon test --packages-select passable_area --event-handlers console_direct+`: pass
-- `colcon test-result --verbose`: `132 tests, 0 errors, 0 failures, 0 skipped`
+- `colcon test-result --verbose`: `133 tests, 0 errors, 0 failures, 0 skipped`
 - false-obstacle benchmark: all six frozen bags passed with `suspicious_frames: 0`
 - miss-obstacle acceptance: Setup A left `1/4`, Setup A right `2/4`, Setup B left `2/3`, Setup B right `0/3`
 - strict read-only review: no blocking findings
