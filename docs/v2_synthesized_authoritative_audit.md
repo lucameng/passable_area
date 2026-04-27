@@ -394,6 +394,40 @@ front dropout 不具备单独状态，无法建立明确的前向安全策略。
 
 把发布决策抽成 core 纯函数并返回结构化 trace。Analyzer 只读取 trace，不重新推断。
 
+### P2-3：support-surface contamination 语义仍应显式化
+
+问题陈述：
+
+P1-D 已把地形几何从简单邻域极值升级为 support-surface 几何：active `protrusion_evidence` 邻居不参与 slope、roughness、step 计算，overhead-only 低净空邻居仍参与支撑面几何。这关闭了 P1-4 的主要风险。但当前实现仍用 `obstacle_points_min_evidence` 这个发布相关阈值来表达“邻居是否污染 support surface”。
+
+为什么重要：
+
+发布阈值和支撑面几何 eligibility 是两个不同合同。前者决定外部 obstacle point 是否足够可信，后者决定一个邻居的 `support_height` 是否还能代表可行走支撑面。如果长期复用同一命名阈值，后续调发布灵敏度时可能无意改变 slope、step、roughness 的输入集合。
+
+涉及代码路径：
+
+- `src/core/terrain_feature_updater.cpp`
+- `src/core/obstacle_reasoner.cpp`
+- `include/passable_area/core/types/frame_types.hpp`
+- `docs/algorithm_scheme.md`
+
+期望语义：
+
+support-surface geometry eligibility 应显式表达哪些 cell 的 `support_height` 可参与局部支撑面拟合，哪些 cell 因 active protrusion contamination 被排除。该语义不应把 overhead-only low-clearance 与实体 protrusion 混淆，也不应引入针对 bag 的特例。
+
+当前差距：
+
+当前实现方向正确，但 eligibility 仍复用 `obstacle_points_min_evidence` 的命名和阈值。该复用不是 P1 阻塞问题，但属于 P2 层面的语义耦合。
+
+推荐修复方向：
+
+不要新增魔法参数。优先从已有 reasoner/evidence stage 中导出一个明确的内部语义，例如 `support_surface_contaminated` 或 `support_geometry_eligible`，并满足以下不变量：
+
+- overhead-only low-clearance 邻居仍参与 support geometry。
+- active protrusion / wall-foot 邻居不污染 support geometry。
+- obstacle publication contract 不因该清理发生变化。
+- 文档说明 `support_height`、`protrusion_evidence`、support-surface eligibility 和 obstacle publication 四者关系。
+
 ## 3. 最佳实践修改计划
 
 本节只给通用架构和算法改进方向，不建议为某个 bag 或某个 isolated failure 添加窄补丁。
@@ -724,6 +758,7 @@ P2 可作为清理：
 
 1. 清理未使用参数和隐藏常数。
 2. 统一 offline analyzer 与运行时决策 trace。
-3. 更新文档，把旧 V1 字段和过时解释从当前算法说明中移除。
+3. 显式化 support-surface contamination / geometry eligibility 语义。
+4. 更新文档，把旧 V1 字段和过时解释从当前算法说明中移除。
 
 最终判断：**V2 架构可以继续演进，但当前实现的发布合同和 dropout 坐标语义还没有达到真实机器人导航系统应有的严谨程度。下一轮工作不应继续叠加局部启发式，而应先把“物理语义、输出合同、观测坐标、测试不变量”四件事统一。**

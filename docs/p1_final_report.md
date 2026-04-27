@@ -107,3 +107,8 @@ Non-blocking follow-up candidates:
   finite trusted `support_height`; P1-C locked the diagnostic analyzer and
   runtime code path, but the strict review noted this extra test would reduce
   future risk.
+- Track support-surface contamination / geometry eligibility as a P2 semantic
+  cleanup. P1-D currently uses active protrusion evidence to keep overhead-only
+  neighbors in support geometry and exclude wall-foot protrusions; P2 should make
+  that internal eligibility contract explicit without changing obstacle
+  publication behavior.
