@@ -60,6 +60,8 @@ void LocalTerrainMap::clearLayers() {
   Fill(layers_.protrusion_evidence, 0.0f, cell_count);
   Fill(layers_.overhead_evidence, 0.0f, cell_count);
   Fill(layers_.obstacle_evidence, 0.0f, cell_count);
+  Fill(layers_.support_surface_contaminated, static_cast<uint8_t>(0),
+       cell_count);
   Fill(layers_.coverage_confidence, 0.0f, cell_count);
   Fill(layers_.slope, 0.0f, cell_count);
   Fill(layers_.step_up, 0.0f, cell_count);
@@ -103,6 +105,8 @@ void LocalTerrainMap::shiftLayers(int row_shift, int col_shift) {
              0.0f);
   ShiftLayer(layers_.obstacle_evidence, rows_, cols_, row_shift, col_shift,
              0.0f);
+  ShiftLayer(layers_.support_surface_contaminated, rows_, cols_, row_shift,
+             col_shift, static_cast<uint8_t>(0));
   ShiftLayer(layers_.coverage_confidence, rows_, cols_, row_shift, col_shift,
              0.0f);
   ShiftLayer(layers_.slope, rows_, cols_, row_shift, col_shift, 0.0f);

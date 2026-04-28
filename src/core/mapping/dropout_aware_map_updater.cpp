@@ -21,6 +21,23 @@ void ClearObstacleLayer(TerrainLayers &layers, int cell) {
   layers.protrusion_height[cell] = std::numeric_limits<float>::quiet_NaN();
   layers.protrusion_evidence[cell] = 0.0f;
   layers.overhead_evidence[cell] = 0.0f;
+  layers.support_surface_contaminated[cell] = 0U;
+}
+
+float SupportSurfaceContaminationEvidenceThreshold(const Config &config) {
+  return config.obstacle_points_min_evidence;
+}
+
+void RefreshSupportSurfaceContamination(TerrainLayers &layers,
+                                        const Config &config, int cell) {
+  // Support geometry follows active solid-protrusion evidence. This is derived
+  // from the existing protrusion evidence activation contract instead of being
+  // a separate tuning knob.
+  layers.support_surface_contaminated[cell] =
+      layers.protrusion_evidence[cell] >=
+              SupportSurfaceContaminationEvidenceThreshold(config)
+          ? 1U
+          : 0U;
 }
 
 float NormalizeAngle(float angle) {
@@ -42,6 +59,7 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
                     frontend_output.overhead_candidates.size());
   std::vector<uint8_t> touched_support(map.size(), 0);
   std::vector<uint8_t> touched_obstacle(map.size(), 0);
+  std::vector<uint8_t> touched_protrusion(map.size(), 0);
 
   const float base_yaw = YawFromQuaternion(base_pose_in_map.orientation);
   const auto sector_state_for_cell = [&](int cell) {
@@ -118,11 +136,13 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
     layers.obstacle_evidence[candidate.cell] =
         std::max(layers.protrusion_evidence[candidate.cell],
                  layers.overhead_evidence[candidate.cell]);
+    RefreshSupportSurfaceContamination(layers, config_, candidate.cell);
     layers.coverage_confidence[candidate.cell] = std::max(
         layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
     layers.last_sector_state[candidate.cell] =
         static_cast<uint8_t>(sector.state);
     touched_obstacle[candidate.cell] = 1U;
+    touched_protrusion[candidate.cell] = 1U;
     dirty_set.insert(candidate.cell);
   }
 
@@ -140,11 +160,15 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
     layers.obstacle_evidence[candidate.cell] =
         std::max(layers.protrusion_evidence[candidate.cell],
                  layers.overhead_evidence[candidate.cell]);
+    RefreshSupportSurfaceContamination(layers, config_, candidate.cell);
     layers.coverage_confidence[candidate.cell] = std::max(
         layers.coverage_confidence[candidate.cell], sector.coverage_confidence);
     layers.last_sector_state[candidate.cell] =
         static_cast<uint8_t>(sector.state);
     touched_obstacle[candidate.cell] = 1U;
+    if (!touched_protrusion[candidate.cell]) {
+      layers.support_surface_contaminated[candidate.cell] = 0U;
+    }
     dirty_set.insert(candidate.cell);
   }
 
@@ -187,6 +211,7 @@ DropoutAwareMapUpdater::update(const FrontendOutput &frontend_output,
       }
       layers.obstacle_evidence[cell] = std::max(
           layers.protrusion_evidence[cell], layers.overhead_evidence[cell]);
+      RefreshSupportSurfaceContamination(layers, config_, cell);
     }
 
     if (touched_support[cell]) {

@@ -30,6 +30,7 @@ TerrainLayers MakeLayers(int cell_count = 3) {
   layers.protrusion_evidence.assign(cell_count, 0.0f);
   layers.overhead_evidence.assign(cell_count, 0.0f);
   layers.obstacle_evidence.assign(cell_count, 0.0f);
+  layers.support_surface_contaminated.assign(cell_count, 0U);
   layers.coverage_confidence.assign(cell_count, 1.0f);
   layers.slope.assign(cell_count, 0.0f);
   layers.step_up.assign(cell_count, 0.0f);
@@ -148,6 +149,26 @@ TEST(ObstacleReasonerTest, ProtrusionBlocksWhenEvidenceHighAndTallProtrusion) {
             static_cast<uint8_t>(ObstacleEvidenceStage::kBlocking));
   EXPECT_EQ(
       output.obstacle_point_publish_status[1],
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion));
+}
+
+TEST(ObstacleReasonerTest,
+     SupportSurfaceContaminationDoesNotChangePublicationContract) {
+  auto config = MakeConfig();
+  auto layers = MakeLayers();
+  layers.protrusion_evidence[1] = 0.7f;
+  layers.support_height[1] = 0.0f;
+  layers.protrusion_height[1] = config.geometry.max_step_up + 0.1f;
+
+  const auto clean_output = ObstacleReasoner(config).evaluate(layers);
+  layers.support_surface_contaminated[1] = 1U;
+  const auto contaminated_output = ObstacleReasoner(config).evaluate(layers);
+
+  EXPECT_EQ(contaminated_output.block_reason[1], clean_output.block_reason[1]);
+  EXPECT_EQ(contaminated_output.obstacle_point_publish_status[1],
+            clean_output.obstacle_point_publish_status[1]);
+  EXPECT_EQ(
+      contaminated_output.obstacle_point_publish_status[1],
       static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion));
 }
 

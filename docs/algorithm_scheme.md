@@ -719,7 +719,11 @@ P2 参数合同收缩后，地图更新中的经验比例均为命名内部常�
 实现特点：
 
 - 使用 3x3 support-surface 邻域统计
-- 达到发布证据阈值的 active `protrusion_evidence` 邻居不参与 support-surface 几何特征，避免墙脚或实体障碍 bleed 到可站立 cell；`overhead_evidence` 不通过聚合的 `obstacle_evidence` 间接剔除地面支撑邻居
+- `DropoutAwareMapUpdater` 维护内部 `support_surface_contaminated` 语义，用来表达某 cell 的 `support_height` 是否会污染邻域支撑面几何
+- `support_surface_contaminated` 从 active solid-protrusion evidence 派生：当前 protrusion candidate 把 `protrusion_evidence` 推到既有 protrusion 发布/阻挡证据合同后，该 cell 的 support surface 不再参与邻域 slope / roughness / step 计算；只有 overhead candidate、没有当前 protrusion candidate 的刷新会清掉该支撑几何污染标记，避免 overhead-only 低净空长期排除支撑面。这不是新的 YAML 参数，也不是独立调参入口
+- `TerrainFeatureUpdater` 只消费 `support_surface_contaminated`，不直接读取发布参数名；这样 support-surface eligibility 和 obstacle point publication 保持解耦但仍共享同一 protrusion evidence activation 语义
+- active protrusion / wall-foot 邻居不参与 support-surface 几何特征，避免墙脚或实体障碍 bleed 到可站立 cell；inactive/residual protrusion evidence 不会无限期排除支撑几何
+- `overhead_evidence` 不通过聚合的 `obstacle_evidence` 间接剔除地面支撑邻居，因此 overhead-only 低净空仍可作为 support-surface 几何
 - slope / roughness 来自局部支撑面平面拟合；点数不足以拟合平面时，按邻居实际平面距离计算退化坡度
 - `step_up` / `step_down` 表示“从邻居进入当前 cell”的方向性跨越代价
 - 偏向实时性和稳定性

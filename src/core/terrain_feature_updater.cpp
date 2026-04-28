@@ -17,10 +17,8 @@ struct SurfacePoint {
   float z = 0.0f;
 };
 
-bool HasActiveProtrusionSurfaceContaminant(const TerrainLayers &layers,
-                                           const Config &config, int cell) {
-  return layers.protrusion_evidence[static_cast<size_t>(cell)] >=
-         config.obstacle_points_min_evidence;
+bool IsSupportGeometryEligible(const TerrainLayers &layers, int cell) {
+  return layers.support_surface_contaminated[static_cast<size_t>(cell)] == 0U;
 }
 
 bool FitSupportPlane(const std::array<SurfacePoint, 9> &points, int count,
@@ -120,7 +118,7 @@ void TerrainFeatureUpdater::update(const std::vector<int> &dirty_cells,
         const int neighbor = nr * map.cols() + nc;
         const float nh = layers.support_height[neighbor];
         if (!std::isfinite(nh) ||
-            HasActiveProtrusionSurfaceContaminant(layers, config_, neighbor)) {
+            !IsSupportGeometryEligible(layers, neighbor)) {
           continue;
         }
         const float dz = nh - h;

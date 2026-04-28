@@ -1380,6 +1380,7 @@ TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
   map.layers().support_confidence[original_index] = 0.75f;
   map.layers().support_state[original_index] =
       static_cast<uint8_t>(SupportState::kPersistent);
+  map.layers().support_surface_contaminated[original_index] = 1U;
 
   map.recenter(Eigen::Vector2f(1.0f, 0.0f));
 
@@ -1389,6 +1390,7 @@ TEST(ProcessorTest, LocalTerrainMapRecenterShiftsHistoricalLayers) {
   EXPECT_FLOAT_EQ(map.layers().support_confidence[shifted_index], 0.75f);
   EXPECT_EQ(map.layers().support_state[shifted_index],
             static_cast<uint8_t>(SupportState::kPersistent));
+  EXPECT_EQ(map.layers().support_surface_contaminated[shifted_index], 1U);
 }
 
 TEST(ProcessorTest, LocalTerrainMapInitializesReservedObstacleV2Layers) {
@@ -1400,6 +1402,8 @@ TEST(ProcessorTest, LocalTerrainMapInitializesReservedObstacleV2Layers) {
             static_cast<size_t>(map.size()));
   ASSERT_EQ(map.layers().overhead_evidence.size(),
             static_cast<size_t>(map.size()));
+  ASSERT_EQ(map.layers().support_surface_contaminated.size(),
+            static_cast<size_t>(map.size()));
 
   for (int cell = 0; cell < map.size(); ++cell) {
     EXPECT_TRUE(
@@ -1408,6 +1412,9 @@ TEST(ProcessorTest, LocalTerrainMapInitializesReservedObstacleV2Layers) {
                     0.0f);
     EXPECT_FLOAT_EQ(map.layers().overhead_evidence[static_cast<size_t>(cell)],
                     0.0f);
+    EXPECT_EQ(map.layers().support_surface_contaminated[static_cast<size_t>(
+                  cell)],
+              0U);
   }
 }
 
@@ -1486,6 +1493,7 @@ TEST(ProcessorTest,
   layers.support_confidence[center] = 1.0f;
   layers.protrusion_evidence[east_obstacle] = 1.0f;
   layers.obstacle_evidence[east_obstacle] = 1.0f;
+  layers.support_surface_contaminated[east_obstacle] = 1U;
 
   TerrainFeatureUpdater updater(config);
   updater.update({center}, map);
@@ -1493,6 +1501,43 @@ TEST(ProcessorTest,
   EXPECT_NEAR(layers.slope[center], 0.0f, 1e-5f);
   EXPECT_NEAR(layers.step_up[center], 0.0f, 1e-5f);
   EXPECT_NEAR(layers.step_down[center], 0.0f, 1e-5f);
+  EXPECT_NEAR(layers.roughness[center], 0.0f, 1e-5f);
+}
+
+TEST(ProcessorTest,
+     TerrainFeatureUpdaterKeepsInactiveProtrusionEvidenceInSupportGeometry) {
+  auto config = MakeConfig();
+  config.map.length = 3.0f;
+  config.map.width = 3.0f;
+  config.map.resolution = 1.0f;
+
+  LocalTerrainMap map(config);
+  auto &layers = map.layers();
+  const int center = 1 * map.cols() + 1;
+  const int west = 1 * map.cols();
+  const int north = 2 * map.cols() + 1;
+  const int south = 0 * map.cols() + 1;
+  const int east_residual = 1 * map.cols() + 2;
+  layers.support_height[center] = 0.0f;
+  layers.support_height[west] = -0.10f;
+  layers.support_height[north] = 0.0f;
+  layers.support_height[south] = 0.0f;
+  layers.support_height[east_residual] = 0.10f;
+  layers.support_confidence[center] = 1.0f;
+  layers.protrusion_evidence[east_residual] =
+      config.obstacle_points_min_evidence * 0.5f;
+  layers.obstacle_evidence[east_residual] =
+      layers.protrusion_evidence[east_residual];
+  layers.support_surface_contaminated[east_residual] = 0U;
+
+  TerrainFeatureUpdater updater(config);
+  updater.update({center}, map);
+
+  const float expected_slope =
+      std::atan(0.10f) * 180.0f / static_cast<float>(M_PI);
+  EXPECT_NEAR(layers.slope[center], expected_slope, 1e-4f);
+  EXPECT_NEAR(layers.step_up[center], 0.10f, 1e-5f);
+  EXPECT_NEAR(layers.step_down[center], 0.10f, 1e-5f);
   EXPECT_NEAR(layers.roughness[center], 0.0f, 1e-5f);
 }
 
@@ -1579,6 +1624,103 @@ TEST(ProcessorTest,
   ASSERT_FALSE(dirty.empty());
   EXPECT_EQ(map.layers().support_state[3],
             static_cast<uint8_t>(SupportState::kObserved));
+}
+
+TEST(ProcessorTest,
+     MapUpdaterMarksOnlyActiveProtrusionAsSupportSurfaceContamination) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+  config.persistence.obstacle_evidence_decay = 0.20f;
+  config.persistence.obstacle_clear_partial_decay_scale = 1.0f;
+
+  LocalTerrainMap map(config);
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const int cell = 3;
+
+  FrontendOutput active_protrusion;
+  active_protrusion.protrusion_candidates.push_back(ProtrusionCandidate{
+      cell, config.geometry.max_step_up + 0.2f, 1.0f, 2.0f});
+  updater.update(active_protrusion, observability, base_pose, map);
+  ASSERT_GE(map.layers().protrusion_evidence[cell],
+            config.obstacle_points_min_evidence);
+  EXPECT_EQ(map.layers().support_surface_contaminated[cell], 1U);
+
+  FrontendOutput no_current_obstacle;
+  updater.update(no_current_obstacle, observability, base_pose, map);
+  ASSERT_LT(map.layers().protrusion_evidence[cell],
+            config.obstacle_points_min_evidence);
+  EXPECT_EQ(map.layers().support_surface_contaminated[cell], 0U);
+}
+
+TEST(ProcessorTest, MapUpdaterDoesNotContaminateSupportSurfaceForOverheadOnly) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const int cell = 3;
+
+  FrontendOutput overhead_only;
+  overhead_only.overhead_candidates.push_back(OverheadCandidate{
+      cell, config.geometry.min_clearance * 0.5f, 1.0f, 2.0f});
+  updater.update(overhead_only, observability, base_pose, map);
+
+  EXPECT_GE(map.layers().overhead_evidence[cell],
+            config.obstacle_points_min_evidence);
+  EXPECT_FLOAT_EQ(map.layers().protrusion_evidence[cell], 0.0f);
+  EXPECT_EQ(map.layers().support_surface_contaminated[cell], 0U);
+}
+
+TEST(ProcessorTest,
+     MapUpdaterClearsSupportSurfaceContaminationForOverheadOnlyRefresh) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  LocalTerrainMap map(config);
+  DropoutAwareMapUpdater updater(config);
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const int cell = 3;
+
+  FrontendOutput active_protrusion;
+  active_protrusion.protrusion_candidates.push_back(ProtrusionCandidate{
+      cell, config.geometry.max_step_up + 0.2f, 1.0f, 2.0f});
+  updater.update(active_protrusion, observability, base_pose, map);
+  ASSERT_GE(map.layers().protrusion_evidence[cell],
+            config.obstacle_points_min_evidence);
+  ASSERT_EQ(map.layers().support_surface_contaminated[cell], 1U);
+
+  FrontendOutput overhead_only;
+  overhead_only.overhead_candidates.push_back(OverheadCandidate{
+      cell, config.geometry.min_clearance * 0.5f, 1.0f, 2.0f});
+  updater.update(overhead_only, observability, base_pose, map);
+
+  EXPECT_GT(map.layers().protrusion_evidence[cell], 0.0f);
+  EXPECT_GE(map.layers().overhead_evidence[cell],
+            config.obstacle_points_min_evidence);
+  EXPECT_EQ(map.layers().support_surface_contaminated[cell], 0U);
 }
 
 TEST(ProcessorTest, ConfigValidationRejectsBrokenPhysicalInvariants) {
