@@ -55,19 +55,17 @@ root cause 不是猜的，而是沿着当前控制链往后推：
 
 1. ROI 内是否有输入样本
 2. 前端是否形成 `obstacle_suspicious / obstacle_candidate`
-3. 地图里的 `obstacle_evidence` 是否过阈值
-4. 当前样本是否满足 `/terrain_obstacle_points` 的发布高度门槛
+3. Reasoner 是否给出 `obstacle_point_publish_status`
+4. 当前样本是否满足共享 `/terrain_obstacle_points` 发布高度门槛
 
 所以报告里会直接给出：
 
 - `roi_sample_count`
 - `obstacle_suspicious_cells`
 - `obstacle_candidate_cells`
-- `rejected_suspicious_cells`
-- `neighbor_upper_support_count`
-- `aligned_neighbor_support_count`
-- `explanation_decision`
 - `max_obstacle_evidence`
+- `block_reason`
+- `obstacle_point_publish_status`
 - `support_ref`
 - `max_sample_z_minus_support_ref`
 
@@ -79,13 +77,17 @@ root cause 不是猜的，而是沿着当前控制链往后推：
   - 在当前简单前端里，通常与 `obstacle_suspicious_cells` 同步出现
 - `max_obstacle_evidence`
   - 前端候选进入地图后，最终有没有积累到足够障碍证据
+- `obstacle_point_publish_status`
+  - runtime publication helper 给出的当前发布路径或 gate 状态，例如 `PublishedByProtrusion`、`GatedByEvidence`、`GatedByHeight`、`BlockedButNoSamples`
 - `max_sample_z_minus_support_ref`
   - obstacle point 发布时，当前 ROI 样本相对支撑参考的最高高度差
 
 这里的“发布高度门槛”包含两部分：
 
 - 样本相对 `support_ref` 的高度要达到 `obstacle_points_min_height`
+- 样本相对 `support_ref` 的高度必须严格超过 `max_step_up`
 - 样本在 `base_link` 下的高度不能高于 `obstacle_points_max_height_in_base_link`
+- `GeometryFailure` 发布路径还要求同一个样本在 `base_gravity` 发布坐标下不低于 `obstacle_points_min_height`
 
 ## 5. 当前版本里最常见的 root cause
 
@@ -105,19 +107,9 @@ root cause 不是猜的，而是沿着当前控制链往后推：
 - 地图证据够了，但 obstacle point 发布高度门槛没过
 - 地图里有强 evidence cell，但当前 ROI 内没有对应 source sample
 
-## 6. 关于兼容性字段怎么理解
+## 6. 关于发布 trace 怎么理解
 
-报告里仍然可能出现：
-
-- `RejectedByNeighborSupport`
-- `LeakFilteredToNoCandidate`
-- `neighbor_upper_support_count`
-- `aligned_neighbor_support_count`
-- `explanation_decision`
-
-这些字段和 root cause 之所以还保留，是为了：
-
-- 不打破 `FrameOutput` 契约
+miss analyzer 使用和 runtime obstacle point 发布相同的 ROS-free helper 解释逐样本高度门和发布状态。它不会用 ROI 样本最低点临时生成 support fallback，不会恢复旧的 `base_gravity` floor clamp，也不会把不同样本的最高 `map` 高度和最低 `base_link` 高度拼成一个虚假的可发布样本。
 - 不打破 analyzer 输出格式
 - 兼容历史数据和历史调试心智
 

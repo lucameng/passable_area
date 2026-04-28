@@ -1,5 +1,6 @@
 #include "passable_area/tools/miss_obstacle_analyzer.hpp"
 
+#include "passable_area/core/obstacle_publication.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace passable_area::tools {
 namespace {
@@ -20,22 +22,13 @@ struct RoiSampleStats {
   float max_relative_z = -std::numeric_limits<float>::infinity();
   float min_base_link_z = std::numeric_limits<float>::infinity();
   float max_base_link_z = -std::numeric_limits<float>::infinity();
+  std::vector<passable_area::core::ObstaclePublicationSample>
+      publication_samples;
 };
 
 bool IsInsideDetectionBox(const MissObstacleDetectionBox &box, float x,
                           float y) {
   return x >= box.x_min && x <= box.x_max && y >= box.y_min && y <= box.y_max;
-}
-
-bool PassesObstaclePointPublishHeightGates(
-    const passable_area::core::Config &config, float support_ref,
-    const RoiSampleStats &sample_stats) {
-  return std::isfinite(support_ref) &&
-         sample_stats.max_z >=
-             support_ref + config.obstacle_points_min_height &&
-         sample_stats.max_z > support_ref + config.geometry.max_step_up &&
-         sample_stats.min_base_link_z <=
-             config.obstacle_points_max_height_in_base_link;
 }
 
 passable_area::core::Point3f
@@ -65,6 +58,20 @@ int CellIndex(const passable_area::core::FrameOutput &output, float map_x,
 
 int RootCauseIndex(MissObstacleRootCause cause) {
   return static_cast<int>(cause);
+}
+
+passable_area::core::ObstaclePublicationSampleStats MakePublicationSampleStats(
+    const passable_area::core::Config &config, uint8_t publish_status,
+    float support_ref, bool has_samples, const RoiSampleStats &sample_stats) {
+  passable_area::core::ObstaclePublicationSampleStats publication_stats;
+  if (!has_samples || sample_stats.sample_count <= 0) {
+    return publication_stats;
+  }
+  for (const auto &sample : sample_stats.publication_samples) {
+    passable_area::core::AccumulateObstaclePublicationSample(
+        config, publish_status, support_ref, sample, publication_stats);
+  }
+  return publication_stats;
 }
 
 } // namespace
@@ -112,6 +119,10 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
         std::min(stats.min_base_link_z, sample.point_in_base.z);
     stats.max_base_link_z =
         std::max(stats.max_base_link_z, sample.point_in_base.z);
+    stats.publication_samples.push_back(
+        passable_area::core::ObstaclePublicationSample{
+            sample.point_in_map.z, sample.point_in_base.z,
+            point_in_base_gravity.z});
   }
 
   for (const auto &obstacle_point : output.obstacle_points) {
@@ -138,8 +149,9 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
   analysis.min_clearance = std::numeric_limits<float>::infinity();
   analysis.min_support_continuity = std::numeric_limits<float>::infinity();
 
-  int strong_evidence_cell_count = 0;
-  int strong_evidence_cells_with_samples = 0;
+  int publication_decision_cell_count = 0;
+  int publication_decision_cells_with_samples = 0;
+  int evidence_gated_cell_count = 0;
   int publishable_sample_count = 0;
   int reasoner_blocked_cell_count = 0;
   int reasoner_candidate_not_blocked_count = 0;
@@ -197,21 +209,33 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
       }
 
       float support_ref = output.support_height[idx];
+      const uint8_t publish_status =
+          output.obstacle_point_publish_status.empty()
+              ? 0U
+              : output.obstacle_point_publish_status[idx];
+      const auto publication_sample_stats = MakePublicationSampleStats(
+          config_, publish_status, support_ref, has_samples, sample_stats);
+      const auto publication_trace =
+          passable_area::core::EvaluateObstaclePublicationDecisionTrace(
+              config_, publish_status, support_ref, publication_sample_stats);
 
-      if (output.obstacle_evidence[idx] >=
-          config_.obstacle_points_min_evidence) {
-        ++strong_evidence_cell_count;
+      if (publication_trace.reasoner_requests_publication) {
+        ++publication_decision_cell_count;
         if (has_samples && sample_stats.sample_count > 0) {
-          ++strong_evidence_cells_with_samples;
+          ++publication_decision_cells_with_samples;
         }
+      } else if (publish_status ==
+                 static_cast<uint8_t>(
+                     passable_area::core::ObstaclePointPublishStatus::
+                         kGatedByEvidence)) {
+        ++evidence_gated_cell_count;
       }
 
       if (has_samples && sample_stats.sample_count > 0 &&
-          output.obstacle_evidence[idx] >=
-              config_.obstacle_points_min_evidence &&
-          PassesObstaclePointPublishHeightGates(config_, support_ref,
-                                                sample_stats)) {
-        publishable_sample_count += sample_stats.sample_count;
+          publication_trace.reasoner_requests_publication &&
+          publication_trace.height_gate.passes) {
+        publishable_sample_count +=
+            publication_sample_stats.publishable_sample_count;
       }
 
       const bool interesting =
@@ -247,10 +271,7 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
                                    : output.overhead_evidence[idx];
       cell.obstacle_evidence = output.obstacle_evidence[idx];
       cell.block_reason = block_reason;
-      cell.obstacle_point_publish_status =
-          output.obstacle_point_publish_status.empty()
-              ? 0U
-              : output.obstacle_point_publish_status[idx];
+      cell.obstacle_point_publish_status = publish_status;
       cell.support_confidence = output.support_confidence[idx];
       cell.support_continuity = output.support_continuity[idx];
       cell.raw_sample_min_z = output.raw_sample_min_z.empty()
@@ -289,17 +310,17 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
         cell.explanation =
             "frontend candidate exists, but reasoner did not mark the cell as "
             "blocked";
-      } else if (cell.obstacle_evidence <
-                 config_.obstacle_points_min_evidence) {
+      } else if (cell.obstacle_point_publish_status ==
+                 static_cast<uint8_t>(
+                     passable_area::core::ObstaclePointPublishStatus::
+                         kGatedByEvidence)) {
         cell.explanation =
             "candidate formed, but obstacle evidence is still below publish "
             "threshold";
-      } else if (cell.obstacle_evidence >=
-                     config_.obstacle_points_min_evidence &&
-                 !PassesObstaclePointPublishHeightGates(config_, support_ref,
-                                                        sample_stats)) {
-        cell.explanation = "obstacle evidence is high enough but samples fail "
-                           "the obstacle-point publish height gates";
+      } else if (publication_trace.reasoner_requests_publication &&
+                 !publication_trace.height_gate.passes) {
+        cell.explanation = "runtime publication decision exists, but samples "
+                           "fail the obstacle-point publish height gates";
       } else {
         cell.explanation = "mixed local evidence";
       }
@@ -334,27 +355,28 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.evidence_lines.push_back(
         "reasoner_candidate_not_blocked_cells=" +
         std::to_string(reasoner_candidate_not_blocked_count));
-  } else if (strong_evidence_cell_count > 0 && publishable_sample_count == 0) {
-    if (strong_evidence_cells_with_samples == 0) {
+  } else if (publication_decision_cell_count > 0 &&
+             publishable_sample_count == 0) {
+    if (publication_decision_cells_with_samples == 0) {
       analysis.classification =
           MissObstacleRootCause::kNoObstacleSourceSamplesInRoi;
       analysis.explanation =
-          "some roi cells already have strong obstacle evidence, but no "
-          "current roi samples land in those publishable cells";
+          "some roi cells already have runtime publication decisions, but no "
+          "current roi samples land in those runtime publish-decision cells";
       analysis.evidence_lines.push_back(
-          "strong_evidence_cells=" +
-          std::to_string(strong_evidence_cell_count));
+          "publication_decision_cells=" +
+          std::to_string(publication_decision_cell_count));
       analysis.evidence_lines.push_back(
-          "strong_evidence_cells_with_samples=" +
-          std::to_string(strong_evidence_cells_with_samples));
+          "publication_decision_cells_with_samples=" +
+          std::to_string(publication_decision_cells_with_samples));
     } else {
       analysis.classification = MissObstacleRootCause::kOutputHeightGateNotMet;
       analysis.explanation =
-          "roi cells have enough obstacle evidence, but no current sample "
-          "passes the publish height gates in both base_gravity and base_link";
+          "roi cells have a runtime publication decision, but no current "
+          "sample passes the shared obstacle-point publish height gates";
       analysis.evidence_lines.push_back(
-          "strong_evidence_cells=" +
-          std::to_string(strong_evidence_cell_count));
+          "publication_decision_cells=" +
+          std::to_string(publication_decision_cell_count));
       analysis.evidence_lines.push_back(
           "obstacle_points_min_height=" +
           std::to_string(config_.obstacle_points_min_height));
@@ -370,7 +392,8 @@ std::optional<MissObstacleFrameAnalysis> MissObstacleAnalyzer::analyzeFrame(
     analysis.evidence_lines.push_back(
         "obstacle_suspicious_cells=" +
         std::to_string(analysis.obstacle_suspicious_cell_count));
-  } else if (analysis.max_obstacle_evidence <
+  } else if (evidence_gated_cell_count > 0 ||
+             analysis.max_obstacle_evidence <
              config_.obstacle_points_min_evidence) {
     analysis.classification = MissObstacleRootCause::kObstacleEvidenceTooLow;
     analysis.explanation = "frontend obstacle evidence exists, but it never "

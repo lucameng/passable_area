@@ -1,5 +1,6 @@
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
 
+#include "passable_area/core/obstacle_publication.hpp"
 #include "passable_area/core/types/obstacle_types.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
@@ -94,42 +95,6 @@ int SectorIndexForBaseGravityPoint(
 
 int64_t MakeBinKey(int x_bin, int y_bin) {
   return (static_cast<int64_t>(x_bin) << 32) ^ static_cast<uint32_t>(y_bin);
-}
-
-bool IsLowClearanceBridgeEligible(
-    const passable_area::core::Config &config, uint8_t block_reason,
-    float clearance, float overhead_evidence) {
-  return block_reason ==
-         static_cast<uint8_t>(
-             passable_area::core::BlockReason::kLowClearance) &&
-     std::isfinite(clearance) && clearance > config.geometry.max_step_up &&
-         overhead_evidence >= config.obstacle_points_min_evidence;
-}
-
-std::string PublishPathFromStatus(uint8_t publish_status) {
-  switch (static_cast<passable_area::core::ObstaclePointPublishStatus>(
-      publish_status)) {
-  case passable_area::core::ObstaclePointPublishStatus::
-      kPublishedByProtrusion:
-    return "ProtrusionEvidence";
-  case passable_area::core::ObstaclePointPublishStatus::
-      kPublishedByDenseProtrusion:
-    return "DenseProtrusionSource";
-  case passable_area::core::ObstaclePointPublishStatus::
-      kPublishedByGeometryFailure:
-    return "GeometryFailure";
-  case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
-    return "LowClearanceBridge";
-  case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
-    return "GatedByEvidence";
-  case passable_area::core::ObstaclePointPublishStatus::kGatedByHeight:
-    return "GatedByHeight";
-  case passable_area::core::ObstaclePointPublishStatus::kBlockedButNoSamples:
-    return "BlockedButNoSamples";
-  case passable_area::core::ObstaclePointPublishStatus::kNotApplicable:
-    return "None";
-  }
-  return "None";
 }
 
 } // namespace
@@ -328,10 +293,9 @@ FalseObstacleAnalyzer::lookupLocalContext(
               source_cell)];
     }
     context.source_low_clearance_bridge_eligible =
-        IsLowClearanceBridgeEligible(config_, context.source_block_reason,
-                                     context.source_clearance,
-                                     context.source_overhead_evidence);
-    context.source_publish_path = PublishPathFromStatus(
+        passable_area::core::IsLowClearanceBridgePublishStatus(
+            context.source_obstacle_point_publish_status);
+    context.source_publish_path = passable_area::core::ObstaclePublicationPathName(
         context.source_obstacle_point_publish_status);
   }
 

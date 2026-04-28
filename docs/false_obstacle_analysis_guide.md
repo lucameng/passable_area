@@ -64,6 +64,10 @@ build/passable_area/passable_area_offline_replay \
 3. 检查检测框里有没有 `obstacle_points`
 4. 如果有，就把最值得优先排查的 frame 和局部热点列出来
 
+当前 false analyzer 直接读取 runtime 输出的 `obstacle_point_publish_status`
+并通过 core publication helper 转成 `source_publish_path`。它不会重新推断
+DenseProtrusionSource 或 LowClearanceBridge 的发布资格。
+
 要注意两点：
 
 - 它是**离线排查工具**

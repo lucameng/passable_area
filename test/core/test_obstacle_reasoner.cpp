@@ -1,4 +1,5 @@
 #include "passable_area/core/obstacle_reasoner.hpp"
+#include "passable_area/core/obstacle_publication.hpp"
 
 #include <gtest/gtest.h>
 
@@ -9,6 +10,8 @@ namespace {
 using passable_area::core::BlockReason;
 using passable_area::core::Config;
 using passable_area::core::ObstacleEvidenceStage;
+using passable_area::core::ObstaclePublicationSample;
+using passable_area::core::ObstaclePublicationSampleStats;
 using passable_area::core::ObstaclePublicationContext;
 using passable_area::core::ObstaclePointPublishStatus;
 using passable_area::core::ObstacleReasoner;
@@ -344,4 +347,93 @@ TEST(ObstacleReasonerTest, BlockReasonNoneNeverHasPublishedStatus) {
             static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
             static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
+}
+
+TEST(ObstaclePublicationTest, HeightGateRejectsStepBoundaryAndMissingSupport) {
+  auto config = MakeConfig();
+  ObstaclePublicationSampleStats step_boundary_sample;
+  passable_area::core::AccumulateObstaclePublicationSample(
+      config,
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion),
+      0.0f,
+      ObstaclePublicationSample{config.geometry.max_step_up, 0.0f,
+                                config.geometry.max_step_up},
+      step_boundary_sample);
+
+  const auto step_boundary =
+      passable_area::core::EvaluateObstaclePublicationDecisionTrace(
+          config,
+          static_cast<uint8_t>(
+              ObstaclePointPublishStatus::kPublishedByProtrusion),
+          0.0f, step_boundary_sample);
+
+  EXPECT_FALSE(step_boundary.height_gate.above_step_height);
+  EXPECT_FALSE(step_boundary.height_gate.passes);
+  EXPECT_EQ(step_boundary.final_status,
+            ObstaclePointPublishStatus::kGatedByHeight);
+
+  ObstaclePublicationSampleStats tall_sample;
+  passable_area::core::AccumulateObstaclePublicationSample(
+      config,
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion),
+      std::numeric_limits<float>::quiet_NaN(),
+      ObstaclePublicationSample{config.geometry.max_step_up + 0.1f, 0.0f,
+                                config.geometry.max_step_up + 0.1f},
+      tall_sample);
+  const auto missing_support =
+      passable_area::core::EvaluateObstaclePublicationDecisionTrace(
+          config,
+          static_cast<uint8_t>(
+              ObstaclePointPublishStatus::kPublishedByProtrusion),
+          std::numeric_limits<float>::quiet_NaN(), tall_sample);
+
+  EXPECT_FALSE(missing_support.height_gate.finite_support_ref);
+  EXPECT_FALSE(missing_support.height_gate.passes);
+  EXPECT_EQ(missing_support.final_status,
+            ObstaclePointPublishStatus::kGatedByHeight);
+}
+
+TEST(ObstaclePublicationTest, GeometryFailureRequiresBaseGravityFloor) {
+  auto config = MakeConfig();
+  ObstaclePublicationSampleStats below_floor_sample;
+  passable_area::core::AccumulateObstaclePublicationSample(
+      config,
+      static_cast<uint8_t>(
+          ObstaclePointPublishStatus::kPublishedByGeometryFailure),
+      0.0f,
+      ObstaclePublicationSample{config.geometry.max_step_up + 0.1f, 0.0f,
+                                config.obstacle_points_min_height - 0.01f},
+      below_floor_sample);
+
+  const auto trace =
+      passable_area::core::EvaluateObstaclePublicationDecisionTrace(
+          config,
+          static_cast<uint8_t>(
+              ObstaclePointPublishStatus::kPublishedByGeometryFailure),
+          0.0f, below_floor_sample);
+
+  EXPECT_FALSE(trace.height_gate.above_publish_path_floor);
+  EXPECT_FALSE(trace.height_gate.passes);
+  EXPECT_EQ(trace.final_status, ObstaclePointPublishStatus::kGatedByHeight);
+}
+
+TEST(ObstaclePublicationTest, TraceReportsNoSamplesAndPublishPath) {
+  auto config = MakeConfig();
+  const ObstaclePublicationSampleStats no_samples{};
+
+  const auto trace =
+      passable_area::core::EvaluateObstaclePublicationDecisionTrace(
+          config,
+          static_cast<uint8_t>(
+              ObstaclePointPublishStatus::kPublishedByDenseProtrusion),
+          0.0f, no_samples);
+
+  EXPECT_TRUE(trace.reasoner_requests_publication);
+  EXPECT_FALSE(trace.has_current_samples);
+  EXPECT_EQ(trace.final_status,
+            ObstaclePointPublishStatus::kBlockedButNoSamples);
+  EXPECT_STREQ(passable_area::core::ObstaclePublicationPathName(
+                   static_cast<uint8_t>(ObstaclePointPublishStatus::
+                                            kPublishedByDenseProtrusion)),
+               "DenseProtrusionSource");
 }

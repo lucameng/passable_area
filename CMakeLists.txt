@@ -68,6 +68,7 @@ set(core_sources
   src/core/terrain_feature_updater.cpp
   src/core/traversability_solver.cpp
   src/core/obstacle_reasoner.cpp
+  src/core/obstacle_publication.cpp
   src/core/processor.cpp
 )
 

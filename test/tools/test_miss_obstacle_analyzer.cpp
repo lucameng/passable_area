@@ -1,5 +1,7 @@
 #include "passable_area/tools/miss_obstacle_analyzer.hpp"
 
+#include "passable_area/core/types/obstacle_types.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -11,6 +13,7 @@ using passable_area::core::Config;
 using passable_area::core::FrameOutput;
 using passable_area::core::MakeCellDebugPointWithoutSource;
 using passable_area::core::ObservabilityState;
+using passable_area::core::ObstaclePointPublishStatus;
 using passable_area::core::Point3f;
 using passable_area::core::ProcessedFrame;
 using passable_area::tools::MissObstacleAnalyzer;
@@ -140,6 +143,8 @@ TEST(
   output.obstacle_candidate_cell[cell] = 1U;
   output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.25f;
+  output.obstacle_point_publish_status[cell] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByEvidence);
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
@@ -159,6 +164,8 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_candidate_cell[cell] = 1U;
   output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.6f;
+  output.obstacle_point_publish_status[cell] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion);
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
@@ -181,6 +188,8 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_candidate_cell[cell] = 1U;
   output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.6f;
+  output.obstacle_point_publish_status[cell] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion);
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
@@ -204,6 +213,8 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_candidate_cell[cell] = 1U;
   output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.6f;
+  output.obstacle_point_publish_status[cell] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion);
   output.support_height[cell] = std::numeric_limits<float>::quiet_NaN();
 
   const auto analysis = analyzer.analyzeFrame(output, frame);
@@ -218,6 +229,32 @@ TEST(MissObstacleAnalyzerTest,
 }
 
 TEST(MissObstacleAnalyzerTest,
+     OutputHeightGateUsesCorrelatedRuntimeSampleCoordinates) {
+  MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
+  auto output = MakeOutput();
+  ProcessedFrame frame;
+  frame.base_pose_in_map.position = Eigen::Vector3f::Zero();
+  frame.base_pose_in_map.orientation = Eigen::Quaternionf::Identity();
+  frame.map_samples.push_back(
+      {Point3f{0.0f, 0.0f, 0.30f}, Point3f{0.0f, 0.0f, 0.30f}});
+  frame.map_samples.push_back(
+      {Point3f{0.0f, 0.0f, 0.10f}, Point3f{0.0f, 0.0f, 0.00f}});
+  const int cell = CenterCellIndex(output);
+  output.obstacle_suspicious[cell] = 1U;
+  output.obstacle_candidate_cell[cell] = 1U;
+  output.block_reason[cell] = 1U;
+  output.obstacle_evidence[cell] = 0.6f;
+  output.obstacle_point_publish_status[cell] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion);
+  output.support_height[cell] = 0.0f;
+
+  const auto analysis = analyzer.analyzeFrame(output, frame);
+  ASSERT_TRUE(analysis.has_value());
+  EXPECT_EQ(analysis->classification,
+            MissObstacleRootCause::kOutputHeightGateNotMet);
+}
+
+TEST(MissObstacleAnalyzerTest,
      ReturnsNoObstacleSourceSamplesWhenStrongEvidenceCellsHaveNoCurrentSamples) {
   MissObstacleAnalyzer analyzer(MakeConfig(), MakeAnalyzerConfig());
   auto output = MakeOutput();
@@ -229,6 +266,8 @@ TEST(MissObstacleAnalyzerTest,
   output.obstacle_candidate_cell[cell] = 1U;
   output.block_reason[cell] = 1U;
   output.obstacle_evidence[cell] = 0.7f;
+  output.obstacle_point_publish_status[cell] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion);
   output.support_height[cell] = 0.0f;
 
   const auto analysis = analyzer.analyzeFrame(output, frame);

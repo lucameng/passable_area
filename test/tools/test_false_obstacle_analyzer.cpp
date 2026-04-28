@@ -11,6 +11,7 @@ using passable_area::core::Config;
 using passable_area::core::BlockReason;
 using passable_area::core::FrameOutput;
 using passable_area::core::ObservabilityState;
+using passable_area::core::ObstaclePointPublishStatus;
 using passable_area::tools::FalseObstacleAnalyzer;
 using passable_area::tools::FalseObstacleAnalyzerConfig;
 using passable_area::tools::FalseObstacleDetectionBox;
@@ -158,6 +159,8 @@ TEST(FalseObstacleAnalyzerTest,
   output.obstacle_evidence[0] = 0.7f;
   output.protrusion_evidence[0] = 0.7f;
   output.overhead_height[0] = 0.9f;
+  output.obstacle_point_publish_status[0] =
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByOverhead);
   output.obstacle_suspicious[0] = 1U;
   output.obstacle_candidate_cell[0] = 1U;
   const int center_cell = CenterCellIndex(output);
@@ -184,6 +187,9 @@ TEST(FalseObstacleAnalyzerTest,
   EXPECT_TRUE(analysis->hotspots.front().obstacle_candidate_cell);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_obstacle_evidence, 0.7f);
   EXPECT_FLOAT_EQ(analysis->hotspots.front().source_overhead_height, 0.9f);
+  EXPECT_TRUE(analysis->hotspots.front().source_low_clearance_bridge_eligible);
+  EXPECT_EQ(analysis->hotspots.front().source_publish_path,
+            "LowClearanceBridge");
   EXPECT_EQ(analysis->hotspots.front().raw_sample_count, 4U);
   EXPECT_EQ(analysis->hotspots.front().filtered_sample_count, 3U);
   EXPECT_EQ(analysis->hotspots.front().classification,

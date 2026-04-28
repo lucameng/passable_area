@@ -1,5 +1,6 @@
 #include "passable_area/core/processor.hpp"
 #include "passable_area/core/config_validation.hpp"
+#include "passable_area/core/obstacle_publication.hpp"
 #include "passable_area/core/utils/math_utils.hpp"
 
 #include <algorithm>
@@ -80,49 +81,6 @@ bool IsRearBridgeMotionValid(const Pose3D &cached_pose,
   return std::abs(yaw_delta) <= kRearBridgeMaxYawChangeRad;
 }
 
-bool PassesObstaclePointPublishHeightGates(
-    const passable_area::core::MapPointSample &sample,
-    const passable_area::core::Point3f &point_in_base_gravity,
-    float support_ref, const passable_area::core::Config &config) {
-  (void)point_in_base_gravity;
-  return std::isfinite(support_ref) &&
-         sample.point_in_map.z >=
-             support_ref + config.obstacle_points_min_height &&
-         sample.point_in_map.z > support_ref + config.geometry.max_step_up &&
-         sample.point_in_base.z <=
-             config.obstacle_points_max_height_in_base_link;
-}
-
-bool PassesCurrentBaseLinkHeightCeiling(
-    const passable_area::core::Point3f &point_in_base,
-    const passable_area::core::Config &config) {
-  return point_in_base.z <= config.obstacle_points_max_height_in_base_link;
-}
-
-bool PassesCurrentSupportRelativeHeightGate(
-    const passable_area::core::Point3f &point_in_map,
-    float support_ref, const passable_area::core::Config &config) {
-  return std::isfinite(support_ref) &&
-         point_in_map.z >= support_ref + config.obstacle_points_min_height &&
-         point_in_map.z > support_ref + config.geometry.max_step_up;
-}
-
-bool IsObstaclePointPublishStatusPublished(uint8_t status) {
-  switch (static_cast<ObstaclePointPublishStatus>(status)) {
-  case ObstaclePointPublishStatus::kPublishedByProtrusion:
-  case ObstaclePointPublishStatus::kPublishedByDenseProtrusion:
-  case ObstaclePointPublishStatus::kPublishedByGeometryFailure:
-  case ObstaclePointPublishStatus::kPublishedByOverhead:
-    return true;
-  case ObstaclePointPublishStatus::kNotApplicable:
-  case ObstaclePointPublishStatus::kGatedByEvidence:
-  case ObstaclePointPublishStatus::kGatedByHeight:
-  case ObstaclePointPublishStatus::kBlockedButNoSamples:
-    return false;
-  }
-  return false;
-}
-
 bool HasObstaclePointPublishDecision(const FrameOutput &output, int cell) {
   const auto index = static_cast<size_t>(cell);
   return index < output.obstacle_point_publish_status.size() &&
@@ -135,11 +93,6 @@ bool HasObstaclePointPublishDecision(const std::vector<uint8_t> &statuses,
   const auto index = static_cast<size_t>(cell);
   return index < statuses.size() &&
          IsObstaclePointPublishStatusPublished(statuses[index]);
-}
-
-bool IsGeometryFailurePublishStatus(uint8_t status) {
-  return static_cast<ObstaclePointPublishStatus>(status) ==
-         ObstaclePointPublishStatus::kPublishedByGeometryFailure;
 }
 
 MapGeometry MakeMapGeometry(const LocalTerrainMap &map) {
@@ -308,13 +261,15 @@ Processor::buildOutput(const ProcessedFrame &frame,
     publish_decision_sample_seen[static_cast<size_t>(cell)] = 1U;
     const uint8_t publish_status =
         output.obstacle_point_publish_status[static_cast<size_t>(cell)];
-    const bool geometry_sample_height_ok =
-        !IsGeometryFailurePublishStatus(publish_status) ||
-        point_in_base_gravity.z >= config_.obstacle_points_min_height;
-    if (geometry_sample_height_ok &&
-        PassesObstaclePointPublishHeightGates(sample, point_in_base_gravity,
-                                              layers.support_height[cell],
-                                              config_)) {
+    ObstaclePublicationSampleStats sample_stats;
+    AccumulateObstaclePublicationSample(
+        config_, publish_status, layers.support_height[cell],
+        ObstaclePublicationSample{sample.point_in_map.z, sample.point_in_base.z,
+                                  point_in_base_gravity.z},
+        sample_stats);
+    const auto publication_trace = EvaluateObstaclePublicationDecisionTrace(
+        config_, publish_status, layers.support_height[cell], sample_stats);
+    if (publication_trace.height_gate.passes) {
       const auto point = MakeCellDebugPoint(point_in_base_gravity, cell);
       output.obstacle_points.push_back(point);
       native_obstacle_point_published[static_cast<size_t>(cell)] = 1U;
@@ -347,13 +302,15 @@ Processor::buildOutput(const ProcessedFrame &frame,
       const float support_ref = layers.support_height[current_cell];
       const uint8_t publish_status =
           reasoner_publish_status[static_cast<size_t>(current_cell)];
-      const bool geometry_sample_height_ok =
-          !IsGeometryFailurePublishStatus(publish_status) ||
-          point_in_base_gravity.z >= config_.obstacle_points_min_height;
-      if (!geometry_sample_height_ok ||
-          !PassesCurrentSupportRelativeHeightGate(
-              cached_point.point_in_map, support_ref, config_) ||
-          !PassesCurrentBaseLinkHeightCeiling(point_in_base, config_)) {
+      ObstaclePublicationSampleStats sample_stats;
+      AccumulateObstaclePublicationSample(
+          config_, publish_status, support_ref,
+          ObstaclePublicationSample{cached_point.point_in_map.z,
+                                    point_in_base.z, point_in_base_gravity.z},
+          sample_stats);
+      const auto publication_trace = EvaluateObstaclePublicationDecisionTrace(
+          config_, publish_status, support_ref, sample_stats);
+      if (!publication_trace.height_gate.passes) {
         continue;
       }
       output.obstacle_points.push_back(
@@ -371,10 +328,10 @@ Processor::buildOutput(const ProcessedFrame &frame,
       continue;
     }
     output.obstacle_point_publish_status[static_cast<size_t>(cell)] =
-        static_cast<uint8_t>(
-            publish_decision_sample_seen[static_cast<size_t>(cell)] != 0U
-                ? ObstaclePointPublishStatus::kGatedByHeight
-                : ObstaclePointPublishStatus::kBlockedButNoSamples);
+        static_cast<uint8_t>(FinalizeObstaclePublicationStatus(
+            reasoner_publish_status[static_cast<size_t>(cell)],
+            publish_decision_sample_seen[static_cast<size_t>(cell)] != 0U,
+            false));
   }
 
   for (int cell = 0; cell < map_.size(); ++cell) {
