@@ -3,9 +3,13 @@
 `passable_area` is now a single-node, dropout-aware local terrain evaluator for quadruped navigation. The node keeps ROS concerns in `interfaces/ros` and runs the terrain logic in a ROS-free `core` pipeline.
 
 ## Runtime model
-- Inputs are strictly synchronized with `ExactTime`:
+- Primary inputs are strictly synchronized with `ExactTime`:
   - `/LOC_BODY_POINTS` (`sensor_msgs/msg/PointCloud2`)
   - `/ODOM` (`nav_msgs/msg/Odometry`)
+- Optional auxiliary input for temporary CPU validation:
+  - `/tof/merged_pointcloud` (`sensor_msgs/msg/PointCloud2`)
+  - cached as the latest frame in the ROS wrapper and appended to the primary cloud when present
+  - does not participate in `ExactTime`, freshness checks, or geometric alignment
 - The preprocessor now produces two explicit views from the synchronized input cloud:
   - `cloud_in_base`: body-centric view for observability and sector semantics after body-box noise removal and local crop
   - `cloud_in_odom`: internal local-map view for mapping, features, and traversability

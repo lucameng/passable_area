@@ -37,6 +37,10 @@ PassableAreaNode::PassableAreaNode(const rclcpp::NodeOptions &options)
   const auto sensor_qos = rclcpp::SensorDataQoS();
   cloud_sub_.subscribe(this, topic_config_.input_cloud_topic,
                        sensor_qos.get_rmw_qos_profile());
+  aux_cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+      topic_config_.aux_input_cloud_topic, sensor_qos,
+      std::bind(&PassableAreaNode::onAuxCloudObserved, this,
+                std::placeholders::_1));
   odom_sub_.subscribe(this, topic_config_.odom_topic,
                       sensor_qos.get_rmw_qos_profile());
   cloud_sub_.registerCallback(std::bind(&PassableAreaNode::onCloudObserved,
@@ -182,6 +186,8 @@ void PassableAreaNode::logFatal(const char *format, ...) {
 void PassableAreaNode::logTopicConfiguration() {
   logInfo("===== Subscribed Topics =====");
   logInfo("input_cloud_topic: %s", topic_config_.input_cloud_topic.c_str());
+  logInfo("aux_input_cloud_topic: %s",
+          topic_config_.aux_input_cloud_topic.c_str());
   logInfo("odom_topic: %s", topic_config_.odom_topic.c_str());
   logInfo("sync_queue_size: %d", topic_config_.sync_queue_size);
   logInfo("===== Output Topics =====");
@@ -205,6 +211,28 @@ void PassableAreaNode::onCloudObserved(
   status_code_manager_.markCloud(now());
   watchdog_.markCloud(now());
   perf_stats_.observeCloud();
+}
+
+void PassableAreaNode::onAuxCloudObserved(
+    const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
+  passable_area::core::PointCloud aux_cloud;
+  if (!point_converter_.fromRos(*msg, aux_cloud)) {
+    logWarnThrottle(2000, "aux_pointcloud_ros_convert_failed",
+                    "Auxiliary PointCloud2 conversion failed");
+    return;
+  }
+  if (!msg->header.frame_id.empty() &&
+      msg->header.frame_id != config_.body_frame) {
+    logWarnThrottle(
+        5000, "aux_body_frame_input_mismatch",
+        "Auxiliary PointCloud2 header.frame_id is '%s' but passable_area "
+        "expects body_frame='%s'",
+        msg->header.frame_id.c_str(), config_.body_frame.c_str());
+  }
+
+  std::lock_guard<std::mutex> lock(aux_cloud_mutex_);
+  latest_aux_cloud_in_base_ = std::move(aux_cloud);
+  has_latest_aux_cloud_ = true;
 }
 
 void PassableAreaNode::onOdomObserved(
@@ -236,6 +264,15 @@ void PassableAreaNode::onSynced(
       logWarnThrottle(2000, "odom_ros_convert_failed",
                       "Odometry conversion failed");
       return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(aux_cloud_mutex_);
+      if (has_latest_aux_cloud_ && !latest_aux_cloud_in_base_.empty()) {
+        cloud.reserve(cloud.size() + latest_aux_cloud_in_base_.size());
+        cloud.insert(cloud.end(), latest_aux_cloud_in_base_.begin(),
+                     latest_aux_cloud_in_base_.end());
+      }
     }
 
     passable_area::core::FrameInput input;

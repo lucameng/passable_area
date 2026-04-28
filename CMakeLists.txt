@@ -267,6 +267,58 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  ament_add_gtest(test_ros_param_loader
+    test/interfaces/ros/test_ros_param_loader.cpp
+  )
+  if(TARGET test_ros_param_loader)
+    target_include_directories(test_ros_param_loader PUBLIC include)
+    target_link_libraries(test_ros_param_loader
+      passable_area_ros
+      passable_area_core
+      ${OpenCV_LIBS}
+    )
+    ament_target_dependencies(test_ros_param_loader
+      Eigen3
+      OpenCV
+      rclcpp
+    )
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_ros_param_loader ${cpp_typesupport_target})
+    else()
+      rosidl_target_interfaces(test_ros_param_loader
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
+  endif()
+
+  ament_add_gtest(test_passable_area_node_aux_cloud
+    test/interfaces/ros/test_passable_area_node_aux_cloud.cpp
+  )
+  if(TARGET test_passable_area_node_aux_cloud)
+    target_include_directories(test_passable_area_node_aux_cloud PUBLIC include)
+    target_link_libraries(test_passable_area_node_aux_cloud
+      passable_area_ros
+      passable_area_core
+      ${OpenCV_LIBS}
+    )
+    ament_target_dependencies(test_passable_area_node_aux_cloud
+      Eigen3
+      OpenCV
+      nav_msgs
+      pcl_conversions
+      rclcpp
+      sensor_msgs
+      std_msgs
+    )
+    if(COMMAND rosidl_get_typesupport_target)
+      target_link_libraries(test_passable_area_node_aux_cloud
+        ${cpp_typesupport_target}
+      )
+    else()
+      rosidl_target_interfaces(test_passable_area_node_aux_cloud
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    endif()
+  endif()
+
   ament_add_gtest(test_status_code_manager
     test/interfaces/ros/test_status_code_manager.cpp
   )

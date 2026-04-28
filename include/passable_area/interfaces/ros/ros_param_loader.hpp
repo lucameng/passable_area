@@ -9,6 +9,7 @@ namespace passable_area::interfaces::ros {
 
 struct RosTopicConfig {
   std::string input_cloud_topic = "/LOC_BODY_POINTS";
+  std::string aux_input_cloud_topic = "/tof/merged_pointcloud";
   std::string odom_topic = "/ODOM";
   int sync_queue_size = 10;
   std::string terrain_state_topic = "/terrain_state";

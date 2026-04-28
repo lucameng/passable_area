@@ -125,6 +125,7 @@ Processor::update(const FrameInput&) -> FrameOutput
 默认订阅：
 
 - `/LOC_BODY_POINTS` `sensor_msgs/msg/PointCloud2`
+- `/tof/merged_pointcloud` `sensor_msgs/msg/PointCloud2`
 - `/ODOM` `nav_msgs/msg/Odometry`
 
 配置来源：
@@ -132,7 +133,14 @@ Processor::update(const FrameInput&) -> FrameOutput
 - `src/passable_area/config/sensors.yaml`
 - `src/passable_area/include/passable_area/interfaces/ros/ros_param_loader.hpp`
 
-这两路输入通过 `message_filters::Synchronizer<ExactTime>` 严格同步。
+主点云与里程计通过 `message_filters::Synchronizer<ExactTime>` 严格同步。
+
+辅助点云当前仅用于临时 CPU 验证：
+
+- 不参与 `ExactTime`
+- ROS 层只缓存最近一帧
+- 每次主同步帧到来时，如缓存存在，则直接与主点云拼接后进入处理链
+- 不做时间新鲜度判断，不承诺几何严格对齐
 
 当前实现含义是：
 

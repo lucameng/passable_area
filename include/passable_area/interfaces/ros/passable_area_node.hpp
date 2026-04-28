@@ -25,6 +25,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <memory>
+#include <mutex>
 
 namespace passable_area::interfaces::ros {
 
@@ -34,12 +35,16 @@ public:
       const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 private:
+  friend class PassableAreaNodeRosTestAccess;
+
   using SyncPolicy =
       message_filters::sync_policies::ExactTime<sensor_msgs::msg::PointCloud2,
                                                 nav_msgs::msg::Odometry>;
 
   void
   onCloudObserved(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg);
+  void
+  onAuxCloudObserved(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg);
   void onOdomObserved(const nav_msgs::msg::Odometry::ConstSharedPtr &msg);
   void onSynced(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg,
                 const nav_msgs::msg::Odometry::ConstSharedPtr &odom_msg);
@@ -72,8 +77,13 @@ private:
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr
+      aux_cloud_sub_;
   message_filters::Subscriber<nav_msgs::msg::Odometry> odom_sub_;
   std::unique_ptr<message_filters::Synchronizer<SyncPolicy>> sync_;
+  std::mutex aux_cloud_mutex_;
+  passable_area::core::PointCloud latest_aux_cloud_in_base_;
+  bool has_latest_aux_cloud_ = false;
 };
 
 } // namespace passable_area::interfaces::ros

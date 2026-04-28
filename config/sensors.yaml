@@ -1,4 +1,5 @@
 passable_area:
   ros__parameters:
-    input_cloud_topic: "/LOC_BODY_POINTS"
-    odom_topic: "/ODOM"
+    input_cloud_topic: "/CLOUD_REGISTERED_BODY"
+    aux_input_cloud_topic: "/tof/merged_pointcloud"
+    odom_topic: "/LIO_ODOM"

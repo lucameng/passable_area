@@ -109,6 +109,8 @@ RosNodeParams RosParamLoader::load(rclcpp::Node &node) const {
       "debug.publish_observability", config.debug.publish_observability);
   topics.input_cloud_topic =
       node.declare_parameter("input_cloud_topic", topics.input_cloud_topic);
+  topics.aux_input_cloud_topic = node.declare_parameter(
+      "aux_input_cloud_topic", topics.aux_input_cloud_topic);
   topics.odom_topic = node.declare_parameter("odom_topic", topics.odom_topic);
   topics.sync_queue_size =
       node.declare_parameter("sync.queue_size", topics.sync_queue_size);
