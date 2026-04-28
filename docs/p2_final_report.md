@@ -116,4 +116,4 @@ Operational notes:
 - `3175a4f fix: name terrain geometry constants`
 - `97308f6 fix: unify publication decision trace`
 - `9d0e9d9 fix: clarify support contamination eligibility`
-- P2-D: `docs: consolidate P2 handover` (commit hash available after this document is committed)
+- `283200b docs: consolidate P2 handover`

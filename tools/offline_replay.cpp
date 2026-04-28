@@ -1,8 +1,9 @@
+#include "passable_area/core/obstacle_publication.hpp"
+#include "passable_area/core/types/obstacle_types.hpp"
 #include "passable_area/interfaces/ros/converters/odom_converter.hpp"
 #include "passable_area/interfaces/ros/converters/pointcloud_converter.hpp"
 #include "passable_area/interfaces/ros/ros_param_loader.hpp"
 #include "passable_area/passable_area.hpp"
-#include "passable_area/core/types/obstacle_types.hpp"
 #include "passable_area/tools/false_obstacle_analyzer.hpp"
 #include "passable_area/tools/miss_obstacle_analyzer.hpp"
 
@@ -51,42 +52,6 @@ using passable_area::core::ProcessedFrame;
 const char *ToBlockReasonString(passable_area::core::BlockReason reason);
 const char *ToObstaclePointPublishStatusString(
     passable_area::core::ObstaclePointPublishStatus status);
-
-bool IsLowClearanceBridgeEligible(const passable_area::core::Config &config,
-                                  uint8_t block_reason,
-                                  float clearance,
-                                  float overhead_evidence) {
-  return block_reason ==
-         static_cast<uint8_t>(
-             passable_area::core::BlockReason::kLowClearance) &&
-     std::isfinite(clearance) && clearance > config.geometry.max_step_up &&
-         overhead_evidence >= config.obstacle_points_min_evidence;
-}
-
-std::string PublishPathFromStatus(
-    passable_area::core::ObstaclePointPublishStatus publish_status) {
-  switch (publish_status) {
-  case passable_area::core::ObstaclePointPublishStatus::kPublishedByProtrusion:
-    return "ProtrusionEvidence";
-  case passable_area::core::ObstaclePointPublishStatus::
-      kPublishedByDenseProtrusion:
-    return "DenseProtrusionSource";
-  case passable_area::core::ObstaclePointPublishStatus::
-      kPublishedByGeometryFailure:
-    return "GeometryFailure";
-  case passable_area::core::ObstaclePointPublishStatus::kPublishedByOverhead:
-    return "LowClearanceBridge";
-  case passable_area::core::ObstaclePointPublishStatus::kGatedByEvidence:
-    return "GatedByEvidence";
-  case passable_area::core::ObstaclePointPublishStatus::kGatedByHeight:
-    return "GatedByHeight";
-  case passable_area::core::ObstaclePointPublishStatus::kBlockedButNoSamples:
-    return "BlockedButNoSamples";
-  case passable_area::core::ObstaclePointPublishStatus::kNotApplicable:
-    return "None";
-  }
-  return "None";
-}
 
 std::string DefaultParamsFile();
 std::vector<std::string> DefaultParamsFiles();
@@ -1589,8 +1554,7 @@ RunMissObstacleReplay(const MissObstacleReplayArgs &args) {
 void PrintRoiFrameInspection(
     const FrameOutput &output, const passable_area::core::Pose3D &base_pose,
     const passable_area::core::ProcessedFrame &processed_frame,
-    double start_offset_sec, const RoiInspectArgs &args,
-    const passable_area::core::Config &config) {
+    double start_offset_sec, const RoiInspectArgs &args) {
   std::cout << std::fixed << std::setprecision(3);
   const float yaw = std::atan2(
       2.0f * (base_pose.orientation.w() * base_pose.orientation.z() +
@@ -1722,18 +1686,28 @@ void PrintRoiFrameInspection(
                                              : output.protrusion_evidence[idx];
       const float overhead_evidence =
           output.overhead_evidence.empty() ? 0.0f : output.overhead_evidence[idx];
-      const uint8_t block_reason =
-          output.block_reason.empty() ? 0U : output.block_reason[idx];
       roi_max_protrusion_evidence =
           std::max(roi_max_protrusion_evidence, protrusion_evidence);
       roi_max_overhead_evidence =
           std::max(roi_max_overhead_evidence, overhead_evidence);
-      if (protrusion_evidence >= config.obstacle_points_min_evidence) {
+      const uint8_t publish_status =
+          output.obstacle_point_publish_status.empty()
+              ? static_cast<uint8_t>(
+                    passable_area::core::ObstaclePointPublishStatus::
+                        kNotApplicable)
+              : output.obstacle_point_publish_status[idx];
+      if (publish_status ==
+              static_cast<uint8_t>(
+                  passable_area::core::ObstaclePointPublishStatus::
+                      kPublishedByProtrusion) ||
+          publish_status ==
+              static_cast<uint8_t>(
+                  passable_area::core::ObstaclePointPublishStatus::
+                      kPublishedByDenseProtrusion)) {
         ++roi_protrusion_publish_cells;
       }
-      if (IsLowClearanceBridgeEligible(config, block_reason,
-                                       output.clearance[idx],
-                                       overhead_evidence)) {
+      if (passable_area::core::IsLowClearanceBridgePublishStatus(
+              publish_status)) {
         ++roi_low_clearance_bridge_cells;
       }
     }
@@ -1776,12 +1750,12 @@ void PrintRoiFrameInspection(
               ? 0U
               : output.obstacle_point_publish_status[idx];
       const bool low_clearance_bridge =
-          IsLowClearanceBridgeEligible(config, block_reason,
-                                       output.clearance[idx],
-                                       overhead_evidence);
-      const std::string publish_path = PublishPathFromStatus(
-          static_cast<passable_area::core::ObstaclePointPublishStatus>(
-              publish_status));
+          passable_area::core::IsLowClearanceBridgePublishStatus(
+              publish_status);
+      const char *publish_path =
+          passable_area::core::ObstaclePublicationPathName(
+              static_cast<passable_area::core::ObstaclePointPublishStatus>(
+                  publish_status));
       std::cout
           << "  cell base_x=" << base_gravity_x << " base_y=" << base_gravity_y
           << " map_x=" << map_x << " map_y=" << map_y << " sample_count="
@@ -1912,7 +1886,7 @@ std::optional<int> RunRoiInspect(const RoiInspectArgs &args) {
       continue;
     }
     PrintRoiFrameInspection(output, pose, processed_frame, start_offset_sec,
-                            args, config);
+                            args);
     ++printed_frames;
   }
   return printed_frames;

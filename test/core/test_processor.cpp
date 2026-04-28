@@ -1660,6 +1660,54 @@ TEST(ProcessorTest,
   EXPECT_EQ(map.layers().support_surface_contaminated[cell], 0U);
 }
 
+TEST(ProcessorTest,
+     SupportSurfaceContaminationDoesNotFollowPublicationEvidenceTuning) {
+  auto config = MakeConfig();
+  config.map.length = 2.0f;
+  config.map.width = 2.0f;
+  config.map.resolution = 1.0f;
+  config.observability.sector_count = 4;
+
+  const auto observability =
+      MakeUniformObservability(config, ObservabilityState::kObserved);
+  passable_area::core::Pose3D base_pose;
+  base_pose.position = Eigen::Vector3f::Zero();
+  base_pose.orientation = Eigen::Quaternionf::Identity();
+  const int cell = 3;
+
+  auto high_publish_threshold_config = config;
+  high_publish_threshold_config.obstacle_points_min_evidence = 0.8f;
+  LocalTerrainMap high_publish_threshold_map(high_publish_threshold_config);
+  DropoutAwareMapUpdater high_publish_threshold_updater(
+      high_publish_threshold_config);
+  FrontendOutput strong_protrusion;
+  strong_protrusion.protrusion_candidates.push_back(ProtrusionCandidate{
+      cell, config.geometry.max_step_up + 0.2f, 1.0f, 2.0f});
+  high_publish_threshold_updater.update(strong_protrusion, observability,
+                                        base_pose, high_publish_threshold_map);
+  ASSERT_LT(high_publish_threshold_map.layers().protrusion_evidence[cell],
+            high_publish_threshold_config.obstacle_points_min_evidence);
+  EXPECT_EQ(
+      high_publish_threshold_map.layers().support_surface_contaminated[cell],
+      1U);
+
+  auto low_publish_threshold_config = config;
+  low_publish_threshold_config.obstacle_points_min_evidence = 0.2f;
+  LocalTerrainMap low_publish_threshold_map(low_publish_threshold_config);
+  DropoutAwareMapUpdater low_publish_threshold_updater(
+      low_publish_threshold_config);
+  FrontendOutput weak_protrusion;
+  weak_protrusion.protrusion_candidates.push_back(ProtrusionCandidate{
+      cell, config.geometry.max_step_up + 0.2f, 1.0f, 1.2f});
+  low_publish_threshold_updater.update(weak_protrusion, observability,
+                                       base_pose, low_publish_threshold_map);
+  ASSERT_GE(low_publish_threshold_map.layers().protrusion_evidence[cell],
+            low_publish_threshold_config.obstacle_points_min_evidence);
+  EXPECT_EQ(
+      low_publish_threshold_map.layers().support_surface_contaminated[cell],
+      0U);
+}
+
 TEST(ProcessorTest, MapUpdaterDoesNotContaminateSupportSurfaceForOverheadOnly) {
   auto config = MakeConfig();
   config.map.length = 2.0f;

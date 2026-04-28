@@ -2,19 +2,19 @@
 
 这份文档整理当前 `passable_area` 的测试资产、覆盖范围、运行方式和最近一次本地验证结果。
 
-当前版本有一个重要前提：
+当前版本按 V2 双层语义理解：
 
-- `PolarFrontend` 已经回退到接近 `f92759c` 的简单语义
-- 前端只负责 per-cell 原始统计、support candidate、直接 `vertical_span` 障碍形成
-- 复杂的 neighbor gate / explanation 链不再是当前主判定路径
-
-因此，测试说明也必须按这个基线理解。
+- `PolarFrontend` 负责 per-cell profile、support/protrusion/overhead candidates 和 dropout-aware observability 输入
+- `DropoutAwareMapUpdater` 维护 support、protrusion、overhead、coverage 以及显式 `support_surface_contaminated` layer
+- `ObstacleReasoner` 负责 impassable block reason 和 obstacle-point publication status
+- runtime 与 offline analyzer 共享 core publication decision/path 语义；诊断输出不应重新推导发布门
 
 ## 1. 自动测试
 
 这些目标会被 `colcon test --packages-select passable_area` 自动执行：
 
 - `test_processor`
+- `test_obstacle_reasoner`
 - `test_output_converter`
 - `test_debug_publishers`
 - `test_status_code_manager`
@@ -32,7 +32,7 @@ colcon test-result --verbose
 
 结果：
 
-- `Summary: 80 tests, 0 errors, 0 failures, 0 skipped`
+- `Summary: 148 tests, 0 errors, 0 failures, 0 skipped`
 
 ## 2. 自动测试覆盖矩阵
 
@@ -57,22 +57,37 @@ colcon test-result --verbose
   - recenter 后历史层平移
   - dropout 下 obstacle 不被激进清空
   - 动态障碍可被后续地面重观测清除
-- 简化后的 `PolarFrontend`
-  - support candidate 直接取当前帧 `min_z`
-  - `vertical_span` 直接形成 obstacle candidate
-  - `PartiallyObserved` 且未触发 obstacle 时生成 ambiguous candidate
-  - 历史复杂字段保持兼容但默认不激活
-- obstacle point 发布门槛
-  - `obstacle_points_min_height`
-  - `obstacle_points_max_height_in_base_link`
-  - 弱 `obstacle_evidence` 不发布 obstacle points
+- `PolarFrontend`
+  - support candidate 使用当前帧 lower support band
+  - suspicious `vertical_span`、pure protrusion gain、overhead low-clearance candidate
+  - sparse lower leak 不污染 support band
+  - dropout sector 抑制不可靠 support candidate
+- terrain geometry
+  - slope 使用实际邻接距离
+  - support-plane roughness / slope / step
+  - active protrusion support contamination 被排除
+  - overhead-only low clearance 仍参与 support geometry
+  - support contamination 不跟随 obstacle-point publication threshold 调参
+- obstacle point publication contract
+  - 需要有限 support reference
+  - `height <= max_step_up` 不发布
+  - base-link ceiling 生效
+  - dense-source、rear dropout bridge、low-clearance bridge 仍经过 Reasoner/publication contract
 
-当前障碍语义回退后，这个文件重点锁的是：
+### 2.2 `test_obstacle_reasoner`
 
-- 前端回到简单基线以后，障碍形成不会再被邻域 gate 或 explanation 分支拦掉
-- 但 `Processor` 仍然保留当前 obstacle point 发布门槛
+文件：
 
-### 2.2 `test_output_converter`
+- `test/core/test_obstacle_reasoner.cpp`
+
+覆盖：
+
+- protrusion / low-clearance / geometry-failure block reason
+- protrusion、dense protrusion、geometry failure、overhead bridge publication status
+- weak evidence、height gate、no-sample 等 gated status
+- `support_surface_contaminated` 不改变 obstacle publication contract
+
+### 2.3 `test_output_converter`
 
 文件：
 
@@ -84,7 +99,7 @@ colcon test-result --verbose
 - 非零 yaw 时的重采样方向
 - `grid_map` 与 occupancy 输出对齐
 
-### 2.3 `test_debug_publishers`
+### 2.4 `test_debug_publishers`
 
 文件：
 
@@ -96,7 +111,7 @@ colcon test-result --verbose
 - observability debug 输出
 - `base_gravity` 上下文是否保持一致
 
-### 2.4 `test_status_code_manager`
+### 2.5 `test_status_code_manager`
 
 文件：
 
@@ -110,7 +125,7 @@ colcon test-result --verbose
 - output stall
 - sticky fatal 状态码覆盖
 
-### 2.5 `test_ros_param_loader`
+### 2.6 `test_ros_param_loader`
 
 文件：
 
@@ -122,7 +137,7 @@ colcon test-result --verbose
 - legacy 顶层参数兼容
 - 新旧参数并存时优先取新位置
 
-### 2.6 `test_passable_area_node_frames`
+### 2.7 `test_passable_area_node_frames`
 
 文件：
 
@@ -134,7 +149,7 @@ colcon test-result --verbose
 - 打开参数后发布指定 TF
 - 输入 frame 不匹配时给出 warning
 
-### 2.7 `test_false_obstacle_analyzer`
+### 2.8 `test_false_obstacle_analyzer`
 
 文件：
 
@@ -147,13 +162,13 @@ colcon test-result --verbose
 - `ClearanceDriven`
 - `ObstacleEvidencePlusLowContinuity`
 - source cell 到离散前端状态查找
+- source cell 的 low-clearance bridge 状态来自 core publication status
 
 说明：
 
-- analyzer 仍会读取一批历史前端字段
-- 这些字段的读取契约被保留，但不代表当前前端仍靠这些分支判障碍
+- analyzer 面向离线误检归因，但发布路径名称和 bridge 判定必须跟 runtime `obstacle_point_publish_status` 保持一致
 
-### 2.8 `test_miss_obstacle_analyzer`
+### 2.9 `test_miss_obstacle_analyzer`
 
 文件：
 
@@ -166,16 +181,18 @@ colcon test-result --verbose
 - 有 candidate 但 `obstacle_evidence` 不足
 - 有 evidence 但没有通过 obstacle point 高度门槛
 - evidence cell 在 ROI 内但当前没有对应 source sample
-- 历史兼容字段驱动的 reject / leak 类 root cause 仍可被解释
+- 高度门要求有限 support reference，且 `height <= max_step_up` 不发布
+- sample `min_z` fallback 不能授予发布资格
+- runtime sample 坐标必须相关，不能把不同样本的极值组合成发布资格
 
 说明：
 
-- 当前简单前端的主路径，重点是：
+- 当前 V2 主路径重点是：
   - `NoFrontendObstacleSuspicion`
   - `ObstacleEvidenceTooLow`
   - `OutputHeightGateNotMet`
   - `NoObstacleSourceSamplesInRoi`
-- `RejectedByNeighborSupport`、`LeakFilteredToNoCandidate` 这类结果现在主要是兼容性守卫，用来保证 analyzer 不被历史字段契约打断
+- offline miss 归因必须复用 core publication gate/trace，不在 tool 内维护独立高度门语义
 
 ## 3. 手工验证资产
 
@@ -201,21 +218,21 @@ colcon test-result --verbose
 
 ## 4. 当前测试策略的重点
 
-这次前端回退后，测试策略也跟着收敛：
+当前 V2 后处理后，测试策略收敛到三条主线：
 
-- 主门禁由 `test_processor` 锁住简单前端基线
-- `Processor` 保留当前 obstacle point 发布门槛，由对应 case 锁住
+- 主门禁由 `test_processor` 锁住 core pipeline、dropout-aware map、support geometry 和 publication contract
+- `test_obstacle_reasoner` 锁住 Reasoner block/status 语义
 - tools 层测试继续守住 analyzer 契约，避免离线排查工具失真
-- 不再把复杂 neighbor gate / explanation 规则当成当前必须维护的主行为
+- docs/benchmarks 用于补充真实 bag 验收，不替代 core semantic tests
 
 ## 5. 后续补强建议
 
 建议继续补的方向是：
 
 1. 用真实 bag 为 missed obstacle 场景建立固定回放样例
-2. 给 false / miss analyzer 增加一组“当前简单前端基线”专用回归样本
-3. 如果后续要重新引入障碍增强逻辑，优先加到地图层或证据累计层，不要直接把规则栈塞回 `PolarFrontend`
-4. 所有新行为都先补 `test_processor`，再补离线 replay 复现链路
+2. 给 false / miss analyzer 增加更多 publication trace 边界样本
+3. 后续障碍增强逻辑优先落在地图层、证据累计层或 Reasoner，不把 bag-specific 规则塞回 `PolarFrontend`
+4. 所有新行为都先补 core semantic tests，再补离线 replay 复现链路
 
 ## 6. 常用命令
 
