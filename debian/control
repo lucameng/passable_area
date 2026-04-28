@@ -1,0 +1,12 @@
+Source: ros-humble-passable-area
+Section: misc
+Priority: optional
+Maintainer: Lucas Meng <mengliang@deeprobotics.cn>
+Build-Depends: debhelper (>= 9.0.0), liblog4cplus-dev, libpcl-dev, ros-humble-ament-cmake, ros-humble-ament-cmake-gtest, ros-humble-geometry-msgs, ros-humble-grid-map-core, ros-humble-grid-map-msgs, ros-humble-grid-map-ros, ros-humble-message-filters, ros-humble-nav-msgs, ros-humble-pcl-conversions, ros-humble-rclcpp, ros-humble-rosbag2-cpp, ros-humble-rosbag2-storage, ros-humble-rosidl-default-generators, ros-humble-sensor-msgs, ros-humble-std-msgs, ros-humble-tf2-ros, ros-humble-visualization-msgs
+Homepage: https://index.ros.org/p/passable_area/#humble
+Standards-Version: 3.9.2
+
+Package: ros-humble-passable-area
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, liblog4cplus-dev, libpcl-dev, ros-humble-geometry-msgs, ros-humble-grid-map-core, ros-humble-grid-map-msgs, ros-humble-grid-map-ros, ros-humble-message-filters, ros-humble-nav-msgs, ros-humble-pcl-conversions, ros-humble-rclcpp, ros-humble-rosbag2-cpp, ros-humble-rosbag2-storage, ros-humble-rosidl-default-runtime, ros-humble-sensor-msgs, ros-humble-std-msgs, ros-humble-tf2-ros, ros-humble-visualization-msgs
+Description: Dropout-aware local terrain traversability for quadruped navigation.

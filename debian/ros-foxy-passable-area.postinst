@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  systemctl unmask passable_area.service || true
+  systemctl daemon-reload || true
+  systemctl disable passable_area.service || true
+  systemctl restart passable_area.service || true
+fi
+
+exit 0
