@@ -11,6 +11,10 @@ P2 closed the follow-up issues listed in `docs/v2_synthesized_authoritative_audi
 
 P2 preserved the P0/P1 contracts: no obstacle point publication for `height <= max_step_up`, no restoration of the old global `base_gravity` floor clamp, no bag/ROI/frame-specific fixes, no benchmark config pollution, and ROS-free core behavior.
 
+Current delivery HEAD is `c7a30de fix: align diagnostic trace and support eligibility`.
+That post-P2 review follow-up keeps the P2 scope intact while aligning the
+diagnostic and handover documentation with the final reviewed delivery state.
+
 ## Completed Changes
 
 ### P2-A Parameter and Hidden-Constant Contract
@@ -47,6 +51,15 @@ Commit: this report is committed by the P2-D closeout commit (`docs: consolidate
 
 - Consolidated P2-A/B/C/D status, validation, review, and remaining-risk conclusions here.
 - Kept `docs/p2_subagent_coordination_plan.md` as the execution board rather than long-term design authority.
+
+### Post-P2 Review Follow-Up
+
+Commit: `c7a30de fix: align diagnostic trace and support eligibility`
+
+- `offline_replay --inspect-roi` now reports low-clearance bridge and publish path from the core `obstacle_point_publish_status` helpers instead of locally re-deriving bridge eligibility or maintaining a duplicate path switch.
+- `support_surface_contaminated` is derived from an internal active-solid protrusion evidence stage rather than the obstacle-point publication parameter name.
+- Added focused regression coverage proving support-surface contamination does not follow `obstacle_points_min_evidence` publication tuning.
+- Updated the P2 handover, algorithm scheme, and test guide to match the current HEAD and latest validation state.
 
 ## Validation Results
 
@@ -95,6 +108,18 @@ Commit: this report is committed by the P2-D closeout commit (`docs: consolidate
 - `colcon test-result --verbose`: `145 tests, 0 errors, 0 failures, 0 skipped`
 - Offline benchmarks were not rerun for P2-D because no code, config, analyzer, obstacle, dropout, terrain, support, publication, or acceptance semantics changed.
 
+### Current HEAD `c7a30de`
+
+- `colcon build --packages-select passable_area --symlink-install`: pass
+- `ROS_LOG_DIR=/tmp colcon test --packages-select passable_area --event-handlers console_direct+`: pass
+- `colcon test-result --verbose`: `148 tests, 0 errors, 0 failures, 0 skipped`
+- False-obstacle benchmark: all six frozen bags passed with `suspicious_frames: 0`
+- Miss acceptance:
+  - Setup A left: `1 / 4 missed`
+  - Setup A right: `2 / 4 missed`
+  - Setup B left: `2 / 3 missed`
+  - Setup B right: `0 / 3 missed`
+
 ## Strict Review Results
 
 - P2-A: strict read-only review found no blocking issues. One non-blocking DenseProtrusionSource documentation note was addressed in P2-B.
@@ -104,16 +129,18 @@ Commit: this report is committed by the P2-D closeout commit (`docs: consolidate
 
 ## Remaining Risks
 
-None known for P2 scope after P2-A/B/C validation and strict review.
+None known for P2 scope after P2-A/B/C validation, strict review, and the
+`c7a30de` post-P2 review follow-up validation.
 
 Operational notes:
 
 - ROS-facing tests should be run with `ROS_LOG_DIR=/tmp` in this sandbox to avoid `/home/deep/.ros/log` write failures.
 - The DDS socket warnings seen during offline replay are sandbox/network-interface warnings; the rosbag analyses completed successfully.
 
-## Current P2 Commit Stack
+## Current Delivery Commit Stack
 
 - `3175a4f fix: name terrain geometry constants`
 - `97308f6 fix: unify publication decision trace`
 - `9d0e9d9 fix: clarify support contamination eligibility`
 - `283200b docs: consolidate P2 handover`
+- `c7a30de fix: align diagnostic trace and support eligibility`
