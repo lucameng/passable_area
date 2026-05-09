@@ -159,7 +159,7 @@ The current frontend has been rolled back to a simple per-cell baseline:
 
 Relevant obstacle-point output controls:
 - `obstacle_points_min_evidence`: minimum obstacle evidence required before a cell can contribute to `/terrain_obstacle_points`
-- `obstacle_points_min_height`: minimum height relative to the cell support reference required for a sample to be published to `/terrain_obstacle_points`, not an absolute z threshold; when historical `support_height` is missing, the current-frame `min_z` is used as fallback
+- `obstacle_points_min_height`: minimum height relative to the cell support reference required for a sample to be published to `/terrain_obstacle_points`, not an absolute z threshold; a finite support reference is required
 - `obstacle_points_max_height_in_base_link`: maximum allowed sample height in `base_link` for `/terrain_obstacle_points`; samples above this ceiling are filtered at publish time even if they clear the support-relative height gate in `base_gravity`
 
 ## Offline analysis tools

@@ -1,5 +1,5 @@
-#include "passable_area/core/obstacle_reasoner.hpp"
 #include "passable_area/core/obstacle_publication.hpp"
+#include "passable_area/core/obstacle_reasoner.hpp"
 
 #include <gtest/gtest.h>
 
@@ -10,10 +10,10 @@ namespace {
 using passable_area::core::BlockReason;
 using passable_area::core::Config;
 using passable_area::core::ObstacleEvidenceStage;
+using passable_area::core::ObstaclePointPublishStatus;
+using passable_area::core::ObstaclePublicationContext;
 using passable_area::core::ObstaclePublicationSample;
 using passable_area::core::ObstaclePublicationSampleStats;
-using passable_area::core::ObstaclePublicationContext;
-using passable_area::core::ObstaclePointPublishStatus;
 using passable_area::core::ObstacleReasoner;
 using passable_area::core::SupportState;
 using passable_area::core::TerrainLayers;
@@ -81,7 +81,8 @@ TEST(ObstacleReasonerTest, LowClearanceGatedByStepRangeHeight) {
             static_cast<uint8_t>(ObstaclePointPublishStatus::kGatedByHeight));
 }
 
-TEST(ObstacleReasonerTest, LowClearanceGeometryWithoutOverheadStateDoesNotBlock) {
+TEST(ObstacleReasonerTest,
+     LowClearanceGeometryWithoutOverheadStateDoesNotBlock) {
   auto layers = MakeLayers();
   layers.clearance[0] = 0.3f;
   layers.overhead_confidence[0] = 0.0f;
@@ -89,8 +90,7 @@ TEST(ObstacleReasonerTest, LowClearanceGeometryWithoutOverheadStateDoesNotBlock)
 
   const auto output = ObstacleReasoner(MakeConfig()).evaluate(layers);
 
-  EXPECT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.overhead_stage[0],
             static_cast<uint8_t>(ObstacleEvidenceStage::kEvidenceLow));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
@@ -126,8 +126,7 @@ TEST(ObstacleReasonerTest,
 
   const auto output = ObstacleReasoner(config).evaluate(layers);
 
-  EXPECT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.overhead_stage[0],
             static_cast<uint8_t>(ObstacleEvidenceStage::kEvidenceLow));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
@@ -197,18 +196,17 @@ TEST(ObstacleReasonerTest,
   std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
   std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
   std::vector<float> current_protrusion_evidence_gain = {0.38f, 0.0f, 0.0f};
-  const ObstaclePublicationContext context{
-      &raw_sample_count, &obstacle_candidate_cell,
-      &current_protrusion_evidence_gain};
+  const ObstaclePublicationContext context{&raw_sample_count,
+                                           &obstacle_candidate_cell,
+                                           &current_protrusion_evidence_gain};
 
   const auto output = ObstacleReasoner(config).evaluate(layers, context);
 
   EXPECT_EQ(output.block_reason[0],
             static_cast<uint8_t>(BlockReason::kGeometryFailure));
-  EXPECT_EQ(
-      output.obstacle_point_publish_status[0],
-      static_cast<uint8_t>(
-          ObstaclePointPublishStatus::kPublishedByGeometryFailure));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(
+                ObstaclePointPublishStatus::kPublishedByGeometryFailure));
 }
 
 TEST(ObstacleReasonerTest, ProtrusionBlockingThresholdFollowsPublishEvidence) {
@@ -221,8 +219,7 @@ TEST(ObstacleReasonerTest, ProtrusionBlockingThresholdFollowsPublishEvidence) {
 
   const auto output = ObstacleReasoner(config).evaluate(layers);
 
-  EXPECT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.protrusion_stage[0],
             static_cast<uint8_t>(ObstacleEvidenceStage::kEvidenceLow));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
@@ -251,9 +248,9 @@ TEST(ObstacleReasonerTest,
 
   EXPECT_EQ(output.block_reason[0],
             static_cast<uint8_t>(BlockReason::kProtrusion));
-  EXPECT_EQ(output.obstacle_point_publish_status[0],
-            static_cast<uint8_t>(
-                ObstaclePointPublishStatus::kPublishedByProtrusion));
+  EXPECT_EQ(
+      output.obstacle_point_publish_status[0],
+      static_cast<uint8_t>(ObstaclePointPublishStatus::kPublishedByProtrusion));
 }
 
 TEST(ObstacleReasonerTest,
@@ -269,9 +266,9 @@ TEST(ObstacleReasonerTest,
   std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
   std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
   std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
-  const ObstaclePublicationContext context{
-      &raw_sample_count, &obstacle_candidate_cell,
-      &current_protrusion_evidence_gain};
+  const ObstaclePublicationContext context{&raw_sample_count,
+                                           &obstacle_candidate_cell,
+                                           &current_protrusion_evidence_gain};
 
   const auto output = ObstacleReasoner(config).evaluate(layers, context);
 
@@ -279,10 +276,9 @@ TEST(ObstacleReasonerTest,
             static_cast<uint8_t>(BlockReason::kProtrusion));
   EXPECT_EQ(output.protrusion_stage[0],
             static_cast<uint8_t>(ObstacleEvidenceStage::kBlocking));
-  EXPECT_EQ(
-      output.obstacle_point_publish_status[0],
-      static_cast<uint8_t>(
-          ObstaclePointPublishStatus::kPublishedByDenseProtrusion));
+  EXPECT_EQ(output.obstacle_point_publish_status[0],
+            static_cast<uint8_t>(
+                ObstaclePointPublishStatus::kPublishedByDenseProtrusion));
 }
 
 TEST(ObstacleReasonerTest, DenseNearThresholdStepHeightDoesNotBlock) {
@@ -297,14 +293,13 @@ TEST(ObstacleReasonerTest, DenseNearThresholdStepHeightDoesNotBlock) {
   std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
   std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
   std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
-  const ObstaclePublicationContext context{
-      &raw_sample_count, &obstacle_candidate_cell,
-      &current_protrusion_evidence_gain};
+  const ObstaclePublicationContext context{&raw_sample_count,
+                                           &obstacle_candidate_cell,
+                                           &current_protrusion_evidence_gain};
 
   const auto output = ObstacleReasoner(config).evaluate(layers, context);
 
-  EXPECT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
             static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
 }
@@ -320,14 +315,13 @@ TEST(ObstacleReasonerTest, DenseRawSamplesWithoutCurrentCandidateDoNotPublish) {
   std::vector<uint16_t> raw_sample_count = {11U, 0U, 0U};
   std::vector<uint8_t> obstacle_candidate_cell = {0U, 0U, 0U};
   std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
-  const ObstaclePublicationContext context{
-      &raw_sample_count, &obstacle_candidate_cell,
-      &current_protrusion_evidence_gain};
+  const ObstaclePublicationContext context{&raw_sample_count,
+                                           &obstacle_candidate_cell,
+                                           &current_protrusion_evidence_gain};
 
   const auto output = ObstacleReasoner(config).evaluate(layers, context);
 
-  EXPECT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
             static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
 }
@@ -343,14 +337,13 @@ TEST(ObstacleReasonerTest, SparseCurrentFrameCandidateDoesNotDensePublish) {
   std::vector<uint16_t> raw_sample_count = {10U, 0U, 0U};
   std::vector<uint8_t> obstacle_candidate_cell = {1U, 0U, 0U};
   std::vector<float> current_protrusion_evidence_gain = {0.375f, 0.0f, 0.0f};
-  const ObstaclePublicationContext context{
-      &raw_sample_count, &obstacle_candidate_cell,
-      &current_protrusion_evidence_gain};
+  const ObstaclePublicationContext context{&raw_sample_count,
+                                           &obstacle_candidate_cell,
+                                           &current_protrusion_evidence_gain};
 
   const auto output = ObstacleReasoner(config).evaluate(layers, context);
 
-  EXPECT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  EXPECT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
             static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
 }
@@ -364,13 +357,13 @@ TEST(ObstacleReasonerTest, BlockReasonNoneNeverHasPublishedStatus) {
 
   const auto output = ObstacleReasoner(config).evaluate(layers);
 
-  ASSERT_EQ(output.block_reason[0],
-            static_cast<uint8_t>(BlockReason::kNone));
+  ASSERT_EQ(output.block_reason[0], static_cast<uint8_t>(BlockReason::kNone));
   EXPECT_EQ(output.obstacle_point_publish_status[0],
             static_cast<uint8_t>(ObstaclePointPublishStatus::kNotApplicable));
 }
 
-TEST(ObstaclePublicationTest, HeightGateRejectsStepBoundaryAndMissingSupport) {
+TEST(ObstaclePublicationTest,
+     HeightGateAllowsStepRangeSamplesAndRejectsMissingSupport) {
   auto config = MakeConfig();
   ObstaclePublicationSampleStats step_boundary_sample;
   passable_area::core::AccumulateObstaclePublicationSample(
@@ -389,9 +382,9 @@ TEST(ObstaclePublicationTest, HeightGateRejectsStepBoundaryAndMissingSupport) {
           0.0f, step_boundary_sample);
 
   EXPECT_FALSE(step_boundary.height_gate.above_step_height);
-  EXPECT_FALSE(step_boundary.height_gate.passes);
+  EXPECT_TRUE(step_boundary.height_gate.passes);
   EXPECT_EQ(step_boundary.final_status,
-            ObstaclePointPublishStatus::kGatedByHeight);
+            ObstaclePointPublishStatus::kPublishedByProtrusion);
 
   ObstaclePublicationSampleStats tall_sample;
   passable_area::core::AccumulateObstaclePublicationSample(
@@ -453,8 +446,8 @@ TEST(ObstaclePublicationTest, TraceReportsNoSamplesAndPublishPath) {
   EXPECT_FALSE(trace.has_current_samples);
   EXPECT_EQ(trace.final_status,
             ObstaclePointPublishStatus::kBlockedButNoSamples);
-  EXPECT_STREQ(passable_area::core::ObstaclePublicationPathName(
-                   static_cast<uint8_t>(ObstaclePointPublishStatus::
-                                            kPublishedByDenseProtrusion)),
-               "DenseProtrusionSource");
+  EXPECT_STREQ(
+      passable_area::core::ObstaclePublicationPathName(static_cast<uint8_t>(
+          ObstaclePointPublishStatus::kPublishedByDenseProtrusion)),
+      "DenseProtrusionSource");
 }

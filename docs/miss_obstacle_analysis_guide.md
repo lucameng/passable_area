@@ -82,12 +82,13 @@ root cause 不是猜的，而是沿着当前控制链往后推：
 - `max_sample_z_minus_support_ref`
   - obstacle point 发布时，当前 ROI 样本相对支撑参考的最高高度差
 
-这里的“发布高度门槛”包含两部分：
+这里的“发布高度门槛”包含：
 
 - 样本相对 `support_ref` 的高度要达到 `obstacle_points_min_height`
-- 样本相对 `support_ref` 的高度必须严格超过 `max_step_up`
 - 样本在 `base_link` 下的高度不能高于 `obstacle_points_max_height_in_base_link`
 - `GeometryFailure` 发布路径还要求同一个样本在 `base_gravity` 发布坐标下不低于 `obstacle_points_min_height`
+
+`max_step_up` 仍会影响 reasoner 是否把一个 cell 视为 blocking protrusion / low-clearance publish path，但不再作为 `/terrain_obstacle_points` 逐样本高度发布门槛。
 
 ## 5. 当前版本里最常见的 root cause
 

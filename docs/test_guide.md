@@ -70,7 +70,7 @@ colcon test-result --verbose
   - support contamination 不跟随 obstacle-point publication threshold 调参
 - obstacle point publication contract
   - 需要有限 support reference
-  - `height <= max_step_up` 不发布
+  - `height >= obstacle_points_min_height` 可发布，`max_step_up` 不再裁剪 obstacle point 样本下沿
   - base-link ceiling 生效
   - dense-source、rear dropout bridge、low-clearance bridge 仍经过 Reasoner/publication contract
 
@@ -181,7 +181,7 @@ colcon test-result --verbose
 - 有 candidate 但 `obstacle_evidence` 不足
 - 有 evidence 但没有通过 obstacle point 高度门槛
 - evidence cell 在 ROI 内但当前没有对应 source sample
-- 高度门要求有限 support reference，且 `height <= max_step_up` 不发布
+- 高度门要求有限 support reference，且样本高于 `obstacle_points_min_height`
 - sample `min_z` fallback 不能授予发布资格
 - runtime sample 坐标必须相关，不能把不同样本的极值组合成发布资格
 

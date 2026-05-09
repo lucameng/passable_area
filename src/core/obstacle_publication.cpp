@@ -80,13 +80,12 @@ ObstaclePublicationHeightGateTrace EvaluateObstaclePublicationSampleHeightGates(
       trace.finite_support_ref &&
       sample.z_in_map > support_ref + config.geometry.max_step_up;
   trace.below_base_link_ceiling =
-      sample.z_in_base_link <=
-      config.obstacle_points_max_height_in_base_link;
+      sample.z_in_base_link <= config.obstacle_points_max_height_in_base_link;
   trace.above_publish_path_floor =
       !IsGeometryFailurePublishStatus(reasoner_status) ||
       sample.z_in_base_gravity >= config.obstacle_points_min_height;
   trace.passes = trace.finite_support_ref && trace.above_min_height &&
-                 trace.above_step_height && trace.below_base_link_ceiling &&
+                 trace.below_base_link_ceiling &&
                  trace.above_publish_path_floor;
   return trace;
 }
@@ -137,8 +136,7 @@ ObstaclePublicationHeightGateTrace EvaluateObstaclePublicationHeightGates(
   trace.above_min_height = sample_stats.any_above_min_height;
   trace.above_step_height = sample_stats.any_above_step_height;
   trace.below_base_link_ceiling = sample_stats.any_below_base_link_ceiling;
-  trace.above_publish_path_floor =
-      sample_stats.any_above_publish_path_floor;
+  trace.above_publish_path_floor = sample_stats.any_above_publish_path_floor;
   trace.passes = sample_stats.publishable_sample_count > 0;
   return trace;
 }
@@ -152,8 +150,7 @@ ObstaclePublicationDecisionTrace EvaluateObstaclePublicationDecisionTrace(
   trace.reasoner_requests_publication =
       IsObstaclePointPublishStatusPublished(trace.reasoner_status) ||
       trace.reasoner_status == ObstaclePointPublishStatus::kGatedByHeight ||
-      trace.reasoner_status ==
-          ObstaclePointPublishStatus::kBlockedButNoSamples;
+      trace.reasoner_status == ObstaclePointPublishStatus::kBlockedButNoSamples;
   trace.has_current_samples = sample_stats.has_samples;
   trace.height_gate = EvaluateObstaclePublicationHeightGates(
       config, reasoner_status, support_ref, sample_stats);
@@ -170,8 +167,9 @@ ObstaclePublicationDecisionTrace EvaluateObstaclePublicationDecisionTrace(
   return trace;
 }
 
-ObstaclePointPublishStatus FinalizeObstaclePublicationStatus(
-    uint8_t reasoner_status, bool saw_current_samples, bool published) {
+ObstaclePointPublishStatus
+FinalizeObstaclePublicationStatus(uint8_t reasoner_status,
+                                  bool saw_current_samples, bool published) {
   const auto status = static_cast<ObstaclePointPublishStatus>(reasoner_status);
   if (!IsObstaclePointPublishStatusPublished(status) || published) {
     return status;

@@ -997,9 +997,8 @@ TEST(ProcessorTest, FrontGapTriggersMissingByDropoutSectors) {
         ObservabilityState::kMissingByDropout) {
       continue;
     }
-    const float angle =
-        -static_cast<float>(M_PI) +
-        (static_cast<float>(sector) + 0.5f) * angle_per_sector;
+    const float angle = -static_cast<float>(M_PI) +
+                        (static_cast<float>(sector) + 0.5f) * angle_per_sector;
     if (std::abs(angle) <= static_cast<float>(M_PI_2)) {
       ++front_missing_count;
     } else {
@@ -1412,9 +1411,9 @@ TEST(ProcessorTest, LocalTerrainMapInitializesReservedObstacleV2Layers) {
                     0.0f);
     EXPECT_FLOAT_EQ(map.layers().overhead_evidence[static_cast<size_t>(cell)],
                     0.0f);
-    EXPECT_EQ(map.layers().support_surface_contaminated[static_cast<size_t>(
-                  cell)],
-              0U);
+    EXPECT_EQ(
+        map.layers().support_surface_contaminated[static_cast<size_t>(cell)],
+        0U);
   }
 }
 
@@ -1436,8 +1435,7 @@ TEST(ProcessorTest, TerrainFeatureUpdaterUsesActualDiagonalDistanceForSlope) {
   updater.update({center}, map);
 
   const float expected_slope =
-      std::atan(0.20f / std::sqrt(2.0f)) * 180.0f /
-      static_cast<float>(M_PI);
+      std::atan(0.20f / std::sqrt(2.0f)) * 180.0f / static_cast<float>(M_PI);
   EXPECT_NEAR(layers.slope[center], expected_slope, 1e-4f);
   EXPECT_NEAR(layers.step_up[center], 0.0f, 1e-5f);
   EXPECT_NEAR(layers.step_down[center], 0.20f, 1e-5f);
@@ -1465,8 +1463,8 @@ TEST(ProcessorTest, TerrainFeatureUpdaterFitsSupportPlaneForXYRamp) {
   TerrainFeatureUpdater updater(config);
   updater.update({center}, map);
 
-  const float expected_slope = std::atan(std::hypot(0.10f, 0.20f)) *
-                               180.0f / static_cast<float>(M_PI);
+  const float expected_slope =
+      std::atan(std::hypot(0.10f, 0.20f)) * 180.0f / static_cast<float>(M_PI);
   EXPECT_NEAR(layers.slope[center], expected_slope, 1e-4f);
   EXPECT_NEAR(layers.roughness[center], 0.0f, 1e-5f);
   EXPECT_NEAR(layers.step_up[center], 0.0f, 1e-5f);
@@ -2148,14 +2146,14 @@ TEST(ProcessorTest, ObstaclePointsPublishUpperBandSamplesFromObstacleCells) {
   const auto output = processor.update(MakeObstacleColumnFrame(300000001));
   ASSERT_TRUE(output.valid);
 
-  ASSERT_EQ(output.obstacle_points.size(), 2U);
+  ASSERT_EQ(output.obstacle_points.size(), 4U);
   float min_z = std::numeric_limits<float>::infinity();
   float max_z = -std::numeric_limits<float>::infinity();
   for (const auto &point : output.obstacle_points) {
     min_z = std::min(min_z, point.point.z);
     max_z = std::max(max_z, point.point.z);
   }
-  EXPECT_NEAR(min_z, 0.30f, 1e-5f);
+  EXPECT_NEAR(min_z, 0.12f, 1e-5f);
   EXPECT_NEAR(max_z, 0.30f, 1e-5f);
 }
 
@@ -2193,8 +2191,6 @@ TEST(ProcessorTest, ObstaclePointPublishStatusMatchesActualNativePoints) {
     EXPECT_EQ(output.passability[point.source_cell],
               static_cast<int8_t>(PassabilityState::kImpassable));
     ASSERT_TRUE(std::isfinite(output.support_height[point.source_cell]));
-    EXPECT_GT(point.point.z, output.support_height[point.source_cell] +
-                                 config.geometry.max_step_up);
     EXPECT_GE(point.point.z, output.support_height[point.source_cell] +
                                  config.obstacle_points_min_height);
   }
@@ -2656,7 +2652,7 @@ TEST(ProcessorTest, ObstaclePointsKeepSamplesAtOrBelowBaseLinkHeightCeiling) {
 
   ASSERT_FALSE(output.obstacle_points.empty());
   for (const auto &point : output.obstacle_points) {
-    EXPECT_GT(point.point.z, config.geometry.max_step_up);
+    EXPECT_GE(point.point.z, config.obstacle_points_min_height);
   }
 }
 

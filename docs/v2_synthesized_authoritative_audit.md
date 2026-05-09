@@ -66,7 +66,7 @@
 
 测试覆盖缺口：
 
-- 没有硬性测试锁住 `b171195` 的端到端语义：`height <= max_step_up` 的低位/下行楼梯 alias 不得通过发布旁路进入 `/terrain_obstacle_points`。
+- 没有硬性测试锁住 `b171195` 的端到端语义：`height <= max_step_up` 的低位/下行楼梯 alias 不得绕过 Reasoner / publish-path eligibility 进入 `/terrain_obstacle_points`。
 - 没有测试 `block_reason`、`obstacle_point_publish_status`、`terrain_state`、`/terrain_obstacle_points` 的跨输出一致性。
 - 没有测试 rear bridge 在机器人平移/旋转和 map recenter 后的位置正确性。
 - 没有测试机器人 yaw 非零时 dropout sector 到 map cell 的映射正确性。
@@ -85,13 +85,13 @@ V2 声称 `ObstacleReasoner` 是 `block_reason` 单一权威，但 `Processor::b
 
 `DenseNearThresholdProtrusionSource` 允许 `protrusion_evidence` 低于 `obstacle_points_min_evidence` 时发布点。`test_processor.cpp::DenseNearThresholdProtrusionSourcePublishesObstaclePoints` 已经把这种行为锁成测试。
 
-这同时影响 `b171195` 的端到端语义。该提交明确接受：`Height > max_step_up -> impassable wall`，`Height <= max_step_up -> traversable terrain`，并据此消除全局 floor clamp 的必要性。Reasoner 层当前确实实现了这一方向：`protrusion_blocking = protrusion_evidence > 0.4f && tall_protrusion`，其中 `tall_protrusion` 基于 `protrusion_height - support_height > max_step_up`。但发布层仍有独立 evidence / dense-source 旁路，因此代码合同还没有证明所有 obstacle point 发布路径都服从这条物理闭合规则。
+这同时影响 `b171195` 的端到端语义。该提交明确接受：`Height > max_step_up -> impassable wall`，`Height <= max_step_up -> traversable terrain`，并据此消除全局 floor clamp 的必要性。Reasoner 层当前确实实现了这一方向：`protrusion_blocking = protrusion_evidence > 0.4f && tall_protrusion`，其中 `tall_protrusion` 基于 `protrusion_height - support_height > max_step_up`。当前合同应区分两层：`max_step_up` 约束 Reasoner blocking / publish-path eligibility；逐样本 obstacle point 发布下沿由 `obstacle_points_min_height`、有限 support、`base_link` ceiling 和特定 path floor 决定。
 
 为什么重要：
 
 导航系统通常把 `/terrain_obstacle_points` 当作外部障碍真值。若同一 cell 的 `block_reason == kNone`、`terrain_state == PASSABLE`，但点云发布了障碍点，规划器和 RViz 调试会看到互相矛盾的世界。反过来，如果 `kGeometryFailure` 让 `terrain_state` 阻挡但没有点云，消费点云的下游会漏掉内部已经认定的不可通行区域。
 
-对 `b171195` 而言，四足机器人站在楼梯上方、坡顶或平台边缘时，前/后 LiDAR 可能看到下层地面或下行台阶立面。该提交的核心价值正是把 `height <= max_step_up` 的结构交给步态/落脚控制，而不是让感知层作为硬障碍 veto。若发布层绕过 Reasoner，仅凭 raw evidence 或 near-threshold dense source 发布点云，下游仍可能看到一堵“红点墙”，这会抵消该提交的设计收益。
+对 `b171195` 而言，四足机器人站在楼梯上方、坡顶或平台边缘时，前/后 LiDAR 可能看到下层地面或下行台阶立面。该提交的核心价值正是把 `height <= max_step_up` 的结构交给步态/落脚控制，而不是让感知层作为硬障碍 veto。若发布路径绕过 Reasoner eligibility，仅凭 raw evidence 或 near-threshold dense source 宣称发布资格，下游仍可能看到一堵“红点墙”，这会抵消该提交的设计收益。
 
 涉及代码路径：
 
@@ -107,7 +107,7 @@ V2 声称 `ObstacleReasoner` 是 `block_reason` 单一权威，但 `Processor::b
 
 必须明确一个合同：`/terrain_obstacle_points` 要么是 Reasoner / PublicationDecision 的函数，要么是独立外部合同。但如果选择后者，就不能再宣称 Reasoner 是输出单一权威。
 
-本系统更合理的方向是前者：外部障碍点云发布必须服从同一物理闭合规则。只有 Reasoner 判定为 blocking protrusion / mixed / 明确定义的 low-clearance 发布资格时，才允许从对应 source samples 产生 `/terrain_obstacle_points`。`height <= max_step_up` 的低位结构不得因为 dense source 或 raw protrusion evidence 旁路被发布。
+本系统更合理的方向是前者：外部障碍点云发布必须服从同一物理闭合规则。只有 Reasoner 判定为 blocking protrusion / mixed / 明确定义的 low-clearance 发布资格时，才允许从对应 source samples 产生 `/terrain_obstacle_points`。`height <= max_step_up` 的低位结构不得因为 dense source 或 raw protrusion evidence 旁路获得发布资格；一旦路径具备发布资格，逐样本下沿由 `obstacle_points_min_height` 等发布高度门控决定。
 
 当前差距：
 
@@ -508,14 +508,14 @@ front、rear、side dropout 都应通过同一机制影响 support persistence�
 
 核心单元测试：
 
-- 构造一个 cell：`support_height` 有效，`protrusion_height - support_height == max_step_up`，`protrusion_evidence` 充足，断言 `block_reason == kNone` 或非 protrusion blocking，且不得发布 obstacle point。
-- 构造 `protrusion_height - support_height > max_step_up` 的相邻 case，断言 Reasoner 阻挡且发布资格按合同成立。
-- 构造 dense near-threshold case，断言它不能绕过 `height <= max_step_up` 的非阻挡语义。
+- 构造一个 cell：`support_height` 有效，`protrusion_height - support_height == max_step_up`，`protrusion_evidence` 充足，断言 `block_reason == kNone` 或非 protrusion blocking，且不能获得 protrusion publish-path eligibility。
+- 构造 `protrusion_height - support_height > max_step_up` 的相邻 case，断言 Reasoner 阻挡且发布路径资格按合同成立；逐样本发布仍由 `obstacle_points_min_height`、有限 support、`base_link` ceiling 和特定 path floor 决定。
+- 构造 dense near-threshold case，断言它不能绕过 `height <= max_step_up` 的非阻挡路径资格语义。
 - 确认 protrusion、low-clearance bridge、dense source、rear bridge 都不能发布 Reasoner 判为非 blocking 的低位/下行楼梯 alias。
 
 回归测试：
 
-- 楼梯顶端俯看楼梯底地面时，`height <= max_step_up` 的下行结构不得进入 `/terrain_obstacle_points`；不要用全局 `base_gravity.z` clamp 作为断言依据。
+- 楼梯顶端俯看楼梯底地面时，`height <= max_step_up` 的下行结构不得绕过 Reasoner publish-path eligibility 进入 `/terrain_obstacle_points`；不要用全局 `base_gravity.z` clamp 作为断言依据。
 - `miss_obstacle_analyzer` 与 `Processor` 对同一 ROI 的 publication decision 结论一致。
 
 ### 4.2 输出合同一致性测试
@@ -589,7 +589,7 @@ front、rear、side dropout 都应通过同一机制影响 support persistence�
 ROS 接口测试：
 
 - `grid_map` 中 `block_reason`、`obstacle_point_publish_status`、`protrusion_evidence`、`overhead_evidence` 与 core output 对齐。
-- `/terrain_obstacle_points` 的 source cell 必须对应明确 publication decision；`height <= max_step_up` 的低位/下行楼梯 alias 不得发布。
+- `/terrain_obstacle_points` 的 source cell 必须对应明确 publication decision；`height <= max_step_up` 的低位/下行楼梯 alias 不得绕过 Reasoner publish-path eligibility。
 - ExactTime 输入丢帧时 observability 输出不会伪造 observed。
 
 offline replay 回归：
@@ -680,7 +680,7 @@ source install/setup.bash
 
 正确性指标：
 
-- `/terrain_obstacle_points` 不得来自 `block_reason == kNone` 或 `height <= max_step_up` 的 protrusion source cell。
+- `/terrain_obstacle_points` 不得来自 `block_reason == kNone` 的 source cell；`height <= max_step_up` 只约束 Reasoner blocking / publish-path eligibility，不是逐样本发布下沿。
 - frozen stairs/slopes bags 上 sustained false positive 必须为 0。
 - `block_reason == kNone` 的 source cell 不应产生 obstacle points。
 - `obstacle_point_publish_status` 必须与实际发布路径一致。
@@ -741,7 +741,7 @@ source install/setup.bash
 
 P0 必须先做：
 
-1. 统一 `/terrain_obstacle_points` 与 Reasoner / publish status 合同，把 `b171195` 的 `height > max_step_up` 物理闭合规则实现为不可绕过的 publication decision，并删除或吸收 dense near-threshold 旁路。
+1. 统一 `/terrain_obstacle_points` 与 Reasoner / publish status 合同，把 `b171195` 的 `height > max_step_up` 物理闭合规则实现为不可绕过的 publish-path eligibility，并明确逐样本发布下沿由 `obstacle_points_min_height`、有限 support、`base_link` ceiling 和特定 path floor 决定。
 2. 去掉 `ObstacleReasoner` protrusion 阈值硬编码，建立阻挡阈值与发布阈值的明确关系。
 3. 修复 observability sector 到 map cell 的 yaw 语义不一致。
 4. 修复 rear-dropout bridge 的坐标缓存与重投影。

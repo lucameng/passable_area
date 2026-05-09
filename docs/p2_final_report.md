@@ -9,7 +9,7 @@ P2 closed the follow-up issues listed in `docs/v2_synthesized_authoritative_audi
 - P2-C: Explicit support-surface contamination eligibility (`P2-3`)
 - P2-D: Documentation and handover consolidation
 
-P2 preserved the P0/P1 contracts: no obstacle point publication for `height <= max_step_up`, no restoration of the old global `base_gravity` floor clamp, no bag/ROI/frame-specific fixes, no benchmark config pollution, and ROS-free core behavior.
+P2 originally preserved the P0/P1 publication contract that tied obstacle-point publication to `height > max_step_up`, with no restoration of the old global `base_gravity` floor clamp, no bag/ROI/frame-specific fixes, no benchmark config pollution, and ROS-free core behavior. Current runtime semantics have since been narrowed: `max_step_up` constrains Reasoner blocking / publish-path eligibility, while the per-sample `/terrain_obstacle_points` lower height gate is `obstacle_points_min_height` with finite support, the `base_link` ceiling, and any path-specific floor.
 
 Current delivery HEAD is `c7a30de fix: align diagnostic trace and support eligibility`.
 That post-P2 review follow-up keeps the P2 scope intact while aligning the
@@ -32,7 +32,7 @@ Commit: `97308f6 fix: unify publication decision trace`
 
 - Added a ROS-free obstacle-publication helper and structured decision trace.
 - Runtime publishing, miss analyzer, and false analyzer now use shared publication status/path semantics.
-- Publication height gates are evaluated per correlated runtime sample, including support-relative strict `max_step_up`, finite support, base-link ceiling, and geometry-failure base-gravity floor.
+- Publication height gates are evaluated per correlated runtime sample, including finite support, support-relative `obstacle_points_min_height`, base-link ceiling, and geometry-failure base-gravity floor. `max_step_up` remains a Reasoner/path-eligibility threshold rather than a per-sample point-cloud floor.
 - Removed duplicated offline bridge/status/height-gate inference and stale base-gravity/base-link wording.
 
 ### P2-C Explicit Support-Surface Contamination Eligibility
